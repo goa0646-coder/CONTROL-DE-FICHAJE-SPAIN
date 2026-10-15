@@ -1,6 +1,6 @@
 # Diseño — Control horario (fase 1 en detalle, fases 2–4 en esquema)
 
-Estado: **borrador para aprobar**. No hay código todavía.
+Estado: **aprobado**. Fase 1 implementada.
 
 ## 1. Contexto y límites
 
@@ -75,7 +75,8 @@ Fechas en `DATETIME` UTC. Todas `InnoDB`, `utf8mb4`.
 - **empresa**: id, nombre, cif.
 - **centros**: id, nombre, direccion, lat, lng, radio_m, gps_modo (`no` / `opcional` / `obligatorio`), activo.
 - **usuarios**: id, num_empleado, nombre, apellidos, dni, email, password_hash, pin_hash, rol (`empleado` / `responsable` / `admin` / `inspeccion`), centro_id, responsable_id, gps_modo (NULL = el del centro), aviso_gps_visto_utc, acceso_hasta (inspección), activo, alta_utc, baja_utc.
-- **fichajes** *(solo INSERT)*: id, usuario_id, tipo (`entrada` / `salida` / `pausa_inicio` / `pausa_fin`), momento_utc, origen (`movil` / `web` / `quiosco` / `correccion`), centro_id, quiosco_id, lat, lng, precision_m, ip, correccion_id, hash_anterior, hash.
+- **fichajes** *(solo INSERT)*: id, usuario_id, tipo (`entrada` / `salida` / `pausa_inicio` / `pausa_fin`), momento_utc, origen (`movil` / `web` / `quiosco` / `correccion`), centro_id, quiosco_id, zona, ip, correccion_id, creado_utc, hash_anterior, hash.
+- **fichajes_gps**: fichaje_id, lat, lng, precision_m. Se borra a los 12 meses.
 - **correcciones**: id, usuario_id, accion (`anadir` / `anular` / `cambiar`), fichaje_id (el original, si aplica), tipo_propuesto, momento_propuesto_utc, motivo, estado (`pendiente` / `aprobada` / `rechazada`), pedida_por, pedida_utc, resuelta_por, resuelta_utc, comentario.
 - **quioscos**: id, centro_id, nombre, token_hash, activo, alta_utc.
 - **auditoria**: id, usuario_id, accion, detalle (JSON), ip, momento_utc. Solo INSERT.
@@ -119,9 +120,9 @@ tests/                  → PHPUnit (no va en el ZIP)
 - Varias empresas en la misma instalación.
 - App nativa.
 
-## 9. Preguntas para ti
+## 9. Decisiones (aprobadas)
 
-1. **Coordenadas GPS**: ¿se guardan los 4 años junto al fichaje (prueba) o se borran antes (p. ej. a los 12 meses) y queda solo "dentro / fuera del centro"? Recomiendo lo segundo (más RGPD).
-2. **Responsable**: ¿ve solo a las personas que tiene asignadas, o a todo su centro?
-3. **Inspección**: ¿usuario con contraseña y caducidad (propuesto) o enlace temporal?
-4. **Fuera del radio del centro con GPS obligatorio**: ¿se rechaza el fichaje o se acepta marcado como "fuera de zona"? Recomiendo aceptar y marcar.
+1. **GPS**: las coordenadas van en `fichajes_gps` y se borran a los 12 meses (cron diario). El fichaje guarda para siempre solo `zona` (dentro/fuera).
+2. **Responsable**: solo ve a las personas que tiene asignadas (`responsable_id`).
+3. **Inspección**: usuario con contraseña y fecha de caducidad (30 días por defecto).
+4. **Fuera de zona**: el fichaje se acepta y se marca `fuera`.

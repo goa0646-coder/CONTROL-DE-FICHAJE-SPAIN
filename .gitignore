@@ -1,0 +1,5 @@
+/vendor/
+/dist/
+config-fichaje.php
+.phpunit.result.cache
+.phpunit.cache/
