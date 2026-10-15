@@ -23,7 +23,9 @@ Abre en el navegador:
 `https://fichaje.miempresa.com/?p=instalar&clave=TU_CLAVE_DE_INSTALACION`
 Rellena empresa y tus datos de administrador. Después entra con ellos.
 
-(Con SSH puedes usar en su lugar: `php public_html/app/migrar.php`.)
+Otras formas de crear las tablas (elige una):
+- **phpMyAdmin**: abre tu base de datos → Importar → `fichaje.sql`. Después abre igualmente la dirección de arriba para crear el administrador.
+- **SSH**: `php public_html/app/migrar.php`.
 
 Si sale un **AVISO de trigger**, tu plan no permite triggers. El sistema sigue funcionando y la página **Auditoría** detecta cualquier cambio en los fichajes. Avísame si pasa.
 
