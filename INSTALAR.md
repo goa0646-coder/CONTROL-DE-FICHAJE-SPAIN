@@ -1,34 +1,30 @@
 # Instalar INDA en Hostinger
 
-Necesitas: un subdominio (p. ej. `inda.miempresa.com`) con SSL activado y PHP 8.1 o superior.
+Necesitas: un subdominio (p. ej. `inda.miempresa.com`) con SSL activado (hPanel → Seguridad → SSL) y PHP 8.1 o superior (hPanel → Avanzado → Configuración de PHP).
 
 ## 1. Base de datos
-hPanel → **Bases de datos MySQL** → crea una base de datos y su usuario. Apunta el nombre, el usuario y la contraseña.
+hPanel → **Bases de datos → Bases de datos MySQL** → crea una base de datos y su usuario (p. ej. `inda`). Hostinger les pone delante tu prefijo (`u123456789_inda`). Apunta el nombre, el usuario y la contraseña.
 
 ## 2. Subir los archivos
 1. hPanel → **Administrador de archivos** → entra en la carpeta del subdominio (la que tiene `public_html`).
 2. Sube `inda.zip` dentro de `public_html` y descomprímelo ahí. Debe quedar `public_html/index.php`.
+3. Borra `config.ejemplo.php` de `public_html` (solo es una plantilla).
 
-## 3. Configuración (fuera de public_html)
-1. En la carpeta que está **por encima** de `public_html`, crea un archivo llamado `config-inda.php`.
-   (Si ya tenías `config-fichaje.php` de una versión anterior, sigue valiendo.)
-2. Copia dentro el contenido de `config.ejemplo.php` (va en el ZIP) y rellena:
-   - los datos de la base de datos,
-   - `url`: la dirección del subdominio, con `https://`,
-   - `correo_desde`: un email de tu dominio,
-   - `clave_instalacion`: una clave larga inventada (mínimo 16 caracteres).
-3. Borra `config.ejemplo.php` de `public_html`.
+## 3. Asistente
+Abre `https://inda.miempresa.com` en el navegador. Como aún no hay configuración, sale el **asistente**:
+1. Revisa la tabla de requisitos (✘ = hay que arreglarlo; ⚠ = funciona, pero sin esa parte).
+2. Escribe los tres datos de la base de datos, la dirección y un email de tu dominio → **Probar y guardar**.
+3. INDA crea `config-inda.php` **por encima** de `public_html` (fuera del alcance de la web), crea las tablas y te pide la empresa y tu usuario de administrador.
+4. Entra con ese usuario.
 
-## 4. Crear las tablas y el administrador
-Abre en el navegador:
-`https://inda.miempresa.com/?p=instalar&clave=TU_CLAVE_DE_INSTALACION`
-Rellena empresa y tus datos de administrador. Después entra con ellos.
+Si el asistente dice que no puede escribir el archivo, te muestra el contenido: créalo tú con el Administrador de archivos y recarga.
 
-Otras formas de crear las tablas (elige una):
-- **phpMyAdmin**: abre tu base de datos → Importar → `inda.sql`. Después abre igualmente la dirección de arriba para crear el administrador.
-- **SSH**: `php public_html/app/migrar.php`.
+Si sale un **AVISO de trigger**, tu plan no permite triggers. El sistema sigue funcionando y la página **Auditoría** detecta cualquier cambio en los fichajes.
 
-Si sale un **AVISO de trigger**, tu plan no permite triggers. El sistema sigue funcionando y la página **Auditoría** detecta cualquier cambio en los fichajes. Avísame si pasa.
+Otras formas de crear las tablas: **phpMyAdmin** → Importar → `inda.sql` (y después abrir la web para crear el administrador), o **SSH**: `php public_html/app/migrar.php`.
+
+## 4. Guarda la clave de instalación
+En `config-inda.php` está `clave_instalacion` (la ha inventado el asistente). Te hará falta al actualizar: `https://inda.miempresa.com/?p=instalar&clave=ESA_CLAVE`.
 
 ## 5. Tarea programada cada 15 minutos
 Envía los avisos (no has fichado, retrasos, jornada sin cerrar) y borra las coordenadas GPS de hace más de 12 meses.

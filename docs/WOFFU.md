@@ -108,7 +108,7 @@ INDA copia **funciones y flujos**, no logo, nombres ni textos.
 **Fase 7 — Opcional**
 QR, extensión de navegador, SSO, roles a medida, Slack/Teams, biométricos, idiomas.
 
-Cada fase: migración nueva, pruebas PHPUnit, ZIP limpio. **Aprobado (sin teletrabajo) e implementado en la rama `fase-2`.**
+Cada fase: migración nueva, pruebas PHPUnit, ZIP limpio. **Aprobado (sin teletrabajo) e implementado (fusionado en `master`).**
 
 ## Fuentes
 - https://go.woffu.com/software-gestion-tiempo
