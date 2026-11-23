@@ -72,7 +72,12 @@ cabecera('Documentos', $yo);
   <?php foreach ($enviados as $d): ?>
   <tr><td><a href="?p=archivo&d=<?= e($d['id']) ?>"><?= e($d['titulo']) ?></a> <small class="nota"><?= local($d['subido_utc'], 'd/m/Y') ?></small></td>
     <td><?= $d['usuario_id'] ? e(trim($d['nombre'] . ' ' . $d['apellidos'])) : 'Todos' ?></td>
-    <td><?= $d['requiere_firma'] ? ($d['usuario_id'] ? ($d['firmas'] ? 'Firmado' : 'Pendiente') : e($d['firmas']) . ' firmas') : '—' ?></td>
+    <td><?php if (!$d['requiere_firma']): ?>—<?php else:
+        $fs = consulta(db(), 'SELECT f.*, u.nombre, u.apellidos FROM documentos_firmas f JOIN usuarios u ON u.id = f.usuario_id WHERE f.documento_id = ? ORDER BY f.firmado_utc', [$d['id']])->fetchAll();
+        $total = $d['usuario_id'] ? 1 : count(destinatarios(db(), null)); ?>
+      <details><summary><?= count($fs) ?> de <?= $total ?> firmado</summary>
+        <?php foreach ($fs as $f): ?><small><?= e(trim($f['nombre'] . ' ' . $f['apellidos'])) ?> · <?= local($f['firmado_utc']) ?> · IP <?= e($f['ip']) ?></small><br><?php endforeach ?>
+      </details><?php endif ?></td>
     <td><form method="post"><?= csrf_campo() ?><input type="hidden" name="id" value="<?= e($d['id']) ?>"><button name="que" value="retirar" class="secundario">Retirar</button></form></td></tr>
   <?php endforeach ?>
 </table>

@@ -43,6 +43,20 @@ if (es_post()) {
         } elseif ($que === 'borrar_festivo') {
             consulta(db(), 'DELETE FROM festivos WHERE id = ?', [(int)$_POST['id']]);
             auditar(db(), (int)$yo['id'], 'festivo_borrado', 'festivo=' . (int)$_POST['id']);
+        } elseif ($que === 'importar_festivos') {
+            $f = $_FILES['archivo'] ?? null;
+            if (!$f || $f['error'] !== UPLOAD_ERR_OK || $f['size'] > 1024 * 1024) throw new DomainException('Elige el archivo del calendario (máximo 1 MB).');
+            $lista = leer_festivos((string)file_get_contents($f['tmp_name']));
+            if (!$lista) throw new DomainException('No he encontrado fechas en el archivo. Usa un .ics o un CSV con «fecha;nombre».');
+            $centro = (int)($_POST['centro_id'] ?? 0) ?: null;
+            $n = 0;
+            foreach ($lista as [$fecha, $nombre]) {
+                $existe = consulta(db(), 'SELECT COUNT(*) FROM festivos WHERE fecha = ? AND centro_id <=> ?', [$fecha, $centro])->fetchColumn();
+                if (!$existe) $n += consulta(db(), 'INSERT INTO festivos (centro_id, fecha, nombre) VALUES (?, ?, ?)', [$centro, $fecha, $nombre])->rowCount();
+            }
+            auditar(db(), (int)$yo['id'], 'festivos_importados', "nuevos=$n");
+            aviso("Importados $n festivos" . ($n < count($lista) ? ' (' . (count($lista) - $n) . ' ya estaban)' : '') . '.');
+            redirigir('horarios', ['anio' => substr($lista[0][0], 0, 4)]);
         } elseif ($que === 'copiar_festivos') {
             $anio = (int)$_POST['anio'];
             consulta(db(), 'INSERT INTO festivos (centro_id, fecha, nombre) SELECT centro_id, DATE_ADD(fecha, INTERVAL 1 YEAR), nombre FROM festivos WHERE YEAR(fecha) = ?', [$anio]);
@@ -130,6 +144,13 @@ cabecera('Horarios, festivos y ausencias', $yo);
   <label>Ámbito <select name="centro_id"><?= opciones(['' => 'Toda la empresa'] + $centros, '') ?></select></label>
   <button name="que" value="festivo">Añadir</button>
 </form>
+<form method="post" enctype="multipart/form-data" class="filtros tarjeta">
+  <?= csrf_campo() ?>
+  <label>Subir calendario (.ics de Google/Outlook o CSV «fecha;nombre») <input type="file" name="archivo" accept=".ics,.csv,.txt" required></label>
+  <label>Ámbito <select name="centro_id"><?= opciones(['' => 'Toda la empresa'] + $centros, '') ?></select></label>
+  <button name="que" value="importar_festivos">Importar</button>
+</form>
+<p class="nota">Calendario laboral oficial: búscalo como «festivos [tu comunidad] [año] ics» o exporta el de Google Calendar «Festivos en España».</p>
 <?php if ($festivos): ?>
 <form method="post"><?= csrf_campo() ?><input type="hidden" name="anio" value="<?= $anio ?>"><button name="que" value="copiar_festivos" class="secundario">Copiar estos festivos a <?= $anio + 1 ?></button></form>
 <?php endif ?>
