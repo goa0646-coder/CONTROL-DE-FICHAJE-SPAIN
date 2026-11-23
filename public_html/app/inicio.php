@@ -22,6 +22,7 @@ require __DIR__ . '/cuadrante.php';
 require __DIR__ . '/sustituciones.php';
 require __DIR__ . '/importar.php';
 require __DIR__ . '/anuncios.php';
+require __DIR__ . '/presencia.php';
 
 // config-inda.php vive fuera de public_html (ver INSTALAR.md).
 // config-fichaje.php se sigue aceptando para instalaciones antiguas.

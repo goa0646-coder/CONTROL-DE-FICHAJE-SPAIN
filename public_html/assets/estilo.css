@@ -308,3 +308,11 @@ button.enlace { background: none; color: var(--acento); padding: 0; min-height: 
 @media (max-width: 860px) { .ficha-cab { flex-direction: column; text-align: center; } }
 @media print { .detalle-anuncio .volver, .lista-anuncios, .barra-acciones { display: none !important; } .dos-paneles { display: block; } }
 .lista-personas label[hidden] { display: none !important; }
+.calendario .corto { background: rgba(224, 53, 43, .14); color: var(--rojo); font-weight: 600; }
+.calendario tr.totales td { font-weight: 600; font-variant-numeric: tabular-nums; background: var(--relleno); }
+.quien-cal { display: flex; flex-direction: column; line-height: 1.2; }
+.quien-cal small { font-size: .72rem; }
+.para { margin: .4rem 0 0; font-size: .875rem; color: var(--gris); }
+.para summary { color: var(--gris); font-weight: 400; }
+.para summary span { color: var(--acento); font-weight: 500; margin-left: .3rem; }
+.adjuntos { display: flex; flex-wrap: wrap; gap: .5rem; }

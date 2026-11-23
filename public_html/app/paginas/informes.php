@@ -12,6 +12,59 @@ $dep = (int)($_GET['dep'] ?? 0);
 $cen = (int)($_GET['centro'] ?? 0);
 $personas = array_values(array_filter(personas_visibles(db(), $yo), fn($p) => (!$dep || $p['departamento_id'] == $dep) && (!$cen || $p['centro_id'] == $cen)
     && local($p['alta_utc'], 'Y-m-d') <= $hasta && (!$p['baja_utc'] || local($p['baja_utc'], 'Y-m-d') >= $desde)));
+// Presencia diaria: un día, persona a persona.
+if (($_GET['vista'] ?? '') === 'diario') {
+    $dia = $fecha('dia', local(ahora(), 'Y-m-d'));
+    $todas = array_values(array_filter(personas_visibles(db(), $yo), fn($p) => $p['activo'] && (!$dep || $p['departamento_id'] == $dep) && (!$cen || $p['centro_id'] == $cen)));
+    $filas = presencia_dia(db(), $todas, $dia);
+    auditar(db(), (int)$yo['id'], isset($_GET['csv']) ? 'informe_descargado' : 'informe_visto', "presencia=$dia personas=" . count($filas));
+    $hm = fn($utc) => $utc ? local($utc, 'H:i') : '';
+    if (isset($_GET['csv'])) {
+        header('Content-Type: text/csv; charset=utf-8');
+        header("Content-Disposition: attachment; filename=\"presencia-$dia.csv\"");
+        $out = fopen('php://output', 'w');
+        fwrite($out, "\xEF\xBB\xBF");
+        fputcsv($out, ['Fecha', 'Persona', 'DNI', 'Jornada', 'Entrada', 'Salida', 'Pausas', 'Teórico', 'Trabajado', 'Diferencia'], ';');
+        foreach ($filas as $f) fputcsv($out, [date('d/m/Y', strtotime($dia)), nombre($f['persona']), $f['persona']['dni'], $f['jornada'], $hm($f['entrada']), $hm($f['salida']),
+            horas($f['pausas']), horas($f['teorico']), horas($f['trabajado']), horas_signo($f['diferencia'])], ';');
+        exit;
+    }
+    $deps = db()->query('SELECT id, nombre FROM departamentos ORDER BY nombre')->fetchAll(PDO::FETCH_KEY_PAIR);
+    $dentro = count(array_filter($filas, fn($f) => $f['abierta']));
+    $sin = count(array_filter($filas, fn($f) => $f['teorico'] && !$f['entrada']));
+    cabecera('Presencia diaria', $yo); ?>
+<nav class="segmentos no-imprimir"><a href="?p=informes">Resumen del periodo</a><a href="?p=informes&vista=diario" class="activo">Presencia diaria</a></nav>
+<form class="filtros no-imprimir">
+  <input type="hidden" name="p" value="informes"><input type="hidden" name="vista" value="diario">
+  <a class="boton secundario" href="?p=informes&vista=diario&dia=<?= date('Y-m-d', strtotime("$dia -1 day")) ?>&dep=<?= $dep ?>">‹</a>
+  <label><input type="date" name="dia" value="<?= e($dia) ?>"></label>
+  <a class="boton secundario" href="?p=informes&vista=diario&dia=<?= date('Y-m-d', strtotime("$dia +1 day")) ?>&dep=<?= $dep ?>">›</a>
+  <?php if ($deps): ?><label><select name="dep"><?= opciones(['' => 'Todos los departamentos'] + $deps, $dep) ?></select></label><?php endif ?>
+  <button>Ver</button>
+  <a class="boton secundario" href="?<?= e(http_build_query(['csv' => 1] + $_GET + ['vista' => 'diario', 'dia' => $dia])) ?>">Excel (CSV)</a>
+  <button type="button" data-imprimir class="secundario">Imprimir / PDF</button>
+</form>
+<div class="cifras">
+  <div><span>Personas</span><strong><?= count($filas) ?></strong></div>
+  <div><span>Trabajando ahora</span><strong><?= $dentro ?></strong></div>
+  <div><span>Sin fichar (con horario)</span><strong class="<?= $sin ? 'error' : '' ?>"><?= $sin ?></strong></div>
+  <div><span>Ausentes</span><strong><?= count(array_filter($filas, fn($f) => $f['ausencia'])) ?></strong></div>
+</div>
+<table>
+  <tr><th>Persona</th><th>Jornada</th><th>Entrada</th><th>Salida</th><th>Pausas</th><th>Teórico</th><th>Total</th><th>Diferencia</th></tr>
+  <?php foreach ($filas as $f): $tarde = $f['entrada'] && $f['horario_entrada'] && local($f['entrada'], 'H:i:s') > $f['horario_entrada']; ?>
+  <tr><td><a class="con-avatar" href="?p=historial&u=<?= e($f['persona']['id']) ?>&mes=<?= substr($dia, 0, 7) ?>"><?= avatar($f['persona'], 'mini') ?> <?= e(nombre($f['persona'])) ?></a></td>
+    <td><?= e($f['jornada']) ?></td>
+    <td class="<?= $tarde ? 'error' : '' ?>"><?= $hm($f['entrada']) ?: ($f['teorico'] ? '<span class="error">Sin fichar</span>' : '') ?></td>
+    <td><?= $f['abierta'] ? '<span class="estado dentro">Dentro</span>' : $hm($f['salida']) ?></td>
+    <td><?= $f['pausas'] ? horas($f['pausas']) : '' ?></td><td><?= horas($f['teorico']) ?></td><td><?= horas($f['trabajado']) ?></td>
+    <td class="<?= $f['diferencia'] < 0 ? 'error' : '' ?>"><?= horas_signo($f['diferencia']) ?></td></tr>
+  <?php endforeach ?>
+</table>
+<p class="nota">Hora de Madrid. En rojo: entrada después de la hora del horario, o sin fichar teniendo horario. Pulsa en una persona para ver su registro.</p>
+<?php pie();
+    exit;
+}
 $filas = informe(db(), $personas, $desde, $hasta);
 // Si el periodo es un mes completo, se muestra quién ha firmado su registro.
 $mes_completo = substr($desde, 8) === '01' && $hasta === date('Y-m-t', strtotime($desde)) ? substr($desde, 0, 7) : null;
@@ -40,6 +93,7 @@ foreach ($filas as $f) foreach ($tot as $k => $_) $tot[$k] += $f[$k];
 cabecera('Informes', $yo);
 ?>
 <div class="solo-imprimir"><p><strong><?= e($empresa['nombre']) ?></strong> · CIF <?= e($empresa['cif']) ?> · Informe de jornada del <?= date('d/m/Y', strtotime($desde)) ?> al <?= date('d/m/Y', strtotime($hasta)) ?></p></div>
+<nav class="segmentos no-imprimir"><a href="?p=informes" class="activo">Resumen del periodo</a><a href="?p=informes&vista=diario">Presencia diaria</a></nav>
 <form class="filtros no-imprimir">
   <input type="hidden" name="p" value="informes">
   <label>Desde <input type="date" name="desde" value="<?= e($desde) ?>"></label>

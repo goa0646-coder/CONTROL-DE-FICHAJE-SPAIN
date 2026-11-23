@@ -24,6 +24,16 @@ $hoy = local(ahora(), 'Y-m-d');
 $deps = db()->query('SELECT id, nombre FROM departamentos WHERE activo = 1 ORDER BY nombre')->fetchAll(PDO::FETCH_KEY_PAIR);
 $ant = (new DateTime($desde))->modify('-1 month')->format('Y-m');
 $sig = (new DateTime($desde))->modify('+1 month')->format('Y-m');
+// Responsable/admin: personas trabajando cada día, horas del mes y días que no llegan al ratio.
+$cals = [];
+foreach ($personas as $p) $cals[$p['id']] = calendario_teorico(db(), $p, $desde, $hasta);
+$trabajan = array_fill_keys($fechas, 0);
+foreach ($cals as $cal) foreach ($cal as $f => $c) if ($c['minutos'] > 0 && !$c['ausencia'] && !$c['festivo']) $trabajan[$f]++;
+$cortos = [];
+// El ratio es de toda la plantilla, aunque se esté viendo un equipo o departamento.
+if ($jefe) foreach (huecos(db(), db()->query("SELECT * FROM usuarios WHERE activo = 1 AND rol <> 'inspeccion'")->fetchAll(), $desde, $hasta) as [$f, , , $faltan]) $cortos[$f] = ($cortos[$f] ?? 0) + $faltan;
+$pts = puestos(db());
+$pp = puestos_por_persona(db());
 cabecera('Calendario', $yo);
 ?>
 <form class="filtros">
@@ -35,11 +45,16 @@ cabecera('Calendario', $yo);
   <button>Ver</button>
 </form>
 <table class="calendario">
-  <tr><th class="persona"></th><?php foreach ($fechas as $f): ?><th><?= mb_substr(DIAS[(int)date('N', strtotime($f))], 0, 1) ?><br><?= (int)substr($f, 8) ?></th><?php endforeach ?></tr>
+  <tr><th class="persona"></th><?php foreach ($fechas as $f): ?><th class="<?= isset($cortos[$f]) ? 'corto' : '' ?>"><?= mb_substr(DIAS[(int)date('N', strtotime($f))], 0, 1) ?><br><?= (int)substr($f, 8) ?></th><?php endforeach ?></tr>
+  <?php if ($jefe): ?>
+  <tr class="totales"><td class="persona"><small>Trabajan</small></td><?php foreach ($fechas as $f): ?><td class="<?= isset($cortos[$f]) ? 'corto' : '' ?>" title="<?= isset($cortos[$f]) ? 'Faltan ' . $cortos[$f] . ' para el mínimo' : '' ?>"><?= $trabajan[$f] ?></td><?php endforeach ?></tr>
+  <?php endif ?>
   <?php foreach ($personas as $p):
-      $cal = calendario_teorico(db(), $p, $desde, $hasta);
-      $detalle = $jefe || $p['id'] == $yo['id']; ?>
-  <tr><td class="persona"><span class="con-avatar"><?= avatar($p, 'mini') ?> <?= e(nombre($p)) ?></span></td>
+      $cal = $cals[$p['id']];
+      $detalle = $jefe || $p['id'] == $yo['id'];
+      $mes_min = array_sum(array_map(fn($c) => $c['ausencia'] || $c['festivo'] ? 0 : $c['minutos'], $cal)); ?>
+  <tr><td class="persona"><span class="con-avatar"><?= avatar($p, 'mini') ?> <span class="quien-cal"><?= e(nombre($p)) ?>
+    <?php if ($jefe): ?><small><?= horas($mes_min * 60) ?> h<?= ($pp[$p['id']] ?? []) ? ' · ' . e(implode(', ', array_intersect_key($pts, array_flip($pp[$p['id']])))) : '' ?></small><?php endif ?></span></span></td>
     <?php foreach ($cal as $f => $c):
         $clase = ($f === $hoy ? 'hoy ' : '') . (!$c['laborable'] || $c['festivo'] ? 'libre' : '');
         if ($c['ausencia']) {
@@ -56,6 +71,7 @@ cabecera('Calendario', $yo);
     endforeach ?></tr>
   <?php endforeach ?>
 </table>
+<?php if ($cortos): ?><p class="aviso error">Hay <?= count($cortos) ?> días que no llegan al mínimo de personal (en rojo). Revísalos en <a href="?p=planificacion">Planificación</a> o busca sustituto.</p><?php endif ?>
 <p class="nota">Números = horas previstas. F = festivo. ? = ausencia pendiente. Pasa el ratón (o mantén pulsado) para ver el detalle.</p>
 <?php if ($jefe): ?>
 <p class="nota">Leyenda: <?php foreach (tipos_ausencia(db()) as $t): ?><span class="etiqueta" style="background:<?= e($t['color']) ?>"><?= e($t['nombre']) ?></span> <?php endforeach ?></p>

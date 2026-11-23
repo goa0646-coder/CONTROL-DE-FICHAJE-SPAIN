@@ -58,8 +58,22 @@ const COLUMNAS = [
     'centro' => 'centro', 'centro de trabajo' => 'centro', 'cargo' => 'puesto', 'puesto' => 'puesto', 'categoria' => 'puesto',
     'departamento' => 'departamento', 'horario' => 'horario', 'turno' => 'horario', 'rol' => 'rol', 'perfil' => 'rol',
     'usuario suspendido' => 'suspendido', 'suspendido' => 'suspendido', 'activo' => 'activo', 'baja' => 'suspendido',
+    'telefono' => 'telefono', 'movil' => 'telefono', 'telefono movil' => 'telefono', 'telefono de contacto' => 'telefono',
+    'numero seguridad social' => 'nss', 'numero de seguridad social' => 'nss', 'n seguridad social' => 'nss', 'nss' => 'nss', 'naf' => 'nss', 'seguridad social' => 'nss',
+    'fecha de nacimiento' => 'nacimiento', 'fecha nacimiento' => 'nacimiento', 'nacimiento' => 'nacimiento',
     'n de empleado' => 'num_empleado', 'numero de empleado' => 'num_empleado', 'num empleado' => 'num_empleado', 'codigo' => 'num_empleado', 'id empleado' => 'num_empleado',
 ];
+
+// "23/08/1989", "1989-08-23" o el número de fecha de Excel (32743) → "1989-08-23". Si no se entiende, null.
+function fecha_iso(string $s): ?string
+{
+    $s = trim($s);
+    if (preg_match('#^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$#', $s, $m)) [$d, $mes, $a] = [(int)$m[1], (int)$m[2], (int)$m[3]];
+    elseif (preg_match('#^(\d{4})-(\d{2})-(\d{2})#', $s, $m)) [$a, $mes, $d] = [(int)$m[1], (int)$m[2], (int)$m[3]];
+    elseif (ctype_digit($s) && $s > 1000 && $s < 80000) return gmdate('Y-m-d', ((int)$s - 25569) * 86400);
+    else return null;
+    return checkdate($mes, $d, $a) ? sprintf('%04d-%02d-%02d', $a, $mes, $d) : null;
+}
 
 function normalizar(string $s): string
 {
@@ -133,7 +147,10 @@ function preparar_importacion(PDO $db, array $filas): array
         $suspendido = isset($d['suspendido']) ? in_array(normalizar($d['suspendido']), ['si', 'yes', 'true', '1', 'x'], true)
             : (isset($d['activo']) && in_array(normalizar($d['activo']), ['no', 'false', '0'], true));
         $f = ['fila' => $n + 1, 'email' => $email, 'nombre' => $nombre, 'apellidos' => $apellidos, 'dni' => $dni, 'rol' => $rol, 'activo' => !$suspendido,
-            'num_empleado' => $vacio($d['num_empleado'] ?? '') ? null : mb_substr($d['num_empleado'], 0, 20)];
+            'num_empleado' => $vacio($d['num_empleado'] ?? '') ? null : mb_substr($d['num_empleado'], 0, 20),
+            'telefono' => $vacio($d['telefono'] ?? '') ? null : mb_substr(trim($d['telefono']), 0, 30),
+            'nss' => $vacio($d['nss'] ?? '') ? null : mb_substr(preg_replace('/\s+/', '', $d['nss']), 0, 20),
+            'nacimiento' => fecha_iso($d['nacimiento'] ?? '')];
         foreach (['centro' => 'centros', 'departamento' => 'departamentos', 'puesto' => 'puestos'] as $campo => $grupo) {
             $v = $vacio($d[$campo] ?? '') ? null : trim(preg_replace('/\s+/u', ' ', $d[$campo]));
             $f[$campo] = $v;
@@ -183,6 +200,7 @@ function aplicar_importacion(PDO $db, array $plan, bool $actualizar): array
                 'horario_id' => $f['horario_id'], 'activo' => (int)$f['activo']];
             if ($f['dni'] !== '') $c['dni'] = $f['dni'];
             if ($f['num_empleado']) $c['num_empleado'] = $f['num_empleado'];
+            foreach (['telefono' => 'telefono', 'nss' => 'nss', 'nacimiento' => 'fecha_nacimiento'] as $k => $col) if (!empty($f[$k])) $c[$col] = $f[$k];
             $antes = consulta($db, 'SELECT * FROM usuarios WHERE email = ?', [$f['email']])->fetch();
             if ($antes) {
                 if (!$actualizar) {

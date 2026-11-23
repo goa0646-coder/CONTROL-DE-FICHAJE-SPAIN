@@ -28,16 +28,18 @@ function resolver_destinatarios(PDO $db, array $yo, array $sel): array
     return array_keys($ids);
 }
 
-function crear_anuncio(PDO $db, array $yo, string $titulo, string $texto, array $uids, ?string $archivo = null, ?string $original = null): int
+// $adjuntos: [[archivo guardado, nombre original], …].
+function crear_anuncio(PDO $db, array $yo, string $titulo, string $texto, array $uids, array $adjuntos = []): int
 {
     $titulo = trim($titulo);
     $texto = trim($texto);
     if ($titulo === '' || $texto === '') throw new DomainException('Pon título y texto.');
     if (!$uids) throw new DomainException('Elige al menos un destinatario.');
     $db->beginTransaction();
-    consulta($db, 'INSERT INTO comunicados (titulo, texto, centro_id, autor_id, creado_utc, archivo, nombre_original, por_personas) VALUES (?, ?, NULL, ?, ?, ?, ?, 1)',
-        [mb_substr($titulo, 0, 150), $texto, $yo['id'], ahora(), $archivo, $original ? mb_substr($original, 0, 200) : null]);
+    consulta($db, 'INSERT INTO comunicados (titulo, texto, centro_id, autor_id, creado_utc, por_personas) VALUES (?, ?, NULL, ?, ?, 1)',
+        [mb_substr($titulo, 0, 150), $texto, $yo['id'], ahora()]);
     $id = (int)$db->lastInsertId();
+    foreach ($adjuntos as [$archivo, $original]) consulta($db, 'INSERT INTO comunicados_adjuntos (comunicado_id, archivo, nombre_original) VALUES (?, ?, ?)', [$id, $archivo, mb_substr($original, 0, 200)]);
     $s = $db->prepare('INSERT IGNORE INTO comunicados_para (comunicado_id, usuario_id) VALUES (?, ?)');
     foreach ($uids as $u) $s->execute([$id, (int)$u]);
     $db->commit();
@@ -49,6 +51,26 @@ function crear_anuncio(PDO $db, array $yo, string $titulo, string $texto, array 
 function anuncio(PDO $db, int $id): ?array
 {
     return consulta($db, 'SELECT c.*, a.nombre AS autor, a.apellidos AS autor_apellidos FROM comunicados c JOIN usuarios a ON a.id = c.autor_id WHERE c.id = ?', [$id])->fetch() ?: null;
+}
+
+// Adjuntos: [[id, archivo, nombre_original]]. Los anuncios antiguos tenían uno solo (id 0).
+function adjuntos_anuncio(PDO $db, array $c): array
+{
+    $l = consulta($db, 'SELECT id, archivo, nombre_original FROM comunicados_adjuntos WHERE comunicado_id = ? ORDER BY id', [$c['id']])->fetchAll();
+    if ($c['archivo']) array_unshift($l, ['id' => 0, 'archivo' => $c['archivo'], 'nombre_original' => $c['nombre_original'] ?: 'adjunto']);
+    return $l;
+}
+
+// Varios archivos de un <input type="file" multiple name="x[]">: los guarda y devuelve [[archivo, nombre]].
+function guardar_varios(?array $f): array
+{
+    if (!$f || !is_array($f['name'] ?? null)) return [];
+    $out = [];
+    foreach (array_keys($f['name']) as $i) {
+        $uno = ['name' => $f['name'][$i], 'tmp_name' => $f['tmp_name'][$i], 'error' => $f['error'][$i], 'size' => $f['size'][$i]];
+        if ($a = guardar_archivo($uno)) $out[] = [$a, basename($uno['name'])];
+    }
+    return $out;
 }
 
 // Ids de los destinatarios (anuncios nuevos: lista guardada; antiguos: su centro o toda la plantilla).
@@ -73,7 +95,7 @@ function puede_ver_anuncio(PDO $db, array $c, array $u): bool
 // Anuncios que ha recibido $u, con su fecha de lectura (NULL = pendiente).
 function anuncios_para(PDO $db, array $u, int $limite = 100): array
 {
-    return consulta($db, 'SELECT c.*, a.nombre AS autor, a.apellidos AS autor_apellidos, l.leido_utc FROM comunicados c JOIN usuarios a ON a.id = c.autor_id
+    return consulta($db, 'SELECT c.*, a.nombre AS autor, a.apellidos AS autor_apellidos, l.leido_utc, (c.archivo IS NOT NULL OR EXISTS (SELECT 1 FROM comunicados_adjuntos x WHERE x.comunicado_id = c.id)) AS con_adjunto FROM comunicados c JOIN usuarios a ON a.id = c.autor_id
         LEFT JOIN comunicados_leidos l ON l.comunicado_id = c.id AND l.usuario_id = ?
         WHERE (c.por_personas = 0 AND (c.centro_id IS NULL OR c.centro_id = ?))
            OR EXISTS (SELECT 1 FROM comunicados_para p WHERE p.comunicado_id = c.id AND p.usuario_id = ?)
@@ -89,7 +111,7 @@ function anuncios_pendientes(PDO $db, array $u): array
 // Enviados por $yo (el admin ve todos).
 function anuncios_enviados(PDO $db, array $yo): array
 {
-    return consulta($db, 'SELECT c.*, a.nombre AS autor, a.apellidos AS autor_apellidos FROM comunicados c JOIN usuarios a ON a.id = c.autor_id'
+    return consulta($db, 'SELECT c.*, a.nombre AS autor, a.apellidos AS autor_apellidos, (c.archivo IS NOT NULL OR EXISTS (SELECT 1 FROM comunicados_adjuntos x WHERE x.comunicado_id = c.id)) AS con_adjunto FROM comunicados c JOIN usuarios a ON a.id = c.autor_id'
         . ($yo['rol'] === 'admin' ? '' : ' WHERE c.autor_id = ' . (int)$yo['id']) . ' ORDER BY c.id DESC LIMIT 200')->fetchAll();
 }
 

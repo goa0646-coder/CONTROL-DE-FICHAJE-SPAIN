@@ -113,7 +113,7 @@ for (const caja of document.querySelectorAll('[data-ia-dni]')) {
     try {
       const r = await fetch('?p=ia', { method: 'POST', body: datos }); const d = await r.json();
       if (!r.ok) throw new Error(d.error);
-      for (const k of ['nombre', 'apellidos', 'dni']) if (d[k]) form[k].value = d[k];
+      for (const k of ['nombre', 'apellidos', 'dni', 'fecha_nacimiento']) if (d[k] && form[k]) form[k].value = d[k];
       estado.textContent = d.dni_valido ? 'Leído. Revisa los datos y guarda.' : 'Leído, pero la letra del DNI no cuadra: revísalo.';
     } catch (e) { estado.textContent = e.message; }
   });
