@@ -43,7 +43,8 @@ cabecera('Calendario', $yo);
     <?php foreach ($cal as $f => $c):
         $clase = ($f === $hoy ? 'hoy ' : '') . (!$c['laborable'] || $c['festivo'] ? 'libre' : '');
         if ($c['ausencia']) {
-            $txt = $detalle ? mb_substr($c['ausencia']['tipo'], 0, 1) : '·';
+            // Iniciales (Vacaciones → V, Visita médica → VM) para no confundir tipos.
+            $txt = $detalle ? implode('', array_map(fn($w) => mb_strtoupper(mb_substr($w, 0, 1)), array_filter(explode(' ', $c['ausencia']['tipo']), fn($w) => mb_strlen($w) > 3 || $w === 'IT'))) : '·';
             $titulo = $detalle ? $c['ausencia']['tipo'] : 'Ausente';
             echo '<td class="' . $clase . '" title="' . e($titulo) . '" style="background:' . e($detalle ? $c['ausencia']['color'] : '#6b7280') . ';color:#fff">' . e($txt) . '</td>';
         } elseif (isset($pendientes[$p['id']][$f])) {
