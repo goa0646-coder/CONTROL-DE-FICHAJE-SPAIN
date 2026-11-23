@@ -74,7 +74,7 @@ cabecera($yo['rol'] === 'responsable' ? 'Mi equipo' : 'Personas', $yo);
       $estado = estado_actual(db(), (int)$p['id']);
       $aus = $p['activo'] ? (ausencias_por_dia(db(), (int)$p['id'], $hoy, $hoy)[$hoy] ?? null) : null; ?>
   <tr class="<?= $p['activo'] ? '' : 'anulado' ?>">
-    <td><?= e(nombre($p)) ?><?= $p['activo'] ? '' : ' (baja)' ?></td>
+    <td><span class="con-avatar"><?= avatar($p, 'mini') ?> <?= e(nombre($p)) ?><?= $p['activo'] ? '' : ' (baja)' ?></span></td>
     <td><span class="estado <?= $estado ?>"><?= ['fuera' => 'Fuera', 'dentro' => 'Trabajando', 'pausa' => 'En pausa'][$estado] ?></span>
       <?= $aus ? '<span class="etiqueta" style="background:' . e($aus['color']) . '">' . e($aus['tipo']) . '</span>' : '' ?></td>
     <td><?= $f ? TIPOS[$f['tipo']] . ' ' . local($f['momento_utc']) : '' ?></td>

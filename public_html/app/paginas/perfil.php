@@ -4,7 +4,14 @@ $token_nuevo = null;
 if (es_post()) {
     try {
         $que = $_POST['que'] ?? '';
-        if ($que === 'clave') {
+        if ($que === 'foto') {
+            guardar_foto(db(), $u, $_FILES['foto'] ?? null);
+            auditar(db(), (int)$u['id'], 'foto_cambiada');
+            aviso('Foto actualizada.');
+        } elseif ($que === 'quitar_foto') {
+            consulta(db(), 'UPDATE usuarios SET foto = NULL WHERE id = ?', [$u['id']]);
+            aviso('Foto quitada.');
+        } elseif ($que === 'clave') {
             if (!password_verify($_POST['actual'] ?? '', $u['password_hash'])) throw new DomainException('La contraseña actual no es correcta.');
             if (strlen($_POST['nueva'] ?? '') < 8) throw new DomainException('La nueva contraseña debe tener al menos 8 caracteres.');
             consulta(db(), 'UPDATE usuarios SET password_hash = ? WHERE id = ?', [password_hash($_POST['nueva'], PASSWORD_DEFAULT), $u['id']]);
@@ -44,12 +51,41 @@ $dep = $u['departamento_id'] ? consulta(db(), 'SELECT nombre FROM departamentos 
 $hor = $u['horario_id'] ? (horarios(db())[$u['horario_id']]['nombre'] ?? null) : null;
 cabecera('Mi perfil', $u);
 ?>
-<div class="tarjeta">
-  <h2><?= e(nombre($u)) ?></h2>
-  <p>Email: <?= e($u['email']) ?><?= $u['dni'] ? ' · DNI ' . e($u['dni']) : '' ?><?= $u['num_empleado'] ? ' · Nº ' . e($u['num_empleado']) : '' ?></p>
-  <p>Centro: <?= e($c['nombre'] ?? '—') ?> · Departamento: <?= e($dep ?? '—') ?> · Responsable: <?= e($jefe ? nombre($jefe) : '—') ?></p>
-  <p>Horario: <?= e($hor ?? 'Sin horario') ?> · Alta: <?= local($u['alta_utc'], 'd/m/Y') ?></p>
-  <p class="nota">Si algún dato no es correcto, díselo a administración.</p>
+<?php $saldos = $u['rol'] !== 'inspeccion' ? saldos_ausencia(db(), $u, (int)local(ahora(), 'Y')) : [];
+$pts = array_intersect_key(puestos(db()), array_flip(puestos_por_persona(db())[$u['id']] ?? [])); ?>
+<div class="tarjeta ficha">
+  <div class="ficha-cab">
+    <form method="post" enctype="multipart/form-data" class="foto-perfil" data-foto>
+      <?= csrf_campo() ?>
+      <?= avatar($u, 'grande') ?>
+      <label class="cambiar-foto" title="Cambiar foto"><input type="file" name="foto" accept="image/jpeg,image/png,image/webp" data-subir-foto><span>Cambiar</span></label>
+      <input type="hidden" name="que" value="foto">
+    </form>
+    <div>
+      <h2><?= e(nombre($u)) ?></h2>
+      <p class="nota"><?= e($pts ? implode(' · ', $pts) : ['empleado' => 'Empleado', 'responsable' => 'Responsable', 'admin' => 'Administración', 'inspeccion' => 'Inspección'][$u['rol']]) ?><?= $c ? ' · ' . e($c['nombre']) : '' ?></p>
+      <?php if ($u['foto']): ?><form method="post" class="en-linea"><?= csrf_campo() ?><button name="que" value="quitar_foto" class="enlace">Quitar foto</button></form><?php endif ?>
+    </div>
+  </div>
+  <?php foreach ($saldos as $sa): ?>
+  <div class="cifras">
+    <div><span><?= e($sa['tipo']) ?>: disponibles</span><strong><?= e(+$sa['disponible']) ?> <small>días</small></strong></div>
+    <div><span>Disfrutados</span><strong><?= e(+$sa['consumido']) ?></strong></div>
+    <div><span>Pendientes de aprobar</span><strong><?= e(+$sa['comprometido']) ?></strong></div>
+    <div><span>Asignados <?= local(ahora(), 'Y') ?></span><strong><?= e(+$sa['asignado']) ?></strong></div>
+  </div>
+  <?php endforeach ?>
+  <dl class="datos">
+    <div><dt>Email</dt><dd><?= e($u['email']) ?></dd></div>
+    <div><dt>DNI</dt><dd><?= e($u['dni'] ?: '—') ?></dd></div>
+    <?php if ($u['num_empleado']): ?><div><dt>Nº empleado</dt><dd><?= e($u['num_empleado']) ?></dd></div><?php endif ?>
+    <div><dt>Centro</dt><dd><?= e($c['nombre'] ?? '—') ?></dd></div>
+    <div><dt>Departamento</dt><dd><?= e($dep ?? '—') ?></dd></div>
+    <div><dt>Responsable</dt><dd><?= e($jefe ? nombre($jefe) : '—') ?></dd></div>
+    <div><dt>Horario</dt><dd><?= e($hor ?? 'Sin horario') ?></dd></div>
+    <div><dt>Alta</dt><dd><?= local($u['alta_utc'], 'd/m/Y') ?></dd></div>
+  </dl>
+  <p class="nota">Si algún dato no es correcto, díselo a administración desde <a href="?p=enviar">Enviar a la empresa</a>.</p>
 </div>
 
 <form method="post" class="tarjeta">

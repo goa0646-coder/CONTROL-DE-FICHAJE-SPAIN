@@ -17,6 +17,15 @@ if (es_post() && isset($_POST['cambiar_estado'])) {
     redirigir('usuarios', array_intersect_key($_GET, ['ver' => 1, 'q' => 1]));
 }
 
+// El admin puede retirar una foto de perfil inadecuada.
+if (es_post() && isset($_POST['quitar_foto'])) {
+    $id = (int)$_POST['quitar_foto'];
+    consulta(db(), 'UPDATE usuarios SET foto = NULL WHERE id = ?', [$id]);
+    auditar(db(), (int)$yo['id'], 'foto_retirada', "usuario=$id");
+    aviso('Foto retirada.');
+    redirigir('usuarios', ['u' => $id]);
+}
+
 if (es_post() && isset($_POST['saldos'])) {
     $id = (int)$_POST['id'];
     $anio = (int)$_POST['anio'];
@@ -109,6 +118,9 @@ $u ??= ['id' => '', 'num_empleado' => '', 'nombre' => '', 'apellidos' => '', 'dn
     'centro_id' => '', 'responsable_id' => '', 'departamento_id' => '', 'horario_id' => '', 'gps_modo' => '', 'acceso_hasta' => '', 'activo' => 1, 'pin_hash' => null];
 cabecera('Usuarios', $yo);
 ?>
+<?php if (!empty($u['foto'])): ?>
+<form method="post" class="tarjeta con-avatar"><?= csrf_campo() ?><?= avatar($u, 'grande') ?> <button name="quitar_foto" value="<?= e($u['id']) ?>" class="secundario" data-confirmar="¿Retirar la foto de perfil de <?= e(nombre($u)) ?>?">Retirar foto</button></form>
+<?php endif ?>
 <form method="post" class="tarjeta">
   <?= csrf_campo() ?><input type="hidden" name="id" value="<?= e($u['id']) ?>">
   <h2><?= $u['id'] ? 'Editar ' . e(nombre($u)) : 'Nueva persona' ?></h2>
@@ -176,7 +188,7 @@ cabecera('Usuarios', $yo);
   <tr><th>Nombre</th><th>Rol</th><th>Centro</th><th>Email</th><th>Estado</th><th></th></tr>
   <?php foreach ($lista as $x): ?>
   <tr class="<?= $x['activo'] ? '' : 'anulado' ?>">
-    <td><?= e(nombre($x)) ?></td><td><?= $roles[$x['rol']] ?></td><td><?= e($x['centro'] ?? '') ?></td><td><?= e($x['email']) ?></td>
+    <td><span class="con-avatar"><?= avatar($x, 'mini') ?> <?= e(nombre($x)) ?></span></td><td><?= $roles[$x['rol']] ?></td><td><?= e($x['centro'] ?? '') ?></td><td><?= e($x['email']) ?></td>
     <td><span class="estado <?= $x['activo'] ? 'dentro' : 'fuera' ?>"><?= $x['activo'] ? 'Activo' : 'De baja' ?></span></td>
     <td class="acciones"><a href="?p=usuarios&u=<?= e($x['id']) ?>">Editar</a>
       <?php if ($x['id'] != $yo['id']): ?>

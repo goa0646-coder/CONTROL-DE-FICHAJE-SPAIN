@@ -15,6 +15,8 @@ const ICONOS = [
     'planificacion' => '<rect x="3.5" y="3.5" width="17" height="17" rx="3"/><path d="M3.5 9.5h17M9.5 3.5v17"/>',
     'necesidades' => '<path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/>',
     'nominas' => '<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 9.5h17M7.5 14h4M7.5 16.5h2.5"/><circle cx="16" cy="15" r="1.6"/>',
+    'enviar' => '<path d="M21 3L10 14"/><path d="M21 3l-7 18-4-7-7-4 18-7z"/>',
+    'recibidos' => '<path d="M3 13l3-8h12l3 8v6H3z"/><path d="M3 13h5l1.5 2.5h5L16 13h5"/>',
     'admin' => '<path d="M4 21V7l8-4 8 4v14"/><path d="M9 21v-6h6v6M9 10h.01M15 10h.01"/>',
     'usuarios' => '<circle cx="10" cy="8" r="4"/><path d="M3 21c.9-4 3.8-6 7-6 1.5 0 2.9.4 4 1.2M18 15v6M15 18h6"/>',
     'horarios' => '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/>',
@@ -37,11 +39,13 @@ function menu_de(array $u): array
     $r = $u['rol'];
     $g = [];
     if ($r !== 'inspeccion') $g['Personal'] = ['fichar' => 'Fichar', 'historial' => 'Mi registro', 'ausencias' => 'Ausencias', 'calendario' => 'Calendario',
-        'correcciones' => 'Correcciones', 'documentos' => 'Documentos', 'comunicados' => 'Comunicados'];
+        'correcciones' => 'Correcciones', 'documentos' => 'Documentos', 'comunicados' => 'Anuncios', 'enviar' => 'Enviar a la empresa'];
+    if ($r !== 'inspeccion' && ($na = count(anuncios_pendientes(db(), $u)))) $g['Personal']['comunicados'] = "Anuncios ($na)";
     $no = (int)consulta(db(), "SELECT COUNT(*) FROM ofertas_turno WHERE usuario_id = ? AND estado = 'pendiente' AND fecha >= ?", [$u['id'], local(ahora(), 'Y-m-d')])->fetchColumn();
     if ($no) $g['Personal']['ofertas'] = "Turnos ofrecidos ($no)";
     $e = [];
     if ($r !== 'empleado') $e['equipo'] = $r === 'responsable' ? 'Mi equipo' : 'Personas';
+    if (in_array($r, ['responsable', 'admin'], true)) $e['recibidos'] = 'Recibidos' . (($nr = count(envios_recibidos(db(), $u, true))) ? " ($nr)" : '');
     if (puede($u, 'informes')) $e['informes'] = 'Informes';
     if (puede($u, 'planificar') && $r !== 'empleado') $e += ['planificacion' => 'Planificación', 'necesidades' => 'Necesidades'];
     $a = [];
@@ -74,7 +78,6 @@ function cabecera(string $titulo, ?array $u = null): void
     $pestanas = array_slice(array_merge(...array_values($grupos ?: [[]])), 0, 4, true);
     $aviso = $_SESSION['aviso'] ?? null;
     unset($_SESSION['aviso']);
-    $iniciales = $u ? mb_strtoupper(mb_substr($u['nombre'], 0, 1) . mb_substr($u['apellidos'], 0, 1)) : '';
     ?>
 <!doctype html>
 <html lang="es">
@@ -105,7 +108,7 @@ function cabecera(string $titulo, ?array $u = null): void
   <?php endforeach; endforeach ?>
   <div class="cuenta">
     <a href="?p=avisos" class="<?= $actual === 'avisos' ? 'activo' : '' ?>"><?= icono('avisos') ?><span>Avisos</span><?= $n ? '<b class="insignia">' . $n . '</b>' : '' ?></a>
-    <a href="?p=perfil" class="yo <?= $actual === 'perfil' ? 'activo' : '' ?>"><i class="avatar"><?= e($iniciales) ?></i><span><?= e(nombre($u)) ?><small><?= e(['empleado' => 'Empleado', 'responsable' => 'Responsable', 'admin' => 'Administración', 'inspeccion' => 'Inspección'][$u['rol']]) ?></small></span></a>
+    <a href="?p=perfil" class="yo <?= $actual === 'perfil' ? 'activo' : '' ?>"><?= avatar($u) ?><span><?= e(nombre($u)) ?><small><?= e(['empleado' => 'Empleado', 'responsable' => 'Responsable', 'admin' => 'Administración', 'inspeccion' => 'Inspección'][$u['rol']]) ?></small></span></a>
     <a href="?p=salir"><?= icono('salir') ?><span>Salir</span></a>
   </div>
 </aside>
