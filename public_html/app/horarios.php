@@ -106,3 +106,32 @@ function horas_signo(int $s): string
 {
     return ($s < 0 ? '-' : '+') . horas(abs($s));
 }
+
+// Festivos desde un archivo: calendario .ics (Google, Outlook…) o CSV/Excel con "fecha;nombre"
+// (fecha dd/mm/aaaa o aaaa-mm-dd). Devuelve [[fecha Y-m-d, nombre], …].
+function leer_festivos(string $txt): array
+{
+    $out = [];
+    $txt = preg_replace("/\r?\n[ \t]/", '', str_replace("\xEF\xBB\xBF", '', $txt)); // ICS: líneas partidas
+    if (str_contains($txt, 'BEGIN:VEVENT')) {
+        preg_match_all('/BEGIN:VEVENT(.*?)END:VEVENT/s', $txt, $ev);
+        foreach ($ev[1] as $e) {
+            if (!preg_match('/^DTSTART[^:\n]*:(\d{8})/m', $e, $d)) continue;
+            $nombre = preg_match('/^SUMMARY[^:\n]*:(.*)$/m', $e, $s) ? trim(str_replace(['\\,', '\\;', '\\n'], [',', ';', ' '], $s[1])) : 'Festivo';
+            $ini = DateTime::createFromFormat('!Ymd', $d[1]);
+            $fin = preg_match('/^DTEND[^:\n]*:(\d{8})/m', $e, $h) ? DateTime::createFromFormat('!Ymd', $h[1]) : (clone $ini)->modify('+1 day');
+            for ($f = clone $ini; $f < $fin && count($out) < 1000; $f->modify('+1 day')) $out[] = [$f->format('Y-m-d'), mb_substr($nombre, 0, 100)];
+        }
+        return $out;
+    }
+    foreach (preg_split('/\r?\n/', $txt) as $linea) {
+        $c = str_getcsv($linea, str_contains($linea, ';') ? ';' : ',');
+        $f = trim($c[0] ?? '');
+        $fecha = preg_match('#^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$#', $f, $m) ? sprintf('%04d-%02d-%02d', $m[3], $m[2], $m[1])
+            : (preg_match('/^\d{4}-\d{2}-\d{2}$/', $f) ? $f : null);
+        if ($fecha && checkdate((int)substr($fecha, 5, 2), (int)substr($fecha, 8, 2), (int)substr($fecha, 0, 4))) {
+            $out[] = [$fecha, mb_substr(trim($c[1] ?? '') ?: 'Festivo', 0, 100)];
+        }
+    }
+    return $out;
+}

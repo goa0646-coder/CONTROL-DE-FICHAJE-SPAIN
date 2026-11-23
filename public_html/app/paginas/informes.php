@@ -13,6 +13,8 @@ $cen = (int)($_GET['centro'] ?? 0);
 $personas = array_values(array_filter(personas_visibles(db(), $yo), fn($p) => (!$dep || $p['departamento_id'] == $dep) && (!$cen || $p['centro_id'] == $cen)
     && local($p['alta_utc'], 'Y-m-d') <= $hasta && (!$p['baja_utc'] || local($p['baja_utc'], 'Y-m-d') >= $desde)));
 $filas = informe(db(), $personas, $desde, $hasta);
+// Si el periodo es un mes completo, se muestra quién ha firmado su registro.
+$mes_completo = substr($desde, 8) === '01' && $hasta === date('Y-m-t', strtotime($desde)) ? substr($desde, 0, 7) : null;
 $tipos = array_column(tipos_ausencia(db(), false), 'nombre');
 auditar(db(), (int)$yo['id'], isset($_GET['csv']) ? 'informe_descargado' : 'informe_visto', "desde=$desde hasta=$hasta personas=" . count($personas));
 $empresa = db()->query('SELECT * FROM empresa')->fetch() ?: ['nombre' => '', 'cif' => '', 'horas_anuales' => null];
@@ -61,13 +63,17 @@ cabecera('Informes', $yo);
   <div><span>Nocturno</span><strong><?= horas($tot['nocturno']) ?></strong></div>
 </div>
 <table>
-  <tr><th>Persona</th><th>Días</th><th>Teórico</th><th>Trabajado</th><th>Extra</th><th>Noct.</th><th>Fest./libre</th><th>Dif.</th><th>Ausencias</th><th>Abiertas</th></tr>
+  <tr><th>Persona</th><th>Días</th><th>Teórico</th><th>Trabajado</th><th>Extra</th><th>Noct.</th><th>Fest./libre</th><th>Dif.</th><th>Ausencias</th><th>Abiertas</th><?= $mes_completo ? '<th>Firma del mes</th>' : '' ?></tr>
   <?php foreach ($filas as $f): ?>
   <tr><td><a href="?p=historial&u=<?= e($f['persona']['id']) ?>&mes=<?= substr($desde, 0, 7) ?>"><?= e(nombre($f['persona'])) ?></a></td>
     <td><?= $f['dias_trabajados'] ?></td><td><?= horas($f['teorico']) ?></td><td><?= horas($f['trabajado']) ?></td><td><?= horas($f['extra']) ?></td>
     <td><?= horas($f['nocturno']) ?></td><td><?= horas($f['festivo']) ?></td><td class="<?= $f['diferencia'] < 0 ? 'error' : '' ?>"><?= horas_signo($f['diferencia']) ?></td>
     <td><?= e(implode(', ', array_map(fn($t, $n) => "$t: $n", array_keys($f['ausencias']), $f['ausencias']))) ?></td>
-    <td class="<?= $f['abiertas'] ? 'error' : '' ?>"><?= $f['abiertas'] ?: '' ?></td></tr>
+    <td class="<?= $f['abiertas'] ? 'error' : '' ?>"><?= $f['abiertas'] ?: '' ?></td>
+    <?php if ($mes_completo): $fm = firma_mes(db(), $f['persona'], $mes_completo);
+        $ok = $fm && $fm['hash'] === hash('sha256', contenido_mes(db(), $f['persona'], $mes_completo)); ?>
+    <td class="<?= $ok ? '' : 'error' ?>"><?= $fm ? local($fm['firmado_utc']) . ' · IP ' . e($fm['ip']) . ($ok ? '' : ' (hay que volver a firmar)') : 'Sin firmar' ?></td>
+    <?php endif ?></tr>
   <?php endforeach ?>
 </table>
 <?php if ($empresa['horas_anuales']): ?>

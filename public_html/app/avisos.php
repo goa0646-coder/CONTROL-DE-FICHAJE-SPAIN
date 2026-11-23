@@ -40,6 +40,25 @@ function avisos_sin_leer(PDO $db, int $uid): int
     return (int)consulta($db, 'SELECT COUNT(*) FROM avisos WHERE usuario_id = ? AND leido_utc IS NULL', [$uid])->fetchColumn();
 }
 
+// Del día 1 (y otra vez el 5) en adelante, a partir de las 9:00: firma el registro del mes pasado.
+function recordar_firmas(PDO $db, ?string $ahora = null): int
+{
+    $ahora ??= ahora();
+    if (local($ahora, 'H') < 9) return 0;
+    $mes = (new DateTime(local($ahora, 'Y-m-01')))->modify('-1 month')->format('Y-m');
+    $vuelta = (int)local($ahora, 'j') >= 5 ? 2 : 1;
+    $n = 0;
+    foreach ($db->query("SELECT * FROM usuarios WHERE activo = 1 AND rol IN ('empleado','responsable','admin')")->fetchAll() as $u) {
+        if (local($u['alta_utc'], 'Y-m') > $mes || !consulta($db, 'SELECT 1 FROM fichajes WHERE usuario_id = ? LIMIT 1', [$u['id']])->fetchColumn()) continue;
+        $f = firma_mes($db, $u, $mes);
+        if ($f && $f['hash'] === hash('sha256', contenido_mes($db, $u, $mes))) continue;
+        for ($v = 1; $v <= $vuelta; $v++) {
+            $n += notificar($db, (int)$u['id'], "firma:$mes:$v", "Firma tu registro de jornada de $mes (Mi registro → Firmar el mes).", "historial&mes=$mes");
+        }
+    }
+    return $n;
+}
+
 // Cron cada 15 min: falta la entrada, entrada con retraso (al responsable) y jornada sin cerrar.
 function revisar_avisos(PDO $db, ?string $ahora = null): int
 {
