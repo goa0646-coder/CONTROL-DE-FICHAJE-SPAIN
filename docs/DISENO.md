@@ -103,6 +103,8 @@ Reglas de cálculo:
 
 **Fichar desde el móvil como una app** (`008`): PWA instalable; al entrar con «mantener la sesión» se guarda en `dispositivos` el hash de un token y el móvil recibe una cookie `inda_dispositivo` (HttpOnly, 1 año, se renueva con el uso). Se cierra al salir, desde Perfil, al cambiar la contraseña o al dar de baja. Inspección no puede mantener sesión. Activar un quiosco borra la sesión guardada del admin en esa tablet.
 
+**Lectura con IA** (`app/ia.php`, Google Gemini por REST, sin librerías): DNI (rellena el formulario, comprueba la letra), convenio (horas anuales, vacaciones, pausa, horas extra, descansos; se guarda en `ajustes.convenio`) y calendario laboral (festivos con ámbito). Respuesta en JSON con esquema y validada en PHP. Solo el admin, bajo petición, sin guardar el archivo. Clave en `config-inda.php`.
+
 Archivos (justificantes, documentos): fuera de `public_html` (`inda-archivos`), nombre aleatorio, se sirven por `?p=archivo` comprobando permiso.
 
 ## 7. Técnica

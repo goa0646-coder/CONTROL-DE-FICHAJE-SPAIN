@@ -35,7 +35,9 @@ function asistente(string $destino): never
             try {
                 conectar($bd)->query('SELECT 1');
                 $clave = bin2hex(random_bytes(16));
-                $php = generar_config(['bd' => $bd, 'url' => $url, 'correo_desde' => trim($_POST['correo'] ?? ''), 'clave_instalacion' => $clave]);
+                $cfg = ['bd' => $bd, 'url' => $url, 'correo_desde' => trim($_POST['correo'] ?? ''), 'clave_instalacion' => $clave];
+                if (($g = trim($_POST['gemini'] ?? '')) !== '') $cfg['gemini_clave'] = $g;
+                $php = generar_config($cfg);
                 if (@file_put_contents($destino, $php, LOCK_EX) !== false) {
                     @chmod($destino, 0600);
                     header('Location: ?' . http_build_query(['p' => 'instalar', 'clave' => $clave]));
@@ -76,6 +78,9 @@ function asistente(string $destino): never
   <h2>2. Dirección y correo</h2>
   <label>Dirección de INDA <input name="url" required value="<?= e($_POST['url'] ?? "https://$host") ?>"></label>
   <label>Email de envío (de tu dominio) <input type="email" name="correo" placeholder="no-responder@miempresa.com" value="<?= e($_POST['correo'] ?? '') ?>"></label>
+  <h2>3. Lectura con IA (opcional)</h2>
+  <label>Clave de Google Gemini <input type="password" name="gemini" autocomplete="off" placeholder="Déjalo vacío si no la usas"></label>
+  <p class="nota">Sirve para leer DNI, convenios y calendarios. Para DNI usa una cuenta de Google con facturación activada.</p>
   <button>Probar y guardar</button>
 </form>
 <?php
