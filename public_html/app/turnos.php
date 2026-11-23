@@ -81,6 +81,10 @@ const PLANTILLAS_AVISO = [
         "Hola {nombre}:\n\nHoy {fecha} tu turno ({turno}) empezaba a las {hora} y aún no has fichado la entrada.\nSi ya estás trabajando, ficha ahora desde INDA. Si no vas a venir, avisa a tu responsable cuanto antes."],
     'retraso' => ['Al responsable, si alguien ficha tarde',
         "{nombre} ha fichado la entrada a las {fichado} (su turno {turno} empezaba a las {hora})."],
+    'recordar_salida' => ['A la persona, cuando termina su turno y sigue sin fichar la salida',
+        "Hola {nombre}:\n\nTu turno ({turno}) terminaba a las {hora}. Ficha la salida en INDA: si no, se cerrará sola dentro de unos minutos."],
+    'cierre_auto' => ['A la persona, cuando INDA le cierra la jornada',
+        "Hola {nombre}:\n\nNo fichaste la salida. INDA ha cerrado tu jornada a las {fichado} (tu turno {turno} terminaba a las {hora}).\nSi seguiste trabajando, pide una corrección en INDA con la hora real."],
     'sin_salida' => ['A la persona, si se le olvida fichar la salida',
         "Hola {nombre}:\n\nTu jornada sigue abierta desde las {fichado} del {fecha}. ¿Olvidaste fichar la salida?\nSi fue un despiste, ficha ahora o pide una corrección en INDA."],
 ];
@@ -95,4 +99,59 @@ function plantilla_aviso(PDO $db, string $clave): string
 function texto_aviso(PDO $db, string $clave, array $v): string
 {
     return strtr(plantilla_aviso($db, $clave), array_combine(array_map(fn($k) => '{' . $k . '}', array_keys($v)), array_values($v)));
+}
+
+// Minutos tras la hora de salida para cerrar la jornada sola (0 = no se cierra). Por defecto, 5.
+function minutos_cierre(PDO $db): int
+{
+    $v = consulta($db, "SELECT valor FROM ajustes WHERE clave = 'cierre_auto_min'")->fetchColumn(); // ajuste() trata «0» como vacío
+    return $v === false ? 5 : max(0, (int)$v);
+}
+
+// Cron: al acabar el turno, recordatorio; pasados los minutos de cierre, salida automática a la hora de salida + esos minutos.
+// La salida queda marcada como automática (origen) y con la hora real de registro (creado_utc), y se puede corregir.
+function cerrar_jornadas(PDO $db, ?string $ahora = null): int
+{
+    $margen = minutos_cierre($db);
+    if (!$margen) return 0;
+    $ahora ??= ahora();
+    $t = strtotime("$ahora UTC");
+    $n = 0;
+    $lineas = [];
+    foreach ($db->query("SELECT * FROM usuarios WHERE activo = 1 AND rol IN ('empleado','responsable','admin')")->fetchAll() as $u) {
+        if (estado_actual($db, (int)$u['id']) === 'fuera') continue;
+        $e = consulta($db, "SELECT id, momento_utc FROM fichajes f WHERE usuario_id = ? AND tipo = 'entrada' AND " . NO_ANULADO . ' ORDER BY momento_utc DESC, id DESC LIMIT 1', [$u['id']])->fetch();
+        if (!$e) continue;
+        $te = strtotime("{$e['momento_utc']} UTC");
+        // El turno es el del día en que entró (o el del día anterior si es una noche que empezó ayer).
+        $fin = null;
+        foreach ([local($e['momento_utc'], 'Y-m-d'), date('Y-m-d', strtotime(local($e['momento_utc'], 'Y-m-d') . ' -1 day'))] as $dia) {
+            $c = calendario_teorico($db, $u, $dia, $dia)[$dia];
+            if ($c['flexible'] || !$c['entrada'] || !$c['salida'] || !$c['turno']) continue;
+            $ini = ts_local($dia, $c['entrada']);
+            $f = ts_local($dia, $c['salida']);
+            if ($f <= $ini) $f += 86400;
+            if ($te >= $ini - 4 * 3600 && $te < $f) { $fin = $f; break; } // entró para este turno
+        }
+        if (!$fin || $t < $fin) continue;
+        $v = ['nombre' => $u['nombre'], 'fecha' => date('d/m', $fin), 'hora' => (new DateTime("@$fin"))->setTimezone(new DateTimeZone(ZONA))->format('H:i'), 'turno' => $c['horario'] ?? '', 'fichado' => ''];
+        if ($t < $fin + 60 * $margen) {
+            $n += notificar($db, (int)$u['id'], "recordar_salida:{$e['id']}", texto_aviso($db, 'recordar_salida', $v), 'fichar');
+            continue;
+        }
+        $ultimo = (int)strtotime(consulta($db, 'SELECT MAX(momento_utc) FROM fichajes WHERE usuario_id = ?', [$u['id']])->fetchColumn() . ' UTC');
+        $momento = gmdate('Y-m-d H:i:s', max($fin + 60 * $margen, $ultimo + 1));
+        try {
+            $id = registrar_fichaje($db, $u, 'salida', 'automatico', [], $momento);
+        } catch (DomainException) {
+            continue;
+        }
+        $v['fichado'] = local($momento, 'H:i');
+        notificar($db, (int)$u['id'], "cierre_auto:$id", texto_aviso($db, 'cierre_auto', $v), 'correcciones');
+        auditar($db, null, 'salida_automatica', "usuario={$u['id']} fichaje=$id");
+        $lineas[] = nombre($u) . ": salida automática a las {$v['fichado']} (turno hasta las {$v['hora']}).";
+        $n++;
+    }
+    if ($lineas) avisar_administracion('INDA: ' . count($lineas) . ' salidas cerradas automáticamente', implode("\n", $lineas) . "\n\n" . rtrim(config()['url'] ?? '', '/') . '/?p=equipo');
+    return $n;
 }

@@ -25,6 +25,7 @@ if (es_post()) {
         $t = [];
         foreach (PLANTILLAS_AVISO as $k => $_) $t[$k] = mb_substr(trim(str_replace("\r", '', $_POST["plantilla_$k"] ?? '')), 0, 1500);
         consulta(db(), 'REPLACE INTO ajustes VALUES (?, ?)', ['plantillas_aviso', json_encode($t, JSON_UNESCAPED_UNICODE)]);
+        consulta(db(), 'REPLACE INTO ajustes VALUES (?, ?)', ['cierre_auto_min', (string)max(0, min(240, (int)($_POST['cierre_auto_min'] ?? 5)))]);
         auditar(db(), (int)$yo['id'], 'plantillas_aviso_guardadas');
         aviso('Mensajes de aviso guardados.');
         redirigir('admin');
@@ -192,6 +193,7 @@ cabecera('Empresa y centros', $yo);
   <?= csrf_campo() ?>
   <h2>Mensajes de aviso por email</h2>
   <p class="nota">Lo que reciben por email (y en INDA) cuando no fichan a tiempo. Puedes usar {nombre}, {fecha}, {hora} (hora del turno), {turno} y {fichado} (hora a la que fichó). Déjalo vacío para usar el texto de INDA. El margen de cortesía de cada turno se pone en Horarios.</p>
+  <label>Cerrar la jornada sola a los <input type="number" name="cierre_auto_min" min="0" max="240" value="<?= minutos_cierre(db()) ?>" style="display:inline-block;width:5.5rem"> minutos de la hora de salida si no ficha (0 = no cerrar). Al acabar su turno recibe un recordatorio; al cerrarse, otro aviso. La salida queda marcada como automática y se puede corregir.</label>
   <?php foreach (PLANTILLAS_AVISO as $k => [$quien, $def]): ?>
   <label><?= e($quien) ?> <textarea name="plantilla_<?= $k ?>" rows="4" placeholder="<?= e($def) ?>"><?= e(plantilla_aviso(db(), $k) === $def ? '' : plantilla_aviso(db(), $k)) ?></textarea></label>
   <?php endforeach ?>

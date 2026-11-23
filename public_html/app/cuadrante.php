@@ -116,6 +116,7 @@ function generar_cuadrante(PDO $db, array $personas, string $desde, string $hast
                 $c = $e['cal'][$f];
                 if (isset($hoy[$uid]) || ($c['ausencia'] && $c['ausencia']['minutos'] === null)) continue;
                 if ($pid && !in_array($pid, $pp[$uid] ?? [], true)) continue;
+                if ($h[$hid]['departamento_id'] && $u['departamento_id'] != $h[$hid]['departamento_id']) continue; // turno de otro departamento
                 if ($e['fin'] && $ini - $e['fin'] < $r['descanso_entre_jornadas_h'] * 3600) continue;
                 if (($e['semana'][$semana] ?? 0) + $d['minutos'] > $r['horas_semana_media'] * 60) continue;
                 if ($e['seguidos'] >= 5) continue;
