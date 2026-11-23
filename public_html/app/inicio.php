@@ -11,6 +11,7 @@ require __DIR__ . '/usuarios.php';
 require __DIR__ . '/horarios.php';
 require __DIR__ . '/ausencias.php';
 require __DIR__ . '/avisos.php';
+require __DIR__ . '/correo.php';
 require __DIR__ . '/push.php';
 require __DIR__ . '/informes.php';
 require __DIR__ . '/portal.php';

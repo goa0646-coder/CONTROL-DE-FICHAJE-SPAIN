@@ -32,7 +32,17 @@ hPanel → **Avanzado → Cron Jobs** → «Cada 15 minutos» (`*/15 * * * *`):
 `/usr/bin/php /home/TU_USUARIO/domains/miempresa.com/public_html/app/cron.php`
 (Ajusta la ruta a la de tu subdominio. El administrador de archivos te la muestra. Si ya tenías el cron diario, cámbialo a cada 15 minutos.)
 
-Los emails salen con `correo_desde` de la configuración: debe ser un buzón de tu dominio creado en hPanel → Emails.
+### Correo (avisos a la plantilla y a administración)
+1. hPanel → **Emails** → crea un buzón del dominio, por ejemplo `no-responder@tudominio.es`, con una contraseña larga.
+2. En INDA: **Empresa → Correo**:
+   - Email de envío: `no-responder@tudominio.es`
+   - Servidor SMTP: `smtp.hostinger.com` · Puerto: `465 (SSL)`
+   - Usuario: el mismo email · Contraseña: la del buzón (no se vuelve a mostrar)
+   - Correo de administración: el email (o varios, separados por comas) que debe recibir las incidencias de fichaje y las solicitudes.
+3. Pulsa **Guardar y enviar correo de prueba**. Si no llega en un minuto, mira en spam.
+
+Qué se envía: a cada persona, sus avisos (no ha fichado la entrada, jornada sin cerrar, respuestas a solicitudes, turnos ofrecidos, códigos para aceptar, firma mensual). A administración, un resumen en cada revisión del cron con las incidencias nuevas y copia de las solicitudes.
+Si el dominio usa los DNS de Hostinger, los registros SPF/DKIM ya están puestos. Si los DNS están en otro sitio, añade los que indica hPanel → Emails → Configuración DNS; sin ellos los correos pueden ir a spam.
 
 Justificantes y documentos se guardan en la carpeta `inda-archivos`, **junto a** `public_html` (no dentro). Se crea sola. Inclúyela en tus copias de seguridad.
 
