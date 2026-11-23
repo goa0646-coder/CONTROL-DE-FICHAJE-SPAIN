@@ -1,8 +1,12 @@
 document.documentElement.classList.add('js');
-for (const b of document.querySelectorAll('.menu-boton')) b.addEventListener('click', () => {
-  const abierto = b.closest('nav').classList.toggle('abierto');
-  b.setAttribute('aria-expanded', abierto);
-});
+// Móvil: «Más» abre el menú lateral como una hoja; el velo o Escape lo cierran.
+const menu = abierto => {
+  document.body.classList.toggle('menu-abierto', abierto);
+  for (const b of document.querySelectorAll('.menu-boton')) b.setAttribute('aria-expanded', abierto);
+};
+for (const b of document.querySelectorAll('.menu-boton')) b.addEventListener('click', () => menu(!document.body.classList.contains('menu-abierto')));
+for (const v of document.querySelectorAll('[data-cerrar-menu]')) v.addEventListener('click', () => menu(false));
+addEventListener('keydown', e => { if (e.key === 'Escape') menu(false); });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 
 // Reloj en hora de Madrid

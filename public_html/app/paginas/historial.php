@@ -71,8 +71,8 @@ cabecera($propio ? 'Mi registro' : 'Registro de ' . nombre($u), $yo);
   <input type="hidden" name="p" value="historial"><input type="hidden" name="u" value="<?= e($u['id']) ?>">
   <label>Mes <input type="month" name="mes" value="<?= e($mes) ?>"></label>
   <button>Ver</button>
-  <a class="boton" href="?<?= e(http_build_query(['p' => 'historial', 'u' => $u['id'], 'mes' => $mes, 'csv' => 1])) ?>">Excel (CSV)</a>
-  <button type="button" data-imprimir>Imprimir / PDF</button>
+  <a class="boton secundario" href="?<?= e(http_build_query(['p' => 'historial', 'u' => $u['id'], 'mes' => $mes, 'csv' => 1])) ?>">Excel (CSV)</a>
+  <button type="button" data-imprimir class="secundario">Imprimir / PDF</button>
 </form>
 
 <div class="cifras">

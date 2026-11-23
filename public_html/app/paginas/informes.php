@@ -47,8 +47,8 @@ cabecera('Informes', $yo);
   <?php if ($deps): ?><label>Departamento <select name="dep"><?= opciones(['' => 'Todos'] + $deps, $dep) ?></select></label><?php endif ?>
   <?php if (count($centros) > 1): ?><label>Centro <select name="centro"><?= opciones(['' => 'Todos'] + $centros, $cen) ?></select></label><?php endif ?>
   <button>Ver</button>
-  <a class="boton" href="?<?= e(http_build_query(['csv' => 1] + $_GET)) ?>">Excel (CSV) / gestoría</a>
-  <button type="button" data-imprimir>Imprimir / PDF</button>
+  <a class="boton secundario" href="?<?= e(http_build_query(['csv' => 1] + $_GET)) ?>">Excel (CSV) / gestoría</a>
+  <button type="button" data-imprimir class="secundario">Imprimir / PDF</button>
 </form>
 <p class="nota no-imprimir">Accesos directos:
   <a href="?p=informes&desde=<?= local(ahora(), 'Y-m-d') ?>&hasta=<?= local(ahora(), 'Y-m-d') ?>">Hoy</a> ·
