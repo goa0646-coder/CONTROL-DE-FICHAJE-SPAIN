@@ -2,7 +2,7 @@
 
 Sistema de control horario y registro de jornada (art. 34.9 ET) para uso interno. PHP 8 + MySQL en hosting compartido (Hostinger).
 
-Diseño: [docs/DISENO.md](docs/DISENO.md) · Instalación: [INSTALAR.md](INSTALAR.md) · Traspaso: [docs/TRASPASO.md](docs/TRASPASO.md)
+Diseño: [docs/DISENO.md](docs/DISENO.md) · Instalación: [INSTALAR.md](INSTALAR.md) · Traspaso: [docs/TRASPASO.md](docs/TRASPASO.md) · Woffu y plan: [docs/WOFFU.md](docs/WOFFU.md)
 
 ## Desarrollo
 
