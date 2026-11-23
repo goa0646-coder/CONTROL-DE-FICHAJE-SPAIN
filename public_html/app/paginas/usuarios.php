@@ -72,6 +72,8 @@ if (es_post()) {
     }
     // Contraseña nueva puesta por el admin o baja: fuera las sesiones guardadas de esa persona.
     if (isset($campos['password_hash']) || !$activo) cerrar_dispositivos(db(), $id);
+    consulta(db(), 'DELETE FROM usuarios_puestos WHERE usuario_id = ?', [$id]);
+    foreach (array_intersect(array_map('intval', (array)($_POST['puestos'] ?? [])), array_keys(puestos(db()))) as $pid) consulta(db(), 'INSERT INTO usuarios_puestos VALUES (?, ?)', [$id, $pid]);
     auditar(db(), (int)$yo['id'], 'usuario_guardado', "usuario=$id rol={$campos['rol']} activo=$activo");
     aviso('Guardado.');
     redirigir('usuarios');
@@ -107,6 +109,11 @@ cabecera('Usuarios', $yo);
   <label>Departamento <select name="departamento_id"><?= opciones(['' => '—'] + $deps, $u['departamento_id']) ?></select></label>
   <label>Horario <select name="horario_id"><?= opciones(['' => 'Sin horario'] + $hors, $u['horario_id']) ?></select></label>
   <label>Responsable <select name="responsable_id"><?= opciones(['' => '—'] + $jefes, $u['responsable_id']) ?></select></label>
+  <?php if ($pts = puestos(db())): $mios = puestos_por_persona(db())[$u['id'] ?: 0] ?? []; ?>
+  <fieldset><legend>Puestos que sabe cubrir</legend>
+    <?php foreach ($pts as $pid => $pn): ?><label><input type="checkbox" name="puestos[]" value="<?= e($pid) ?>" <?= in_array($pid, $mios, true) ? 'checked' : '' ?>> <?= e($pn) ?></label><?php endforeach ?>
+  </fieldset>
+  <?php endif ?>
   <label>GPS al fichar <select name="gps_modo"><?= opciones($gps, $u['gps_modo'] ?? '') ?></select></label>
   <label>Nº de empleado (quiosco) <input name="num_empleado" value="<?= e($u['num_empleado']) ?>"></label>
   <label>PIN de quiosco (4–8 cifras) <input name="pin" inputmode="numeric" autocomplete="off" placeholder="<?= $u['pin_hash'] ? 'Dejar vacío para no cambiarlo' : '' ?>"></label>

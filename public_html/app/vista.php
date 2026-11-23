@@ -9,7 +9,7 @@ function cabecera(string $titulo, ?array $u = null): void
             'ausencias' => 'Ausencias', 'calendario' => 'Calendario', 'documentos' => 'Documentos', 'comunicados' => 'Comunicados'];
         if ($r !== 'empleado') $menu['equipo'] = $r === 'responsable' ? 'Mi equipo' : 'Personas';
         if (puede($u, 'informes')) $menu['informes'] = 'Informes';
-        if (puede($u, 'planificar')) $menu['planificacion'] = 'Planificación';
+        if (puede($u, 'planificar') && $r !== 'empleado') $menu += ['planificacion' => 'Planificación', 'necesidades' => 'Necesidades'];
         if ($r === 'admin') $menu += ['admin' => 'Empresa', 'usuarios' => 'Usuarios', 'horarios' => 'Horarios', 'quioscos' => 'Quioscos'];
         if (in_array($r, ['admin', 'inspeccion'], true)) $menu['auditoria'] = 'Auditoría';
         $n = avisos_sin_leer(db(), (int)$u['id']);
