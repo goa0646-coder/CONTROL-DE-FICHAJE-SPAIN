@@ -9,7 +9,7 @@ class HorariosTest extends Base
         $u = $this->usuario(['horario_id' => $this->horario(), 'centro_id' => $c]);
         $this->db->prepare('INSERT INTO festivos (centro_id, fecha, nombre) VALUES (?, ?, ?)')->execute([$c, '2026-03-03', 'Fiesta local']);
         $otro = $this->horario([3], '14:00', '22:00', 480);
-        $this->db->prepare('INSERT INTO planificacion VALUES (?, ?, ?), (?, ?, NULL)')->execute([$u['id'], '2026-03-04', $otro, $u['id'], '2026-03-05']);
+        $this->db->prepare('INSERT INTO planificacion (usuario_id, fecha, horario_id) VALUES (?, ?, ?), (?, ?, NULL)')->execute([$u['id'], '2026-03-04', $otro, $u['id'], '2026-03-05']);
         $cal = calendario_teorico($this->db, $u, '2026-03-02', '2026-03-08');
         $this->assertEquals([480, 0, 480, 0, 480, 0, 0], array_column($cal, 'minutos'));
         $this->assertEquals('Fiesta local', $cal['2026-03-03']['festivo']);

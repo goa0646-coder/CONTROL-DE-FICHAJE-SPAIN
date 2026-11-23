@@ -41,7 +41,8 @@ function dias_de_tipo(PDO $db, array $u, int $tipo, int $anio, array $estados): 
     $s = consulta($db, 'SELECT * FROM ausencias WHERE usuario_id = ? AND tipo_id = ? AND estado IN (' . implode(',', array_fill(0, count($estados), '?')) . ')
         AND desde <= ? AND hasta >= ?', [$u['id'], $tipo, ...$estados, "$anio-12-31", "$anio-01-01"]);
     $n = 0;
-    foreach ($s as $a) $n += dias_laborables($db, $u, max($a['desde'], "$anio-01-01"), min($a['hasta'], "$anio-12-31"), (int)$a['id']);
+    $t = tipos_ausencia($db, false)[$tipo] ?? [];
+    foreach ($s as $a) $n += dias_computables($db, $u, $t, max($a['desde'], "$anio-01-01"), min($a['hasta'], "$anio-12-31"), (int)$a['id']);
     return $n;
 }
 
@@ -77,7 +78,7 @@ function pedir_ausencia(PDO $db, array $u, array $d, int $pedida_por, ?string $j
         AND (hora_desde IS NULL OR ? IS NULL OR (hora_desde < ? AND hora_hasta > ?))", [$u['id'], $hasta, $desde, $hd, $hh, $hd])->fetchColumn();
     if ($solape) throw new DomainException('Ya tienes una ausencia pedida o aprobada en esas fechas.');
     if (!$t['por_horas'] && ($saldo = saldos_ausencia($db, $u, (int)substr($desde, 0, 4))[$t['id']] ?? null)) {
-        $pide = dias_laborables($db, $u, $desde, $hasta);
+        $pide = dias_computables($db, $u, $t, $desde, $hasta);
         if (substr($desde, 0, 4) === substr($hasta, 0, 4) && $pide > $saldo['disponible']) {
             throw new DomainException("No tienes días suficientes: pides $pide y te quedan " . (float)$saldo['disponible'] . '.');
         }
@@ -105,6 +106,15 @@ function resolver_ausencia(PDO $db, int $id, array $yo, bool $aprobar, string $c
 }
 
 // La persona cancela lo pendiente, o lo aprobado que aún no ha empezado.
+// Aviso si las vacaciones se aprueban con menos antelación de la que pide la ley (art. 38.3 ET: 2 meses).
+function aviso_preaviso(PDO $db, array $a): ?string
+{
+    if ($a['tipo'] !== 'Vacaciones') return null;
+    $dias = (int)((strtotime($a['desde']) - strtotime(local(ahora(), 'Y-m-d'))) / 86400);
+    $min = (int)reglas($db)['preaviso_vacaciones_dias'];
+    return $dias < $min ? "Empiezan en $dias días: la ley pide que se conozcan con $min días de antelación. Si las pide la propia persona, no hay problema." : null;
+}
+
 function cancelar_ausencia(PDO $db, int $id, array $u): array
 {
     $a = ausencia($db, $id);

@@ -34,9 +34,10 @@ cabecera($yo['rol'] === 'responsable' ? 'Mi equipo' : 'Personas', $yo);
   <p><strong><?= e(nombre($a)) ?></strong> · <span class="etiqueta" style="background:<?= e($a['color']) ?>"><?= e($a['tipo']) ?></span>
     <?= date('d/m/Y', strtotime($a['desde'])) ?><?= $a['hasta'] !== $a['desde'] ? ' – ' . date('d/m/Y', strtotime($a['hasta'])) : '' ?>
     <?= $a['hora_desde'] ? substr($a['hora_desde'], 0, 5) . '–' . substr($a['hora_hasta'], 0, 5) : '' ?>
-    <?php if (!$a['por_horas']): ?>(<?= dias_laborables(db(), usuario(db(), (int)$a['usuario_id']), $a['desde'], $a['hasta']) ?> laborables)<?php endif ?></p>
+    <?php if (!$a['por_horas']): $t = tipos_ausencia(db(), false)[$a['tipo_id']] ?? []; ?>(<?= dias_computables(db(), usuario(db(), (int)$a['usuario_id']), $t, $a['desde'], $a['hasta']) ?> <?= ($t['computo'] ?? '') === 'naturales' ? 'naturales' : 'laborables' ?>)<?php endif ?></p>
   <?php if ($a['motivo'] !== ''): ?><p>Comentario: <?= e($a['motivo']) ?></p><?php endif ?>
   <?php if ($a['justificante']): ?><p><a href="?p=archivo&a=<?= e($a['id']) ?>">Ver justificante</a></p><?php elseif ($a['pide_justificante']): ?><p class="nota">Sin justificante todavía.</p><?php endif ?>
+  <?php if ($pre = aviso_preaviso(db(), $a)): ?><p class="nota">⚠ <?= e($pre) ?></p><?php endif ?>
   <?php if ($sol): ?><p class="error">Coincide con: <?= e(implode('; ', array_map(fn($s) => nombre($s) . ' (' . $s['estado'] . ' ' . date('d/m', strtotime($s['desde'])) . '–' . date('d/m', strtotime($s['hasta'])) . ')', $sol))) ?></p><?php endif ?>
   <label>Comentario <input name="comentario" maxlength="500"></label>
   <button name="decision" value="aprobar">Aprobar</button>

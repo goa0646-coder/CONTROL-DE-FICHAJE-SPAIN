@@ -13,7 +13,7 @@ $lunes = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['semana'] ?? '') ? date('Y-m-
 $guardar = function (int $uid, string $fecha, string $v) use ($hors) {
     if ($v === '') return consulta(db(), 'DELETE FROM planificacion WHERE usuario_id = ? AND fecha = ?', [$uid, $fecha]);
     if ($v !== 'L' && !isset($hors[(int)$v])) throw new DomainException('Horario no válido.');
-    consulta(db(), 'REPLACE INTO planificacion VALUES (?, ?, ?)', [$uid, $fecha, $v === 'L' ? null : (int)$v]);
+    consulta(db(), 'REPLACE INTO planificacion (usuario_id, fecha, horario_id) VALUES (?, ?, ?)', [$uid, $fecha, $v === 'L' ? null : (int)$v]);
 };
 
 if (es_post()) {
@@ -28,7 +28,7 @@ if (es_post()) {
                     $antes = consulta(db(), 'SELECT COALESCE(horario_id, "L") FROM planificacion WHERE usuario_id = ? AND fecha = ?', [$uid, $f])->fetchColumn();
                     if ((string)($antes === false ? '' : $antes) === $v) continue;
                     $guardar((int)$uid, $f, $v);
-                    $afectados[$uid] = true;
+                    $afectados[$uid][] = $f;
                 }
             }
         } else {
@@ -42,8 +42,19 @@ if (es_post()) {
             $desfase = isset($_POST['escalonar']);
             foreach ($sel as $i => $uid) {
                 foreach (rango_fechas($d, $h) as $n => $f) $guardar($uid, $f, $sec[($n + ($desfase ? $i : 0)) % count($sec)]);
-                $afectados[$uid] = true;
+                $afectados[$uid] = [$d, $h];
             }
+        }
+        // Reglas del convenio sobre lo que queda planificado: lo que bloquea no se guarda.
+        $mal = [];
+        foreach ($afectados as $uid => $fs) {
+            foreach (comprobar_plan(db(), usuario(db(), (int)$uid), min($fs), max($fs)) as $m) $mal[] = [nombre(usuario(db(), (int)$uid))] + array_combine([1, 2, 3, 4], $m);
+        }
+        $_SESSION['incumplimientos'] = $mal;
+        if (array_filter($mal, fn($m) => $m[4] === 'bloqueo')) {
+            db()->rollBack();
+            aviso('No se ha guardado: incumple el convenio. Revisa la lista de abajo.', 'error');
+            redirigir('planificacion', ['semana' => $lunes]);
         }
         db()->commit();
         foreach (array_keys($afectados) as $uid) notificar(db(), (int)$uid, 'horario:' . ahora() . ":$uid", 'Tu horario ha cambiado. Revísalo en el calendario.', 'calendario');
@@ -59,8 +70,21 @@ if (es_post()) {
 $dias = rango_fechas($lunes, date('Y-m-d', strtotime("$lunes +6 days")));
 $plan = [];
 foreach (consulta(db(), 'SELECT usuario_id, fecha, COALESCE(horario_id, "L") AS v FROM planificacion WHERE fecha BETWEEN ? AND ?', [$dias[0], $dias[6]]) as $x) $plan[$x['usuario_id']][$x['fecha']] = (string)$x['v'];
+$mal = $_SESSION['incumplimientos'] ?? [];
+unset($_SESSION['incumplimientos']);
 cabecera('Planificación', $yo);
 ?>
+<?php if ($mal): ?>
+<div class="tarjeta">
+  <h2>Reglas del convenio</h2>
+  <table>
+    <?php foreach ($mal as [$quien, $f, , $txt, $tipo]): ?>
+    <tr><td class="<?= $tipo === 'bloqueo' ? 'error' : '' ?>"><?= $tipo === 'bloqueo' ? '⛔ No permitido' : '⚠ Aviso' ?></td><td><?= e($quien) ?></td><td><?= date('d/m', strtotime($f)) ?></td><td><?= e($txt) ?></td></tr>
+    <?php endforeach ?>
+  </table>
+  <p class="nota">Lo marcado ⛔ no se puede saltar ni con la firma del trabajador (art. 3.5 ET). Si es una emergencia, cúbrelo como horas extra por fuerza mayor desde «Huecos».</p>
+</div>
+<?php endif ?>
 <h2>Cuadrante semanal</h2>
 <form class="filtros">
   <input type="hidden" name="p" value="planificacion">

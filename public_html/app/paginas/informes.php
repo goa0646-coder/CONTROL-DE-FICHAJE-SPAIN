@@ -76,6 +76,14 @@ cabecera('Informes', $yo);
     <?php endif ?></tr>
   <?php endforeach ?>
 </table>
+<h2>Cumplimiento del convenio</h2>
+<?php $r = reglas(db()); $hay = false; ?>
+<table>
+  <?php foreach ($filas as $f): foreach (comprobar_real(db(), $f['persona'], $desde, $hasta, $r) as [$dia, , $txt]): $hay = true; ?>
+  <tr><td><?= e(nombre($f['persona'])) ?></td><td><?= date('d/m/Y', strtotime($dia)) ?></td><td class="error"><?= e($txt) ?></td></tr>
+  <?php endforeach; endforeach ?>
+</table>
+<?php if (!$hay): ?><p class="aviso ok">Sin incumplimientos en el periodo: descansos entre jornadas, pausas y horas extra dentro de las reglas.</p><?php endif ?>
 <?php if ($empresa['horas_anuales']): ?>
 <p class="nota">Convenio: <?= e($empresa['horas_anuales']) ?> h/año. Para comparar, elige el año completo.</p>
 <?php endif;
