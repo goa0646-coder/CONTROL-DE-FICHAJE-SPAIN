@@ -1,0 +1,10 @@
+{
+  "name": "INDA · Control horario",
+  "short_name": "INDA",
+  "start_url": "../index.php",
+  "scope": "../",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1d4ed8",
+  "icons": [{ "src": "icono.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
