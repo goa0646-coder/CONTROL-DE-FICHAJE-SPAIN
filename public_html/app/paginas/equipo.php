@@ -9,6 +9,10 @@ if (es_post() && $yo['rol'] !== 'inspeccion') {
             $a = resolver_ausencia(db(), $id, $yo, $aprobar, $_POST['comentario'] ?? '');
             auditar(db(), (int)$yo['id'], "ausencia_$res", "ausencia=$id");
             notificar(db(), (int)$a['usuario_id'], "ausencia_res:$id", "Tu solicitud de {$a['tipo']} del " . date('d/m', strtotime($a['desde'])) . " ha sido $res.", 'ausencias');
+            if ($aprobar && ($hz = huecos(db(), array_values(array_filter(equipo_de(db(), $yo), fn($p) => $p['activo'])), max($a['desde'], local(ahora(), 'Y-m-d')), $a['hasta']))) {
+                aviso('Aprobada. Deja ' . array_sum(array_column($hz, 3)) . ' turnos sin cubrir: búscales sustituto en Planificación → Huecos.', 'error');
+                redirigir('planificacion', ['semana' => date('Y-m-d', strtotime('monday this week', strtotime($hz[0][0])))]);
+            }
         } else {
             resolver_correccion(db(), $id, $yo, $aprobar, $_POST['comentario'] ?? '');
             auditar(db(), (int)$yo['id'], "correccion_$res", "correccion=$id");

@@ -11,6 +11,9 @@ Fecha: 23/11/2026.
 - **Fases 2–7 fusionadas en `master`** (PR #2) (migraciones 003–007): motivos de pausa, departamentos, horarios, festivos, turnos y cuadrante, horas extra/nocturnas, bolsa de horas, avisos (app, email, push), ausencias y vacaciones con saldos, calendario de equipo, informes, firma mensual, documentos con firma, comunicados, QR, API, extensión, Slack/Teams, entrar con Google/Microsoft, permisos por rol. Detalle en [DISENO.md](DISENO.md) §6.
 - Fichar desde el móvil como una app (sesión mantenida por dispositivo, botón Instalar) — migración 008.
 - Asistente de instalación: sin `config-inda.php`, la web pide los datos de la BD y crea la configuración y las tablas.
+- Convenio y cuadrante (migración 009): reglas con bloqueos y avisos, plantilla del VI Convenio de residencias de Galicia, puestos y necesidades, generador de cuadrantes, huecos por bajas, sustitutos y ofertas de horas extra aceptadas con código.
+- Lectura con IA (Gemini): DNI, convenio y calendario laboral.
+- Pendiente legal: el convenio dice que una IT durante las vacaciones no las interrumpe; el art. 38.3 ET y el TJUE dicen lo contrario. Consultar con la asesoría. INDA no bloquea nada por esa cláusula.
 - No hecho a propósito: teletrabajo, WhatsApp, biométricos, idiomas (ver DISENO §8).
 
 ## Hostinger

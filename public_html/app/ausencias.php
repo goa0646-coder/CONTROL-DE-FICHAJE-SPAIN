@@ -112,7 +112,13 @@ function aviso_preaviso(PDO $db, array $a): ?string
     if ($a['tipo'] !== 'Vacaciones') return null;
     $dias = (int)((strtotime($a['desde']) - strtotime(local(ahora(), 'Y-m-d'))) / 86400);
     $min = (int)reglas($db)['preaviso_vacaciones_dias'];
-    return $dias < $min ? "Empiezan en $dias días: la ley pide que se conozcan con $min días de antelación. Si las pide la propia persona, no hay problema." : null;
+    $txt = $dias < $min ? "Empiezan en $dias días: la ley pide que se conozcan con $min días de antelación. Si las pide la propia persona, no hay problema." : '';
+    // Muchos convenios no permiten empezar las vacaciones en el día de descanso.
+    if (!empty($a['usuario_id']) && ($u = usuario($db, (int)$a['usuario_id']))) {
+        $c = calendario_teorico($db, $u, $a['desde'], $a['desde'])[$a['desde']];
+        if (!$c['laborable'] || $c['festivo']) $txt .= ($txt ? ' ' : '') . 'Empiezan en un día de descanso o festivo; según el convenio deberían empezar el siguiente día laborable.';
+    }
+    return $txt ?: null;
 }
 
 function cancelar_ausencia(PDO $db, int $id, array $u): array

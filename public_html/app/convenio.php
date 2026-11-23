@@ -11,6 +11,15 @@ const REGLAS_ET = [
     'pausa_si_mas_de_h' => 6,           // art. 34.4
     'pausa_minutos' => 15,
     'preaviso_vacaciones_dias' => 60,   // art. 38.3
+    'noche_desde_h' => 22,              // art. 36.1
+    'noche_hasta_h' => 6,
+    'domingo_cada_semanas' => 0,        // 0 = no se exige; convenio: p. ej. 4
+    'jornada_partida_pausa_h' => 0,     // pausa mínima en jornada partida (0 = no se exige)
+    'superar_jornada_con_acuerdo' => 0, // 1 = superar la jornada diaria es posible con acuerdo (aviso, no bloqueo)
+    'retrasos_leve' => 0,               // baremo de puntualidad al mes (0 = no se muestra)
+    'retrasos_grave' => 0,
+    'retrasos_muy_grave' => 0,
+    'festivo_compensa_dias' => 0,       // días de descanso por festivo trabajado (p. ej. 1,3)
 ];
 
 const REGLAS_TEXTO = [
@@ -22,7 +31,50 @@ const REGLAS_TEXTO = [
     'pausa_si_mas_de_h' => 'Pausa obligatoria si la jornada pasa de (horas)',
     'pausa_minutos' => 'Duración mínima de esa pausa (minutos)',
     'preaviso_vacaciones_dias' => 'Antelación para conocer las vacaciones (días)',
+    'noche_desde_h' => 'Horario nocturno desde (hora)',
+    'noche_hasta_h' => 'Horario nocturno hasta (hora)',
+    'domingo_cada_semanas' => 'Descanso en domingo al menos cada (semanas, 0 = no)',
+    'jornada_partida_pausa_h' => 'Pausa mínima en jornada partida (horas, 0 = no)',
+    'superar_jornada_con_acuerdo' => 'Superar la jornada diaria con acuerdo (1 = sí)',
+    'retrasos_leve' => 'Retrasos al mes: falta leve desde',
+    'retrasos_grave' => 'Retrasos al mes: falta grave desde',
+    'retrasos_muy_grave' => 'Retrasos al mes: falta muy grave desde',
+    'festivo_compensa_dias' => 'Días de descanso por festivo trabajado',
 ];
+
+// VI Convenio colectivo de residencias privadas de personas mayores de Galicia (datos facilitados por la empresa).
+const PLANTILLA_GALICIA_RESIDENCIAS = [
+    'reglas' => ['descanso_entre_jornadas_h' => 12, 'descanso_semanal_h' => 36, 'jornada_max_diaria_h' => 9, 'horas_semana_media' => 40,
+        'horas_extra_max' => 60, 'pausa_si_mas_de_h' => 6, 'pausa_minutos' => 20, 'preaviso_vacaciones_dias' => 60, 'noche_desde_h' => 22,
+        'noche_hasta_h' => 7, 'domingo_cada_semanas' => 4, 'jornada_partida_pausa_h' => 1, 'superar_jornada_con_acuerdo' => 1,
+        'retrasos_leve' => 3, 'retrasos_grave' => 6, 'retrasos_muy_grave' => 11, 'festivo_compensa_dias' => 1.3],
+    'horas_anuales' => 1762,
+    'pausas' => [['Bocadillo', 1]], // 20 min en jornada continua, tiempo de trabajo efectivo
+    // [nombre, por_horas, retribuida, días/año, justificante, color, cómputo]
+    'tipos' => [
+        ['Vacaciones', 0, 1, 26, 0, '#16a34a', 'laborables'],
+        ['Libre disposición', 0, 1, 6, 0, '#9333ea', 'laborables'],
+        ['Lactancia', 1, 1, null, 1, '#db2777', 'laborables'],
+        ['Asamblea', 1, 1, null, 0, '#0d9488', 'laborables'],
+        ['Crédito sindical', 1, 1, null, 0, '#4f46e5', 'laborables'],
+    ],
+];
+
+function aplicar_plantilla(PDO $db, array $pl): void
+{
+    guardar_reglas($db, $pl['reglas']);
+    consulta($db, 'UPDATE empresa SET horas_anuales = ? WHERE id = 1', [$pl['horas_anuales']]);
+    foreach ($pl['pausas'] ?? [] as [$n, $ret]) {
+        $id = consulta($db, 'SELECT id FROM motivos_pausa WHERE nombre = ?', [$n])->fetchColumn();
+        if ($id) consulta($db, 'UPDATE motivos_pausa SET retribuida = ?, activo = 1 WHERE id = ?', [$ret, $id]);
+        else consulta($db, 'INSERT INTO motivos_pausa (nombre, retribuida) VALUES (?, ?)', [$n, $ret]);
+    }
+    foreach ($pl['tipos'] as [$n, $h, $r, $d, $j, $c, $cmp]) {
+        $id = consulta($db, 'SELECT id FROM tipos_ausencia WHERE nombre = ?', [$n])->fetchColumn();
+        if ($id) consulta($db, 'UPDATE tipos_ausencia SET por_horas = ?, retribuida = ?, dias_anuales = ?, computo = ?, activo = 1 WHERE id = ?', [$h, $r, $d, $cmp, $id]);
+        else consulta($db, 'INSERT INTO tipos_ausencia (nombre, por_horas, retribuida, dias_anuales, justificante, color, computo) VALUES (?, ?, ?, ?, ?, ?, ?)', [$n, $h, $r, $d, $j, $c, $cmp]);
+    }
+}
 
 function reglas(PDO $db): array
 {
@@ -86,7 +138,24 @@ function comprobar_plan(PDO $db, array $u, string $desde, string $hasta, ?array 
     // Jornada diaria.
     foreach ($cal as $f => $c) {
         if ($dentro($f) && !$c['extra'] && $c['turno'] > $r['jornada_max_diaria_h'] * 60) {
-            $mal[] = [$f, 'jornada_max_diaria_h', 'Turno de ' . horas($c['turno'] * 60) . ' h (máximo ' . $r['jornada_max_diaria_h'] . ' h de jornada ordinaria).', 'bloqueo'];
+            $mal[] = $r['superar_jornada_con_acuerdo']
+                ? [$f, 'jornada_max_diaria_h', 'Turno de ' . horas($c['turno'] * 60) . ' h: supera las ' . $r['jornada_max_diaria_h'] . ' h; solo con acuerdo escrito y 12 h de descanso.', 'aviso']
+                : [$f, 'jornada_max_diaria_h', 'Turno de ' . horas($c['turno'] * 60) . ' h (máximo ' . $r['jornada_max_diaria_h'] . ' h de jornada ordinaria).', 'bloqueo'];
+        }
+    }
+    // Descanso en domingo al menos una vez cada N semanas (si hay planificación esas semanas).
+    if ($n = (int)$r['domingo_cada_semanas']) {
+        $domingos = array_values(array_filter(array_keys($cal), fn($f) => date('N', strtotime($f)) == 7));
+        $antes = calendario_teorico($db, $u, date('Y-m-d', strtotime("$ini -" . (7 * $n) . ' days')), date('Y-m-d', strtotime("$ini -1 day")));
+        $todos = array_merge(array_filter($antes, fn($f) => date('N', strtotime($f)) == 7, ARRAY_FILTER_USE_KEY), array_intersect_key($cal, array_flip($domingos)));
+        ksort($todos);
+        $seguidos = 0;
+        foreach ($todos as $f => $c) {
+            $seguidos = $c['turno'] > 0 ? $seguidos + 1 : 0;
+            if ($seguidos >= $n && $dentro($f)) {
+                $mal[] = [$f, 'domingo_cada_semanas', "Trabaja $seguidos domingos seguidos: el descanso semanal debe caer en domingo al menos una vez cada $n semanas (salvo contratos de fin de semana).", 'aviso'];
+                $seguidos = 0;
+            }
         }
     }
     // Descanso semanal: en cada semana (lunes a domingo) tiene que haber un hueco de 36 h seguidas.
@@ -147,6 +216,9 @@ function comprobar_real(PDO $db, array $u, string $desde, string $hasta, ?array 
         $f = local($j['entrada'], 'Y-m-d');
         $ini = strtotime($j['entrada'] . ' UTC');
         // Dos jornadas que empiezan el mismo día son una jornada partida: el descanso de 12 h se mide entre días.
+        if ($prev && $prev_dia === $f && $r['jornada_partida_pausa_h'] && $f >= $desde && $f <= $hasta && $ini - $prev < $r['jornada_partida_pausa_h'] * 3600) {
+            $mal[] = [$f, 'jornada_partida_pausa_h', 'Jornada partida con una interrupción de ' . round(($ini - $prev) / 60) . ' min (mínimo ' . $r['jornada_partida_pausa_h'] . ' h).', 'aviso'];
+        }
         if ($prev && $prev_dia !== $f && $f >= $desde && $f <= $hasta && $ini - $prev < $r['descanso_entre_jornadas_h'] * 3600) {
             $mal[] = [$f, 'descanso_entre_jornadas_h', 'Descansó ' . round(($ini - $prev) / 3600, 1) . ' h entre jornadas (mínimo ' . $r['descanso_entre_jornadas_h'] . ' h).', 'aviso'];
         }

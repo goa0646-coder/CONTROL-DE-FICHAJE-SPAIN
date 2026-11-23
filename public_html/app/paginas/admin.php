@@ -21,6 +21,9 @@ if (es_post()) {
         consulta(db(), 'REPLACE INTO ajustes VALUES (?, ?)', ['convenio', json_encode($cv, JSON_UNESCAPED_UNICODE)]);
         unset($_SESSION['convenio_leido']);
         auditar(db(), (int)$yo['id'], 'convenio_aplicado', $cv['nombre']);
+    } elseif ($que === 'plantilla_galicia') {
+        aplicar_plantilla(db(), PLANTILLA_GALICIA_RESIDENCIAS);
+        auditar(db(), (int)$yo['id'], 'plantilla_convenio', 'VI Convenio residencias Galicia');
     } elseif ($que === 'reglas') {
         guardar_reglas(db(), $_POST);
         auditar(db(), (int)$yo['id'], 'reglas_editadas');
@@ -122,6 +125,8 @@ cabecera('Empresa y centros', $yo);
     <?php endforeach ?>
   </div>
   <button name="que" value="reglas">Guardar reglas</button>
+  <button name="que" value="plantilla_galicia" class="secundario">Cargar el VI Convenio de residencias de Galicia</button>
+  <p class="nota">Carga: 1.762 h/año, 40 h/semana, 9 h/día (ampliable con acuerdo), 12 h entre jornadas, 36 h semanales con domingo cada 4 semanas, 60 h extra, pausa de 20 min retribuida, jornada partida con 1 h mínima, noche de 22:00 a 7:00, 26 días laborables de vacaciones, 6 de libre disposición, lactancia, asambleas y crédito sindical (por horas) y el baremo de puntualidad. Revísalo con el texto oficial.</p>
 </form>
 
 <h2>Centros</h2>

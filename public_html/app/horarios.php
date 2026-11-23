@@ -51,16 +51,16 @@ function calendario_teorico(PDO $db, array $u, string $desde, string $hasta): ar
     return $out;
 }
 
-// Segundos de los tramos que caen entre las 22:00 y las 6:00 (hora de Madrid), art. 36 ET.
-function segundos_nocturnos(array $tramos): int
+// Segundos de los tramos que caen en horario nocturno (hora de Madrid). ET art. 36: 22:00–6:00; el convenio puede ampliarlo.
+function segundos_nocturnos(array $tramos, int $desde_h = 22, int $hasta_h = 6): int
 {
     $n = 0;
     $z = new DateTimeZone(ZONA);
     foreach ($tramos as [$a, $b]) {
-        $d = (new DateTime('@' . $a))->setTimezone($z)->modify('-1 day')->setTime(22, 0);
+        $d = (new DateTime('@' . $a))->setTimezone($z)->modify('-1 day')->setTime($desde_h, 0);
         while ($d->getTimestamp() < $b) {
             $ini = $d->getTimestamp();
-            $fin = (clone $d)->modify('+1 day')->setTime(6, 0)->getTimestamp();
+            $fin = (clone $d)->modify('+1 day')->setTime($hasta_h, 0)->getTimestamp();
             $n += max(0, min($b, $fin) - max($a, $ini));
             $d->modify('+1 day');
         }
@@ -76,11 +76,12 @@ function resumen(PDO $db, array $u, string $desde, string $hasta): array
     $dias = [];
     foreach ($cal as $f => $c) $dias[$f] = $c + ['trabajado' => 0, 'nocturno' => 0, 'jornadas' => []];
     $todos = fichajes_de($db, (int)$u['id'], a_utc("$desde -1 day"), a_utc("$hasta +2 day"));
+    $r = reglas($db);
     foreach (jornadas($todos) as $j) {
         $f = local($j['entrada'], 'Y-m-d');
         if (!isset($dias[$f])) continue;
         $dias[$f]['trabajado'] += $j['trabajado'];
-        $dias[$f]['nocturno'] += segundos_nocturnos($j['tramos']);
+        $dias[$f]['nocturno'] += segundos_nocturnos($j['tramos'], (int)$r['noche_desde_h'], (int)$r['noche_hasta_h']);
         $dias[$f]['jornadas'][] = $j;
     }
     $t = ['teorico' => 0, 'trabajado' => 0, 'extra' => 0, 'nocturno' => 0, 'festivo' => 0, 'diferencia' => 0];

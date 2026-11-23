@@ -76,8 +76,20 @@ cabecera('Informes', $yo);
     <?php endif ?></tr>
   <?php endforeach ?>
 </table>
-<h2>Cumplimiento del convenio</h2>
+<h2>Convenio: puntualidad, festivos y domingos</h2>
 <?php $r = reglas(db()); $hay = false; ?>
+<table>
+  <tr><th>Persona</th><th>Retrasos sin justificar</th><th>Festivos trabajados</th><th>Domingos</th><th>Turnos 24-25/12 y 31/12-1/1</th></tr>
+  <?php foreach ($filas as $f): $nivel = nivel_retrasos($f['retrasos'], $r); ?>
+  <tr><td><?= e(nombre($f['persona'])) ?></td>
+    <td class="<?= $nivel ? 'error' : '' ?>"><?= array_sum($f['retrasos']) ?><?= $nivel ? " · peor mes: " . max($f['retrasos']) . " (falta $nivel según el convenio)" : '' ?></td>
+    <td><?= $f['festivos_trabajados'] ?><?= $f['festivos_trabajados'] && $r['festivo_compensa_dias'] ? ' → ' . str_replace('.', ',', (string)round($f['festivos_trabajados'] * $r['festivo_compensa_dias'], 2)) . ' días de descanso' : '' ?></td>
+    <td><?= $f['domingos'] ?></td><td><?= $f['turnos_especiales'] ?: '' ?></td></tr>
+  <?php endforeach ?>
+</table>
+<p class="nota">Los retrasos son información para la empresa: una sanción exige el procedimiento del convenio y escuchar a la persona. Los retrasos justificados (corrección o ausencia aprobada) no cuentan.</p>
+
+<h2>Cumplimiento del convenio</h2>
 <table>
   <?php foreach ($filas as $f): foreach (comprobar_real(db(), $f['persona'], $desde, $hasta, $r) as [$dia, , $txt]): $hay = true; ?>
   <tr><td><?= e(nombre($f['persona'])) ?></td><td><?= date('d/m/Y', strtotime($dia)) ?></td><td class="error"><?= e($txt) ?></td></tr>

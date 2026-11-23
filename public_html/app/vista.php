@@ -12,6 +12,8 @@ function cabecera(string $titulo, ?array $u = null): void
         if (puede($u, 'planificar') && $r !== 'empleado') $menu += ['planificacion' => 'Planificación', 'necesidades' => 'Necesidades'];
         if ($r === 'admin') $menu += ['admin' => 'Empresa', 'usuarios' => 'Usuarios', 'horarios' => 'Horarios', 'quioscos' => 'Quioscos'];
         if (in_array($r, ['admin', 'inspeccion'], true)) $menu['auditoria'] = 'Auditoría';
+        $no = (int)consulta(db(), "SELECT COUNT(*) FROM ofertas_turno WHERE usuario_id = ? AND estado = 'pendiente' AND fecha >= ?", [$u['id'], local(ahora(), 'Y-m-d')])->fetchColumn();
+        if ($no) $menu['ofertas'] = "Turnos ofrecidos ($no)";
         $n = avisos_sin_leer(db(), (int)$u['id']);
         $menu += ['avisos' => 'Avisos' . ($n ? " ($n)" : ''), 'perfil' => 'Perfil', 'salir' => 'Salir'];
     }

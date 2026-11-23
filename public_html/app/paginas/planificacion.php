@@ -159,6 +159,21 @@ cabecera('Planificación', $yo);
   <p class="nota">Lo marcado ⛔ no se puede saltar ni con la firma del trabajador (art. 3.5 ET). Si es una emergencia, cúbrelo como horas extra por fuerza mayor desde «Huecos».</p>
 </div>
 <?php endif ?>
+<?php $hl ??= horarios(db()); $pn ??= puestos(db());
+$hz = huecos(db(), $personas, local(ahora(), 'Y-m-d'), date('Y-m-d', strtotime(local(ahora(), 'Y-m-d') . ' +20 days'))); ?>
+<?php if ($hz): ?>
+<div class="tarjeta">
+  <h2>Huecos de las próximas 3 semanas</h2>
+  <p class="nota">Turnos sin cubrir según las necesidades (por bajas, vacaciones o falta de personal).</p>
+  <table>
+    <?php foreach (array_slice($hz, 0, 40) as [$f, $h, $p, $n]): ?>
+    <tr><td><?= DIAS[(int)date('N', strtotime($f))] ?> <?= date('d/m', strtotime($f)) ?></td><td><?= e($hl[$h]['nombre']) ?><?= $p ? ' · ' . e($pn[$p] ?? '') : '' ?></td><td class="error">faltan <?= $n ?></td>
+      <td><a class="boton" href="?<?= e(http_build_query(['p' => 'sustitutos', 'f' => $f, 'h' => $h, 'pu' => $p])) ?>">Buscar sustituto</a></td></tr>
+    <?php endforeach ?>
+  </table>
+  <?php if (count($hz) > 40): ?><p class="nota">… y <?= count($hz) - 40 ?> más. Genera el cuadrante o revisa las necesidades.</p><?php endif ?>
+</div>
+<?php endif ?>
 <h2>Cuadrante semanal</h2>
 <form class="filtros">
   <input type="hidden" name="p" value="planificacion">
