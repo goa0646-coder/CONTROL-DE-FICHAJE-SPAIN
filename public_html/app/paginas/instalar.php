@@ -1,5 +1,5 @@
 <?php
-// Para hostings sin SSH: ?p=instalar&clave=<clave_instalacion de config-fichaje.php>
+// Para hostings sin SSH: ?p=instalar&clave=<clave_instalacion de config-inda.php>
 require_once __DIR__ . '/../migrar.php';
 $clave = config()['clave_instalacion'] ?? '';
 if (strlen($clave) < 16 || !hash_equals($clave, (string)($_GET['clave'] ?? ''))) {

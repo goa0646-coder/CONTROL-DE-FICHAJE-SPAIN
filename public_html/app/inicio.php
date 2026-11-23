@@ -9,18 +9,21 @@ require __DIR__ . '/fichajes.php';
 require __DIR__ . '/correcciones.php';
 require __DIR__ . '/usuarios.php';
 
-// config-fichaje.php vive fuera de public_html (ver INSTALAR.md).
+// config-inda.php vive fuera de public_html (ver INSTALAR.md).
+// config-fichaje.php se sigue aceptando para instalaciones antiguas.
 function config(): array
 {
     static $c;
     if ($c) return $c;
     if (isset($GLOBALS['CONFIG'])) return $c = $GLOBALS['CONFIG'];
     foreach ([2, 3, 4] as $n) {
-        $f = dirname(__DIR__, $n) . '/config-fichaje.php';
-        if (is_file($f)) return $c = require $f;
+        foreach (['config-inda.php', 'config-fichaje.php'] as $nombre) {
+            $f = dirname(__DIR__, $n) . '/' . $nombre;
+            if (is_file($f)) return $c = require $f;
+        }
     }
     http_response_code(500);
-    exit('Falta config-fichaje.php (ver INSTALAR.md)');
+    exit('Falta config-inda.php (ver INSTALAR.md)');
 }
 
 function db(): PDO

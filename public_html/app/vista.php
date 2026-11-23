@@ -23,13 +23,14 @@ function cabecera(string $titulo, ?array $u = null): void
 <link rel="manifest" href="assets/manifest.json">
 <link rel="icon" href="assets/icono.svg">
 <link rel="stylesheet" href="assets/estilo.css">
-<title><?= e($titulo) ?> · Fichaje</title>
+<title><?= e($titulo) ?> · INDA</title>
 </head>
 <body>
 <?php if ($menu): ?>
-<nav><?php foreach ($menu as $p => $txt): ?><a href="?p=<?= $p ?>"<?= ($_GET['p'] ?? '') === $p ? ' class="activo"' : '' ?>><?= e($txt) ?></a><?php endforeach ?></nav>
+<nav><span class="marca">INDA</span><?php foreach ($menu as $p => $txt): ?><a href="?p=<?= $p ?>"<?= ($_GET['p'] ?? '') === $p ? ' class="activo"' : '' ?>><?= e($txt) ?></a><?php endforeach ?></nav>
 <?php endif ?>
 <main>
+<?php if (!$menu): ?><p class="marca-grande">INDA</p><?php endif ?>
 <h1><?= e($titulo) ?></h1>
 <?php if ($aviso): ?><p class="aviso <?= e($aviso[1]) ?>" role="status"><?= e($aviso[0]) ?></p><?php endif ?>
 <?php

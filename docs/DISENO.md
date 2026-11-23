@@ -1,4 +1,4 @@
-# Diseño — Control horario (fase 1 en detalle, fases 2–4 en esquema)
+# Diseño — INDA (control horario) (fase 1 en detalle, fases 2–4 en esquema)
 
 Estado: **aprobado**. Fase 1 implementada.
 

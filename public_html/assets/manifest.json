@@ -1,6 +1,6 @@
 {
-  "name": "Control horario",
-  "short_name": "Fichaje",
+  "name": "INDA · Control horario",
+  "short_name": "INDA",
   "start_url": "../index.php",
   "scope": "../",
   "display": "standalone",

@@ -3,6 +3,8 @@
 * { box-sizing: border-box; }
 body { margin: 0; font: 16px/1.5 system-ui, sans-serif; background: var(--fondo); color: var(--texto); }
 nav { display: flex; flex-wrap: wrap; gap: .25rem; padding: .5rem; background: var(--azul); }
+nav .marca { color: #fff; font-weight: 800; letter-spacing: .08em; padding: .4rem .7rem .4rem .3rem; }
+.marca-grande { font-weight: 800; font-size: 2rem; letter-spacing: .12em; color: var(--azul); text-align: center; margin: 1rem 0 0; }
 nav a { color: #fff; text-decoration: none; padding: .4rem .7rem; border-radius: .4rem; }
 nav a.activo, nav a:hover { background: rgba(255,255,255,.2); }
 main { max-width: 60rem; margin: 0 auto; padding: 1rem; }

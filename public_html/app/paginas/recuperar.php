@@ -41,7 +41,7 @@ if (es_post()) {
         db()->prepare('UPDATE usuarios SET reset_hash = ?, reset_expira_utc = ? WHERE id = ?')
             ->execute([hash('sha256', $t), gmdate('Y-m-d H:i:s', time() + 3600), $id]);
         $c = config();
-        mail($email, 'Cambiar tu contraseña de fichaje',
+        mail($email, 'INDA: cambiar tu contraseña',
             "Para elegir una contraseña nueva entra aquí (válido 1 hora):\n{$c['url']}/?p=recuperar&t=$t\n\nSi no lo has pedido tú, ignora este correo.",
             "From: {$c['correo_desde']}\r\nContent-Type: text/plain; charset=utf-8");
     }
