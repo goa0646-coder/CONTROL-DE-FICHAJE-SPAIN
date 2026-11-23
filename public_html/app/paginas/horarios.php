@@ -45,12 +45,15 @@ if (es_post()) {
             auditar(db(), (int)$yo['id'], 'festivo_borrado', 'festivo=' . (int)$_POST['id']);
         } elseif ($que === 'importar_festivos') {
             $f = $_FILES['archivo'] ?? null;
-            if (!$f || $f['error'] !== UPLOAD_ERR_OK || $f['size'] > 1024 * 1024) throw new DomainException('Elige el archivo del calendario (máximo 1 MB).');
-            $lista = leer_festivos((string)file_get_contents($f['tmp_name']));
+            if (!$f || $f['error'] !== UPLOAD_ERR_OK || $f['size'] > 15 * 1024 * 1024) throw new DomainException('Elige el archivo del calendario (máximo 15 MB).');
+            $ext = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION));
+            // PDF o foto del calendario oficial: lo lee la IA. Los festivos locales van al centro elegido; el resto, a toda la empresa.
+            $lista = in_array($ext, ['ics', 'csv', 'txt'], true) ? leer_festivos((string)file_get_contents($f['tmp_name'])) : ia_leer('festivos', $f);
             if (!$lista) throw new DomainException('No he encontrado fechas en el archivo. Usa un .ics o un CSV con «fecha;nombre».');
-            $centro = (int)($_POST['centro_id'] ?? 0) ?: null;
             $n = 0;
-            foreach ($lista as [$fecha, $nombre]) {
+            foreach ($lista as $x) {
+                [$fecha, $nombre] = $x;
+                $centro = ($x[2] ?? 'local') === 'local' ? ((int)($_POST['centro_id'] ?? 0) ?: null) : null;
                 $existe = consulta(db(), 'SELECT COUNT(*) FROM festivos WHERE fecha = ? AND centro_id <=> ?', [$fecha, $centro])->fetchColumn();
                 if (!$existe) $n += consulta(db(), 'INSERT INTO festivos (centro_id, fecha, nombre) VALUES (?, ?, ?)', [$centro, $fecha, $nombre])->rowCount();
             }
@@ -146,8 +149,9 @@ cabecera('Horarios, festivos y ausencias', $yo);
 </form>
 <form method="post" enctype="multipart/form-data" class="filtros tarjeta">
   <?= csrf_campo() ?>
-  <label>Subir calendario (.ics de Google/Outlook o CSV «fecha;nombre») <input type="file" name="archivo" accept=".ics,.csv,.txt" required></label>
-  <label>Ámbito <select name="centro_id"><?= opciones(['' => 'Toda la empresa'] + $centros, '') ?></select></label>
+  <label>Subir calendario (.ics de Google/Outlook o CSV «fecha;nombre»<?= ia_activa() ? '; o el PDF/foto del calendario oficial, que lee la IA' : '' ?>)
+    <input type="file" name="archivo" accept=".ics,.csv,.txt<?= ia_activa() ? ',application/pdf,image/*' : '' ?>" required></label>
+  <label>Ámbito (festivos locales) <select name="centro_id"><?= opciones(['' => 'Toda la empresa'] + $centros, '') ?></select></label>
   <button name="que" value="importar_festivos">Importar</button>
 </form>
 <p class="nota">Calendario laboral oficial: búscalo como «festivos [tu comunidad] [año] ics» o exporta el de Google Calendar «Festivos en España».</p>

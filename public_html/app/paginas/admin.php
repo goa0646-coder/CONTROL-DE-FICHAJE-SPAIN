@@ -5,7 +5,22 @@ $fuera = ['aceptar' => 'Aceptar y marcar «fuera»', 'rechazar' => 'No dejar fic
 
 if (es_post()) {
     $que = $_POST['que'] ?? '';
-    if ($que === 'empresa') {
+    if ($que === 'leer_convenio') {
+        try {
+            $_SESSION['convenio_leido'] = ia_leer('convenio', $_FILES['archivo'] ?? null);
+            auditar(db(), (int)$yo['id'], 'ia_convenio', $_SESSION['convenio_leido']['nombre']);
+        } catch (DomainException $e) {
+            aviso($e->getMessage(), 'error');
+        }
+        redirigir('admin');
+    } elseif ($que === 'aplicar_convenio' && ($cv = $_SESSION['convenio_leido'] ?? null)) {
+        if ($cv['horas_anuales']) consulta(db(), 'UPDATE empresa SET horas_anuales = ? WHERE id = 1', [(int)round($cv['horas_anuales'])]);
+        if ($cv['vacaciones_dias'] && $cv['vacaciones_tipo'] === 'laborables') consulta(db(), "UPDATE tipos_ausencia SET dias_anuales = ? WHERE nombre = 'Vacaciones'", [$cv['vacaciones_dias']]);
+        // Se guarda entero para las reglas de convenio (descansos, horas extra…).
+        consulta(db(), 'REPLACE INTO ajustes VALUES (?, ?)', ['convenio', json_encode($cv, JSON_UNESCAPED_UNICODE)]);
+        unset($_SESSION['convenio_leido']);
+        auditar(db(), (int)$yo['id'], 'convenio_aplicado', $cv['nombre']);
+    } elseif ($que === 'empresa') {
         $horas = ($_POST['horas_anuales'] ?? '') === '' ? null : max(0, (int)$_POST['horas_anuales']);
         db()->prepare('INSERT INTO empresa (id, nombre, cif, horas_anuales) VALUES (1, ?, ?, ?) ON DUPLICATE KEY UPDATE nombre = VALUES(nombre), cif = VALUES(cif), horas_anuales = VALUES(horas_anuales)')
             ->execute([trim($_POST['nombre']), trim($_POST['cif']), $horas]);
@@ -62,6 +77,35 @@ cabecera('Empresa y centros', $yo);
   <label>Horas anuales del convenio <input type="number" name="horas_anuales" min="0" value="<?= e($empresa['horas_anuales']) ?>" placeholder="p. ej. 1780"></label>
   <button name="que" value="empresa">Guardar</button>
 </form>
+
+<?php $cv = $_SESSION['convenio_leido'] ?? null; $guardado = json_decode(ajuste(db(), 'convenio') ?? 'null', true); ?>
+<?php if (ia_activa() || $guardado): ?>
+<div class="tarjeta">
+  <h2>Convenio colectivo</h2>
+  <?php if ($guardado && !$cv): ?><p>Aplicado: <strong><?= e($guardado['nombre']) ?></strong> <?= e($guardado['vigencia']) ?></p><?php endif ?>
+  <?php if ($cv): ?>
+  <p class="aviso ok">Leído por la IA: <strong><?= e($cv['nombre']) ?></strong> <?= e($cv['vigencia']) ?>. Revísalo con el texto oficial antes de aplicarlo.</p>
+  <table>
+    <tr><td>Horas anuales</td><td><?= e($cv['horas_anuales'] ?? 'No lo regula') ?></td></tr>
+    <tr><td>Vacaciones</td><td><?= $cv['vacaciones_dias'] ? e($cv['vacaciones_dias']) . ' días ' . e($cv['vacaciones_tipo']) : 'No lo regula' ?></td></tr>
+    <tr><td>Pausa en jornada continuada</td><td><?= $cv['pausa_minutos'] !== null ? e($cv['pausa_minutos']) . ' min' . ($cv['pausa_retribuida'] === null ? '' : ($cv['pausa_retribuida'] ? ' (retribuida)' : ' (no retribuida)')) : 'No lo regula' ?></td></tr>
+    <tr><td>Máximo horas extra/año</td><td><?= e($cv['horas_extra_max'] ?? 'No lo regula') ?></td></tr>
+    <tr><td>Descanso entre jornadas</td><td><?= $cv['descanso_entre_jornadas_h'] !== null ? e($cv['descanso_entre_jornadas_h']) . ' h' : 'No lo regula' ?></td></tr>
+    <?php foreach ($cv['otras_reglas'] as $r): ?><tr><td colspan="2"><?= e($r) ?></td></tr><?php endforeach ?>
+  </table>
+  <form method="post"><?= csrf_campo() ?><button name="que" value="aplicar_convenio">Aplicar horas anuales y vacaciones</button></form>
+  <?php if ($cv['vacaciones_tipo'] === 'naturales'): ?><p class="nota">Vacaciones en días naturales: de momento ajusta los días a mano en Horarios → Tipos de ausencia.</p><?php endif ?>
+  <?php endif ?>
+  <?php if (ia_activa()): ?>
+  <form method="post" enctype="multipart/form-data" class="filtros">
+    <?= csrf_campo() ?>
+    <label>Leer el convenio (PDF del BOE/BOP) <input type="file" name="archivo" accept="application/pdf,image/*" required></label>
+    <button name="que" value="leer_convenio">Leer con IA</button>
+  </form>
+  <p class="nota">Puede tardar hasta un minuto. El convenio es un texto público; no se envían datos de la plantilla.</p>
+  <?php endif ?>
+</div>
+<?php endif ?>
 
 <h2>Centros</h2>
 <table>

@@ -91,6 +91,13 @@ cabecera('Usuarios', $yo);
 <form method="post" class="tarjeta">
   <?= csrf_campo() ?><input type="hidden" name="id" value="<?= e($u['id']) ?>">
   <h2><?= $u['id'] ? 'Editar ' . e(nombre($u)) : 'Nueva persona' ?></h2>
+  <?php if (ia_activa()): ?>
+  <div class="tarjeta" data-ia-dni>
+    <label>Rellenar con la foto del DNI/NIE <input type="file" accept="image/*,application/pdf" capture="environment"></label>
+    <button type="button">Leer con IA</button> <span class="nota" data-ia-estado></span>
+    <p class="nota">Se envía a Google Gemini solo para leerlo y no se guarda en INDA. Con datos personales usa una cuenta de Google con facturación activada (así Google no usa los datos). Revisa siempre lo que lea la IA.</p>
+  </div>
+  <?php endif ?>
   <label>Nombre <input name="nombre" value="<?= e($u['nombre']) ?>" required></label>
   <label>Apellidos <input name="apellidos" value="<?= e($u['apellidos']) ?>"></label>
   <label>DNI/NIE <input name="dni" value="<?= e($u['dni']) ?>"></label>

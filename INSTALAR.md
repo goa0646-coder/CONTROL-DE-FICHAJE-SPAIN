@@ -50,6 +50,7 @@ Justificantes y documentos se guardan en la carpeta `inda-archivos`, **junto a**
 - **Slack**: crea una app en api.slack.com → Slash command `/inda` con Request URL `https://inda.miempresa.com/?p=chat&canal=slack`. Copia el *Signing Secret* en `slack_secreto` de `config-inda.php`. Cada persona escribe `/inda vincular CÓDIGO` una vez.
 - **Microsoft Teams**: en el equipo → Aplicaciones → Webhook saliente, URL `https://inda.miempresa.com/?p=chat&canal=teams`. Copia el token en `teams_secreto`. Se usa escribiendo `@INDA entrar`.
 - **Entrar con Google o Microsoft**: registra la app en Google Cloud o Entra ID con la URL de retorno `https://inda.miempresa.com/?p=sso` y rellena `sso` en `config-inda.php`. Solo entran emails que ya existan en INDA.
+- **Lectura con IA (Google Gemini)**: crea una clave en aistudio.google.com y ponla en el asistente o en `gemini_clave` de `config-inda.php`. Activa la facturación en esa cuenta de Google antes de leer DNI (con la gratuita Google puede usar los datos). Usos: Usuarios → «Leer con IA» rellena nombre, apellidos y DNI desde la foto; Empresa → leer el PDF del convenio y aplicar horas anuales y vacaciones; Horarios → subir el PDF o la foto del calendario laboral oficial. Las imágenes no se guardan.
 - **Gestoría**: el admin crea en Perfil un código «Exportación (lectura)». API: `?p=api&accion=informe|fichajes|ausencias&desde=AAAA-MM-DD&hasta=AAAA-MM-DD` con la cabecera `Authorization: Bearer CÓDIGO`. También vale el Excel (CSV) de Informes.
 
 ## Actualizar a una versión nueva

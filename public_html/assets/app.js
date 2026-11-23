@@ -97,3 +97,20 @@ if (cajaInstalar && !instalada) {
     cajaInstalar.querySelector('[data-instalar-boton]').onclick = async () => { ev.prompt(); await ev.userChoice; cajaInstalar.hidden = true; };
   });
 }
+
+// Usuarios: leer el DNI con IA y rellenar nombre, apellidos y DNI (el admin lo revisa antes de guardar).
+for (const caja of document.querySelectorAll('[data-ia-dni]')) {
+  const form = caja.closest('form'), estado = caja.querySelector('[data-ia-estado]');
+  caja.querySelector('button').addEventListener('click', async () => {
+    const f = caja.querySelector('input[type=file]').files[0];
+    if (!f) { estado.textContent = 'Elige primero la foto.'; return; }
+    const datos = new FormData(); datos.append('csrf', form.csrf.value); datos.append('archivo', f);
+    estado.textContent = 'Leyendo…';
+    try {
+      const r = await fetch('?p=ia', { method: 'POST', body: datos }); const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      for (const k of ['nombre', 'apellidos', 'dni']) if (d[k]) form[k].value = d[k];
+      estado.textContent = d.dni_valido ? 'Leído. Revisa los datos y guarda.' : 'Leído, pero la letra del DNI no cuadra: revísalo.';
+    } catch (e) { estado.textContent = e.message; }
+  });
+}
