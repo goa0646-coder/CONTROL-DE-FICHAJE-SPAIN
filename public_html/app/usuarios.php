@@ -49,6 +49,17 @@ function equipo_de(PDO $db, array $yo): array
     return $db->query("SELECT * FROM usuarios WHERE rol <> 'inspeccion' ORDER BY activo DESC, nombre, apellidos")->fetchAll();
 }
 
+const PERMISOS = ['informes' => 'Ver informes', 'planificar' => 'Planificar horarios y turnos', 'documentos' => 'Subir documentos', 'comunicados' => 'Publicar comunicados'];
+
+// Permisos extra configurables por rol. El admin los tiene todos.
+function puede(array $u, string $permiso): bool
+{
+    if ($u['rol'] === 'admin') return true;
+    static $tabla;
+    $tabla ??= db()->query('SELECT CONCAT(rol, ":", permiso) FROM permisos_rol')->fetchAll(PDO::FETCH_COLUMN);
+    return in_array("{$u['rol']}:$permiso", $tabla, true);
+}
+
 function login(PDO $db, string $email, string $clave): array|string
 {
     $email = mb_strtolower(trim($email));

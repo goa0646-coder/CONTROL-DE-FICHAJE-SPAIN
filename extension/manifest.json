@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "INDA · Fichar",
+  "version": "1.0",
+  "description": "Ficha entrada, pausa y salida en INDA desde el navegador.",
+  "action": { "default_popup": "popup.html", "default_icon": "icono.png" },
+  "icons": { "128": "icono.png" },
+  "permissions": ["storage"],
+  "optional_host_permissions": ["https://*/*"]
+}

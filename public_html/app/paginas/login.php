@@ -8,6 +8,9 @@ if (es_post()) {
     session_regenerate_id(true);
     $_SESSION['uid'] = $r['id'];
     auditar(db(), (int)$r['id'], 'login');
+    $volver = $_SESSION['volver'] ?? [];
+    unset($_SESSION['volver']);
+    if (preg_match('/^[a-z]+$/', $volver['p'] ?? '') && $volver['p'] !== 'login') redirigir($volver['p'], array_diff_key($volver, ['p' => 1]));
     redirigir(inicio_de($r));
 }
 cabecera('Entrar');
@@ -19,4 +22,7 @@ cabecera('Entrar');
   <button>Entrar</button>
   <p><a href="?p=recuperar">¿Has olvidado la contraseña?</a></p>
 </form>
+<?php if (!empty(config()['sso']['cliente_id'])): ?>
+<p class="centro"><a class="boton secundario" href="?p=sso">Entrar con <?= (config()['sso']['proveedor'] ?? '') === 'microsoft' ? 'Microsoft' : 'Google' ?></a></p>
+<?php endif ?>
 <?php pie();

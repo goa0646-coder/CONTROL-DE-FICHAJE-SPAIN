@@ -8,6 +8,13 @@ const ROLES = ['empleado', 'responsable', 'admin', 'inspeccion'];
 require __DIR__ . '/fichajes.php';
 require __DIR__ . '/correcciones.php';
 require __DIR__ . '/usuarios.php';
+require __DIR__ . '/horarios.php';
+require __DIR__ . '/ausencias.php';
+require __DIR__ . '/avisos.php';
+require __DIR__ . '/push.php';
+require __DIR__ . '/informes.php';
+require __DIR__ . '/portal.php';
+require __DIR__ . '/api.php';
 
 // config-inda.php vive fuera de public_html (ver INSTALAR.md).
 // config-fichaje.php se sigue aceptando para instalaciones antiguas.
@@ -40,6 +47,13 @@ function conectar(array $c): PDO
     ]);
     $db->exec("SET time_zone = '+00:00'");
     return $db;
+}
+
+function consulta(PDO $db, string $sql, array $p = []): PDOStatement
+{
+    $s = $db->prepare($sql);
+    $s->execute($p);
+    return $s;
 }
 
 function ahora(): string
@@ -135,7 +149,11 @@ function usuario_actual(): ?array
 function requiere(string ...$roles): array
 {
     $u = usuario_actual();
-    if (!$u) redirigir('login');
+    if (!$u) {
+        // Tras entrar, vuelve a donde iba (p. ej. un QR escaneado).
+        $_SESSION['volver'] = array_filter($_GET, 'is_string');
+        redirigir('login');
+    }
     if (!in_array($u['rol'], $roles, true)) {
         http_response_code(403);
         exit('No tienes permiso para ver esta página.');

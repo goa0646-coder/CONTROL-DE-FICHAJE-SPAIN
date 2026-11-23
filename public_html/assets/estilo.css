@@ -34,3 +34,25 @@ th, td { padding: .5rem; text-align: left; border-bottom: 1px solid var(--fondo)
 tr.anulado td { text-decoration: line-through; color: var(--gris); }
 .filtros { display: flex; flex-wrap: wrap; gap: .5rem; align-items: end; }
 .filtros label { margin: 0; }
+.cifras { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: .5rem; margin: 1rem 0; }
+.cifras div { background: var(--tarjeta); border-radius: .6rem; padding: .6rem .8rem; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+.cifras span { display: block; color: var(--gris); font-size: .85rem; }
+.cifras strong { font-size: 1.4rem; }
+.etiqueta { display: inline-block; color: #fff; border-radius: .3rem; padding: 0 .35rem; font-size: .85rem; }
+.solo-imprimir { display: none; }
+.firmas { display: flex; justify-content: space-between; margin-top: 4rem; }
+.firmas p { border-top: 1px solid #000; padding-top: .3rem; width: 40%; }
+.calendario td, .calendario th { text-align: center; padding: .25rem; min-width: 2rem; font-size: .85rem; }
+.calendario td.libre { background: var(--fondo); color: var(--gris); }
+.calendario td.hoy { outline: 2px solid var(--azul); }
+.calendario th.persona, .calendario td.persona { text-align: left; white-space: nowrap; }
+.qr { display: flex; justify-content: center; }
+.qr svg, .qr img { width: min(70vw, 18rem); height: auto; background: #fff; padding: .5rem; }
+@media print {
+  nav, .no-imprimir, .aviso[role=status], .marca-grande { display: none !important; }
+  .solo-imprimir { display: block; }
+  .firmas.solo-imprimir { display: flex; }
+  body { background: #fff; color: #000; }
+  table { display: table; }
+}
+.tarjeta.nuevo { border-left: 4px solid var(--azul); }

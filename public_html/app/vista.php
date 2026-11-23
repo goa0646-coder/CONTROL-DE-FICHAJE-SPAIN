@@ -5,11 +5,15 @@ function cabecera(string $titulo, ?array $u = null): void
     $menu = [];
     if ($u) {
         $r = $u['rol'];
-        if ($r !== 'inspeccion') $menu += ['fichar' => 'Fichar', 'historial' => 'Mi registro', 'correcciones' => 'Correcciones'];
+        if ($r !== 'inspeccion') $menu += ['fichar' => 'Fichar', 'historial' => 'Mi registro', 'correcciones' => 'Correcciones',
+            'ausencias' => 'Ausencias', 'calendario' => 'Calendario', 'documentos' => 'Documentos', 'comunicados' => 'Comunicados'];
         if ($r !== 'empleado') $menu['equipo'] = $r === 'responsable' ? 'Mi equipo' : 'Personas';
-        if ($r === 'admin') $menu += ['admin' => 'Empresa', 'usuarios' => 'Usuarios', 'quioscos' => 'Quioscos'];
+        if (puede($u, 'informes')) $menu['informes'] = 'Informes';
+        if (puede($u, 'planificar')) $menu['planificacion'] = 'Planificación';
+        if ($r === 'admin') $menu += ['admin' => 'Empresa', 'usuarios' => 'Usuarios', 'horarios' => 'Horarios', 'quioscos' => 'Quioscos'];
         if (in_array($r, ['admin', 'inspeccion'], true)) $menu['auditoria'] = 'Auditoría';
-        $menu += ['clave' => 'Contraseña', 'salir' => 'Salir'];
+        $n = avisos_sin_leer(db(), (int)$u['id']);
+        $menu += ['avisos' => 'Avisos' . ($n ? " ($n)" : ''), 'perfil' => 'Perfil', 'salir' => 'Salir'];
     }
     $aviso = $_SESSION['aviso'] ?? null;
     unset($_SESSION['aviso']);
@@ -34,6 +38,19 @@ function cabecera(string $titulo, ?array $u = null): void
 <h1><?= e($titulo) ?></h1>
 <?php if ($aviso): ?><p class="aviso <?= e($aviso[1]) ?>" role="status"><?= e($aviso[0]) ?></p><?php endif ?>
 <?php
+}
+
+// Botones válidos según el estado. La pausa se ofrece por motivo si hay motivos activos.
+function botones_fichaje(string $estado): string
+{
+    $txt = ['entrada' => 'Entrar', 'pausa_inicio' => 'Empezar pausa', 'pausa_fin' => 'Volver de la pausa', 'salida' => 'Salir'];
+    $html = '';
+    foreach (PERMITIDOS[$estado] as $t) {
+        $motivos = $t === 'pausa_inicio' ? db()->query('SELECT id, nombre FROM motivos_pausa WHERE activo = 1 ORDER BY nombre')->fetchAll(PDO::FETCH_KEY_PAIR) : [];
+        if (!$motivos) $html .= '<button class="grande ' . $t . '" name="tipo" value="' . $t . '">' . $txt[$t] . '</button>';
+        foreach ($motivos as $id => $m) $html .= '<button class="grande ' . $t . '" name="tipo" value="' . $t . '|' . e($id) . '">Pausa: ' . e($m) . '</button>';
+    }
+    return $html;
 }
 
 function pie(): void

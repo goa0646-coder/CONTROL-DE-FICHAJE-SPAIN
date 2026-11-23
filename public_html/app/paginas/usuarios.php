@@ -3,6 +3,28 @@ $yo = requiere('admin');
 $roles = ['empleado' => 'Empleado', 'responsable' => 'Responsable', 'admin' => 'Administrador', 'inspeccion' => 'Inspección (solo lectura)'];
 $gps = ['' => 'Lo que diga su centro', 'no' => 'Sin GPS', 'opcional' => 'Opcional', 'obligatorio' => 'Obligatorio'];
 
+if (es_post() && isset($_POST['saldos'])) {
+    $id = (int)$_POST['id'];
+    $anio = (int)$_POST['anio'];
+    $p = usuario(db(), $id) ?? redirigir('usuarios');
+    try {
+        if ($tipo = (int)($_POST['arrastrar'] ?? 0)) {
+            $n = arrastrar_saldo(db(), $p, $tipo, $anio);
+            aviso("Pasados $n días a " . ($anio + 1) . '.');
+        } else {
+            foreach ($_POST['dias'] ?? [] as $tipo => $dias) {
+                if ($dias === '') consulta(db(), 'DELETE FROM saldos_ausencia WHERE usuario_id = ? AND tipo_id = ? AND anio = ?', [$id, (int)$tipo, $anio]);
+                else consulta(db(), 'REPLACE INTO saldos_ausencia VALUES (?, ?, ?, ?)', [$id, (int)$tipo, $anio, max(0, (float)str_replace(',', '.', $dias))]);
+            }
+            aviso('Días guardados.');
+        }
+        auditar(db(), (int)$yo['id'], 'saldos_ausencia', "usuario=$id anio=$anio");
+    } catch (DomainException $e) {
+        aviso($e->getMessage(), 'error');
+    }
+    redirigir('usuarios', ['u' => $id, 'anio' => $anio]);
+}
+
 if (es_post()) {
     $id = (int)($_POST['id'] ?? 0);
     $p = array_map(fn($v) => is_string($v) ? trim($v) : $v, $_POST);
@@ -26,7 +48,8 @@ if (es_post()) {
     $campos = [
         'num_empleado' => $p['num_empleado'] ?: null, 'nombre' => $p['nombre'], 'apellidos' => $p['apellidos'], 'dni' => strtoupper($p['dni']),
         'email' => mb_strtolower($p['email']), 'rol' => $p['rol'], 'centro_id' => (int)$p['centro_id'] ?: null,
-        'responsable_id' => (int)$p['responsable_id'] ?: null, 'gps_modo' => isset($gps[$p['gps_modo']]) && $p['gps_modo'] !== '' ? $p['gps_modo'] : null,
+        'responsable_id' => (int)$p['responsable_id'] ?: null,
+        'departamento_id' => (int)($p['departamento_id'] ?? 0) ?: null, 'horario_id' => (int)($p['horario_id'] ?? 0) ?: null, 'gps_modo' => isset($gps[$p['gps_modo']]) && $p['gps_modo'] !== '' ? $p['gps_modo'] : null,
         'acceso_hasta' => $p['rol'] === 'inspeccion' ? ($p['acceso_hasta'] ?: gmdate('Y-m-d', strtotime('+30 days'))) : null,
         'activo' => $activo,
         'baja_utc' => $activo ? null : ($antes['baja_utc'] ?? ahora()),
@@ -54,11 +77,13 @@ if (es_post()) {
 
 $todos = db()->query('SELECT u.*, c.nombre AS centro FROM usuarios u LEFT JOIN centros c ON c.id = u.centro_id ORDER BY u.activo DESC, u.nombre, u.apellidos')->fetchAll();
 $centros = db()->query('SELECT id, nombre FROM centros WHERE activo = 1 ORDER BY nombre')->fetchAll(PDO::FETCH_KEY_PAIR);
+$deps = db()->query('SELECT id, nombre FROM departamentos WHERE activo = 1 ORDER BY nombre')->fetchAll(PDO::FETCH_KEY_PAIR);
+$hors = db()->query('SELECT id, nombre FROM horarios WHERE activo = 1 ORDER BY nombre')->fetchAll(PDO::FETCH_KEY_PAIR);
 $jefes = [];
 foreach ($todos as $x) if (in_array($x['rol'], ['responsable', 'admin'], true) && $x['activo']) $jefes[$x['id']] = nombre($x);
 $u = isset($_GET['u']) ? usuario(db(), (int)$_GET['u']) : null;
 $u ??= ['id' => '', 'num_empleado' => '', 'nombre' => '', 'apellidos' => '', 'dni' => '', 'email' => '', 'rol' => 'empleado',
-    'centro_id' => '', 'responsable_id' => '', 'gps_modo' => '', 'acceso_hasta' => '', 'activo' => 1, 'pin_hash' => null];
+    'centro_id' => '', 'responsable_id' => '', 'departamento_id' => '', 'horario_id' => '', 'gps_modo' => '', 'acceso_hasta' => '', 'activo' => 1, 'pin_hash' => null];
 cabecera('Usuarios', $yo);
 ?>
 <form method="post" class="tarjeta">
@@ -70,6 +95,8 @@ cabecera('Usuarios', $yo);
   <label>Email <input type="email" name="email" value="<?= e($u['email']) ?>" required></label>
   <label>Rol <select name="rol"><?= opciones($roles, $u['rol']) ?></select></label>
   <label>Centro <select name="centro_id"><?= opciones(['' => '—'] + $centros, $u['centro_id']) ?></select></label>
+  <label>Departamento <select name="departamento_id"><?= opciones(['' => '—'] + $deps, $u['departamento_id']) ?></select></label>
+  <label>Horario <select name="horario_id"><?= opciones(['' => 'Sin horario'] + $hors, $u['horario_id']) ?></select></label>
   <label>Responsable <select name="responsable_id"><?= opciones(['' => '—'] + $jefes, $u['responsable_id']) ?></select></label>
   <label>GPS al fichar <select name="gps_modo"><?= opciones($gps, $u['gps_modo'] ?? '') ?></select></label>
   <label>Nº de empleado (quiosco) <input name="num_empleado" value="<?= e($u['num_empleado']) ?>"></label>
@@ -80,6 +107,27 @@ cabecera('Usuarios', $yo);
   <button>Guardar</button>
   <?php if ($u['id']): ?><a href="?p=usuarios">Nueva persona</a><?php endif ?>
 </form>
+
+<?php if ($u['id'] && $u['rol'] !== 'inspeccion'):
+    $anio = (int)($_GET['anio'] ?? local(ahora(), 'Y'));
+    $saldos = saldos_ausencia(db(), $u, $anio);
+    $propios = consulta(db(), 'SELECT tipo_id, dias FROM saldos_ausencia WHERE usuario_id = ? AND anio = ?', [$u['id'], $anio])->fetchAll(PDO::FETCH_KEY_PAIR); ?>
+<form method="post" class="tarjeta">
+  <?= csrf_campo() ?><input type="hidden" name="id" value="<?= e($u['id']) ?>"><input type="hidden" name="anio" value="<?= $anio ?>"><input type="hidden" name="saldos" value="1">
+  <h2>Días de <?= e($u['nombre']) ?> en <?= $anio ?> <a class="nota" href="?p=usuarios&u=<?= e($u['id']) ?>&anio=<?= $anio - 1 ?>">‹ <?= $anio - 1 ?></a> <a class="nota" href="?p=usuarios&u=<?= e($u['id']) ?>&anio=<?= $anio + 1 ?>"><?= $anio + 1 ?> ›</a></h2>
+  <button>Guardar días</button>
+  <table>
+    <tr><th>Tipo</th><th>Asignados</th><th>Disfrutados</th><th>Pedidos</th><th>Quedan</th><th></th></tr>
+    <?php foreach ($saldos as $tid => $x): ?>
+    <tr><td><?= e($x['tipo']) ?></td>
+      <td><input name="dias[<?= e($tid) ?>]" value="<?= e(isset($propios[$tid]) ? (float)$propios[$tid] : '') ?>" placeholder="<?= e((float)$x['asignado']) ?>" size="4"></td>
+      <td><?= e($x['consumido']) ?></td><td><?= e($x['comprometido']) ?></td><td><?= e((float)$x['disponible']) ?></td>
+      <td><button name="arrastrar" value="<?= e($tid) ?>" class="secundario">Pasar sobrante a <?= $anio + 1 ?></button></td></tr>
+    <?php endforeach ?>
+  </table>
+  <p class="nota">Vacío = lo que diga el tipo de ausencia. Pon aquí la parte proporcional si entra a mitad de año.</p>
+</form>
+<?php endif ?>
 
 <table>
   <tr><th>Nombre</th><th>Rol</th><th>Centro</th><th>Email</th><th></th></tr>
