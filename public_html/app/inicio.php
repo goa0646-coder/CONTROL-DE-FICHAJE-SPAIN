@@ -8,6 +8,13 @@ const ROLES = ['empleado', 'responsable', 'admin', 'inspeccion'];
 require __DIR__ . '/fichajes.php';
 require __DIR__ . '/correcciones.php';
 require __DIR__ . '/usuarios.php';
+require __DIR__ . '/horarios.php';
+require __DIR__ . '/ausencias.php';
+require __DIR__ . '/avisos.php';
+require __DIR__ . '/push.php';
+require __DIR__ . '/informes.php';
+require __DIR__ . '/portal.php';
+require __DIR__ . '/api.php';
 
 // config-inda.php vive fuera de public_html (ver INSTALAR.md).
 // config-fichaje.php se sigue aceptando para instalaciones antiguas.
@@ -40,6 +47,13 @@ function conectar(array $c): PDO
     ]);
     $db->exec("SET time_zone = '+00:00'");
     return $db;
+}
+
+function consulta(PDO $db, string $sql, array $p = []): PDOStatement
+{
+    $s = $db->prepare($sql);
+    $s->execute($p);
+    return $s;
 }
 
 function ahora(): string
@@ -128,14 +142,36 @@ function usuario_actual(): ?array
     static $u = false;
     if ($u !== false) return $u;
     $u = isset($_SESSION['uid']) ? usuario(db(), (int)$_SESSION['uid']) : null;
+    // Sin sesión pero con el teléfono recordado: entra solo (como una app).
+    if (!$u && ($t = $_COOKIE[DISPOSITIVO_COOKIE] ?? '') !== '') {
+        $u = usuario_por_dispositivo(db(), $t);
+        if ($u) {
+            session_regenerate_id(true);
+            $_SESSION['uid'] = $u['id'];
+            poner_cookie_dispositivo($t);
+        } else {
+            poner_cookie_dispositivo('');
+        }
+    }
     if ($u && !acceso_vigente($u)) $u = null;
     return $u;
+}
+
+function poner_cookie_dispositivo(string $t): void
+{
+    if (headers_sent()) return;
+    setcookie(DISPOSITIVO_COOKIE, $t, ['expires' => $t === '' ? 1 : time() + DISPOSITIVO_DIAS * 86400, 'path' => '/',
+        'httponly' => true, 'secure' => !empty($_SERVER['HTTPS']), 'samesite' => 'Lax']);
 }
 
 function requiere(string ...$roles): array
 {
     $u = usuario_actual();
-    if (!$u) redirigir('login');
+    if (!$u) {
+        // Tras entrar, vuelve a donde iba (p. ej. un QR escaneado).
+        $_SESSION['volver'] = array_filter($_GET, 'is_string');
+        redirigir('login');
+    }
     if (!in_array($u['rol'], $roles, true)) {
         http_response_code(403);
         exit('No tienes permiso para ver esta página.');

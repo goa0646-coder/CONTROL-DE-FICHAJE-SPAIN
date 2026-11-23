@@ -7,7 +7,9 @@ Fecha: 23/11/2026.
 - **Fase 1 terminada y fusionada en `master`** (PR de `fase-1`): fichar (web/móvil PWA, quiosco con nº + PIN), pausas, GPS por centro (dentro/fuera de zona, coordenadas borradas a los 12 meses), historial con horas y CSV, correcciones con aprobación, equipo en tiempo real, empresa/centros/usuarios/quioscos, rol Inspección con caducidad, auditoría con verificación de la cadena de hashes, recuperar contraseña por email, bloqueo tras 5 fallos.
 - Sistema renombrado a **INDA** (títulos, manifest, ZIP `inda.zip`, config `config-inda.php`; `config-fichaje.php` sigue valiendo).
 - Pruebas: PHPUnit contra MySQL (`tests/`), también en GitHub Actions (`.github/workflows/pruebas.yml`).
-- Análisis de Woffu y plan de fases: [WOFFU.md](WOFFU.md) — **pendiente de aprobación** del dueño antes de programar.
+- Análisis de Woffu y plan: [WOFFU.md](WOFFU.md). Plan aprobado sin teletrabajo.
+- **Fases 2–7 programadas en la rama `fase-2`** (migraciones 003–007): motivos de pausa, departamentos, horarios, festivos, turnos y cuadrante, horas extra/nocturnas, bolsa de horas, avisos (app, email, push), ausencias y vacaciones con saldos, calendario de equipo, informes, firma mensual, documentos con firma, comunicados, QR, API, extensión, Slack/Teams, entrar con Google/Microsoft, permisos por rol. Detalle en [DISENO.md](DISENO.md) §6.
+- No hecho a propósito: teletrabajo, WhatsApp, biométricos, idiomas (ver DISENO §8).
 
 ## Hostinger
 
@@ -19,10 +21,12 @@ No consta en el repo ni en el historial qué hay instalado. Si ya se subió una 
 
 ## Pendientes
 
-1. Aprobar el plan de [WOFFU.md](WOFFU.md) (fases 2+).
-2. Confirmar los datos de Hostinger de arriba.
-3. El dueño renombra el repo a "INDA" y lo pone privado; actualizar el remoto local: `git remote set-url origin https://github.com/goa0646-coder/INDA`.
-4. Copia mensual de la BD (phpMyAdmin → Exportar).
+1. Revisar y fusionar la rama `fase-2`; subir el ZIP nuevo y abrir `?p=instalar&clave=…` (aplica 003–007).
+2. Cambiar el cron a **cada 15 minutos** (INSTALAR §5) y revisar que `correo_desde` es un buzón real.
+3. Configurar horarios, festivos y tipos de ausencia (INSTALAR §6).
+4. Confirmar los datos de Hostinger de arriba.
+5. El dueño renombra el repo a "INDA" y lo pone privado; actualizar el remoto local: `git remote set-url origin https://github.com/goa0646-coder/INDA`.
+6. Copia mensual de la BD (phpMyAdmin → Exportar) y de la carpeta `inda-archivos`.
 
 ## Cómo seguir
 

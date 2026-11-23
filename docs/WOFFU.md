@@ -34,58 +34,53 @@ INDA copia **funciones y flujos**, no logo, nombres ni textos.
 - Se olvidan de fichar → recordatorios.
 - Sin planificación automática de turnos → plantillas rotativas que se repiten solas.
 
-## 2. Tabla de funciones
+## 2. Tabla de funciones (actualizada tras las fases 2–7)
 
 | Función de Woffu | ¿INDA la tiene? | Esfuerzo |
 |---|---|---|
 | Fichaje web / móvil (PWA) | Sí | — |
-| Pausas | Sí (sin motivo) | — |
-| Motivos de pausa (comida, médico…) | No | Bajo |
-| Fichaje teletrabajo marcado | No | Bajo |
+| Pausas con motivo (retribuida o no) | Sí | — |
+| Fichaje teletrabajo marcado | No (descartado) | — |
 | Quiosco/tablet con PIN | Sí | — |
-| Fichaje por QR | No | Medio |
-| Extensión de navegador | No | Medio |
-| WhatsApp / Slack / Teams | No | Alto |
-| Biométrico (ZKTeco…) | No | Alto |
-| Límite por GPS y radio | Sí (acepta y marca "fuera") | — |
-| Opción de bloquear fuera de zona | No | Bajo |
-| Límite por IP | No | Bajo |
+| Fichaje por QR | Sí (QR del quiosco cada 30 s y cartel fijo) | — |
+| Extensión de navegador | Sí (Chrome/Edge) | — |
+| Slack / Teams | Sí | — |
+| WhatsApp | No (cuenta de pago de Meta) | Alto |
+| Biométrico (ZKTeco…) | No (hardware + RGPD) | Alto |
+| Límite por GPS y radio, bloquear fuera de zona | Sí | — |
+| Límite por IP | Sí | — |
 | Correcciones con aprobación | Sí | — |
 | Responsable valida equipo / equipo en tiempo real | Sí | — |
-| Inspección / auditoría / inmutabilidad | Sí (mejor que Woffu: cadena de hashes) | — |
-| Exportar CSV | Sí | — |
-| Departamentos | No | Bajo |
-| Horarios (plantilla semanal, flexible) | No | Medio |
-| Calendario de festivos por centro | No | Bajo |
-| Convenio (horas anuales) | No | Medio |
-| Planificación masiva de horarios | No | Medio |
-| Turnos fijos y rotativos + cuadrante | No | Alto |
-| Horas teóricas vs. reales (extra, nocturnas, festivas) | No | Medio |
-| Saldo / bolsa de horas | No | Medio |
-| Vacaciones y ausencias (días) con aprobación | No | Medio |
-| Ausencias por horas (franja) | No | Bajo (tras ausencias) |
-| Justificantes adjuntos | No | Bajo |
-| Saldos de vacaciones anuales y arrastre | No | Medio |
-| Calendario de equipo | No | Medio |
-| Avisos: recordatorio, olvido de salida, retraso | No | Medio |
-| Notificaciones push | No | Medio |
-| Informes de presencia / saldos / horas | Parcial (historial) | Medio |
-| Exportar Excel y PDF imprimible | No | Bajo |
-| Resumen mensual firmado por el empleado | No | Medio |
-| Documentos (nóminas, contratos) | No | Medio |
-| Firma de documentos | No (simple, propia) | Medio |
-| Comunicados a empleados | No | Bajo |
-| Perfil del empleado | Parcial | Bajo |
-| Roles/permisos configurables | Parcial (4 roles fijos) | Medio |
-| SSO Google/Microsoft | No | Medio |
-| API / export para gestoría (A3, Sage) | No | Medio |
-| Varios idiomas | No | Medio |
-| Accesos, denuncias, selección, desempeño | No | Alto (fuera de alcance de control horario) |
+| Inspección / auditoría / inmutabilidad | Sí (mejor: cadena de hashes) | — |
+| Departamentos | Sí | — |
+| Horarios fijos y flexibles | Sí | — |
+| Festivos por empresa y centro | Sí | — |
+| Convenio (horas anuales) | Sí (referencia en informes) | — |
+| Planificación masiva de horarios | Sí | — |
+| Turnos fijos y rotativos + cuadrante | Sí | — |
+| Horas teóricas vs. reales, extra, nocturnas, festivas | Sí | — |
+| Bolsa de horas con ajustes | Sí | — |
+| Vacaciones y ausencias por días y por horas | Sí | — |
+| Justificantes adjuntos | Sí | — |
+| Saldos anuales y arrastre | Sí | — |
+| Calendario de equipo con aviso de solapes | Sí | — |
+| Avisos: no fichado, retraso, olvido de salida, solicitudes | Sí (app + email + push) | — |
+| Informes de presencia / horas / saldos / ausencias | Sí | — |
+| Excel y PDF | Sí (CSV para Excel; PDF al imprimir) | — |
+| Resumen mensual firmado por el empleado | Sí | — |
+| Documentos (nóminas, contratos) con firma | Sí (confirmación con contraseña + hash) | — |
+| Comunicados con control de lectura | Sí | — |
+| Perfil del empleado | Sí | — |
+| Permisos por rol configurables | Sí | — |
+| Entrar con Google / Microsoft | Sí | — |
+| API / exportación para gestoría | Sí (JSON + CSV) | — |
+| Varios idiomas | No (plantilla en español) | Medio |
+| Accesos, denuncias, selección, desempeño | No (fuera de control horario) | Alto |
 
 ## 3. Plan propuesto (por uso diario)
 
 **Fase 2 — Día a día (lo que se usa cada jornada)**
-1. Motivos de pausa y marca de teletrabajo.
+1. Motivos de pausa. ~~Marca de teletrabajo~~ (descartada).
 2. Departamentos.
 3. Horarios semanales (fijo/flexible) y festivos por centro.
 4. Horas teóricas vs. reales y saldo de horas (bolsa).
@@ -113,7 +108,7 @@ INDA copia **funciones y flujos**, no logo, nombres ni textos.
 **Fase 7 — Opcional**
 QR, extensión de navegador, SSO, roles a medida, Slack/Teams, biométricos, idiomas.
 
-Cada fase: migración nueva, pruebas PHPUnit, ZIP limpio. **Pendiente de tu aprobación antes de programar.**
+Cada fase: migración nueva, pruebas PHPUnit, ZIP limpio. **Aprobado (sin teletrabajo) e implementado en la rama `fase-2`.**
 
 ## Fuentes
 - https://go.woffu.com/software-gestion-tiempo

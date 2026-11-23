@@ -13,7 +13,8 @@ if (!preg_match('/^[a-z]+$/', $p) || !is_file(__DIR__ . "/app/paginas/$p.php")) 
     $p = $u ? inicio_de($u) : 'login';
     $_GET['p'] = $p;
 }
-if (es_post() && !csrf_ok()) {
+// api y chat se autentican con token o firma, no con sesión.
+if (es_post() && !in_array($p, ['api', 'chat'], true) && !csrf_ok()) {
     http_response_code(400);
     exit('El formulario ha caducado. Vuelve atrás y recarga la página.');
 }

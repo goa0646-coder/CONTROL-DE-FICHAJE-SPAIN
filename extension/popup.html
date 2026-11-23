@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<style>
+  body { font: 14px system-ui, sans-serif; width: 240px; margin: 12px; }
+  h1 { font-size: 18px; letter-spacing: .1em; color: #1d4ed8; margin: 0 0 8px; }
+  button { display: block; width: 100%; padding: 10px; margin: 6px 0; border: 0; border-radius: 6px; color: #fff; font: inherit; cursor: pointer; background: #1d4ed8; }
+  .entrar, .volver { background: #15803d; } .salir { background: #b91c1c; } .pausa { background: #b45309; }
+  input { width: 100%; box-sizing: border-box; padding: 6px; margin: 4px 0; }
+  #msg { color: #374151; min-height: 1.2em; }
+  [hidden] { display: none; }
+</style>
+</head>
+<body>
+<h1>INDA</h1>
+<div id="config" hidden>
+  <label>Dirección de INDA <input id="url" placeholder="https://inda.miempresa.com"></label>
+  <label>Código (INDA → Perfil) <input id="token" placeholder="inda_…"></label>
+  <button id="guardar">Guardar</button>
+</div>
+<div id="fichar" hidden>
+  <p id="estado">…</p>
+  <div id="botones"></div>
+  <p><a href="#" id="cambiar">Configuración</a></p>
+</div>
+<p id="msg"></p>
+<script src="popup.js"></script>
+</body>
+</html>

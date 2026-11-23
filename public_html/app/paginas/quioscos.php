@@ -17,7 +17,9 @@ if (es_post()) {
         ->execute([$centro, trim($_POST['nombre']), hash('sha256', $token), ahora()]);
     auditar(db(), (int)$yo['id'], 'quiosco_activado', 'quiosco=' . db()->lastInsertId());
     setcookie('quiosco', $token, ['expires' => time() + 10 * 365 * 86400, 'httponly' => true, 'secure' => !empty($_SERVER['HTTPS']), 'samesite' => 'Strict']);
-    // Este navegador queda como quiosco: se cierra la sesión del admin.
+    // Este navegador queda como quiosco: se cierra la sesión del admin (también la guardada en el dispositivo).
+    if (($t = $_COOKIE[DISPOSITIVO_COOKIE] ?? '') !== '') consulta(db(), 'UPDATE dispositivos SET activo = 0 WHERE token_hash = ?', [hash('sha256', $t)]);
+    poner_cookie_dispositivo('');
     $_SESSION = [];
     session_destroy();
     header('Location: ?p=quiosco');

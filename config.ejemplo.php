@@ -12,4 +12,12 @@ return [
     'correo_desde' => 'no-responder@miempresa.com',
     // Mínimo 16 caracteres al azar. Solo para ?p=instalar.
     'clave_instalacion' => 'CAMBIAR-POR-UNA-CLAVE-LARGA',
+    // Opcional: carpeta de justificantes y documentos (por defecto, inda-archivos junto a public_html).
+    // 'archivos' => '/home/u000000000/inda-archivos',
+    // Opcional: entrar con Google o Microsoft. URL de retorno: https://inda.miempresa.com/?p=sso
+    // 'sso' => ['proveedor' => 'google', 'cliente_id' => '', 'secreto' => ''],
+    // 'sso' => ['proveedor' => 'microsoft', 'cliente_id' => '', 'secreto' => '', 'tenant' => 'ID-DEL-DIRECTORIO'],
+    // Opcional: fichar desde Slack (/inda) y Microsoft Teams (webhook saliente).
+    // 'slack_secreto' => '',
+    // 'teams_secreto' => '',
 ];

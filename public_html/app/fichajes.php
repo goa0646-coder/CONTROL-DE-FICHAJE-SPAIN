@@ -22,7 +22,8 @@ function estado_actual(PDO $db, int $uid): string
 // Todos los fichajes (también los anulados, marcados) ordenados por hora.
 function fichajes_de(PDO $db, int $uid, string $desde = '1970-01-01', string $hasta = '9999-12-31'): array
 {
-    $s = $db->prepare('SELECT f.*, NOT ' . NO_ANULADO . ' AS anulado FROM fichajes f
+    $s = $db->prepare('SELECT f.*, NOT ' . NO_ANULADO . ' AS anulado, m.nombre AS motivo, m.retribuida
+        FROM fichajes f LEFT JOIN motivos_pausa m ON m.id = f.motivo_id
         WHERE usuario_id = ? AND momento_utc >= ? AND momento_utc < ? ORDER BY momento_utc, id');
     $s->execute([$uid, $desde, $hasta]);
     return $s->fetchAll();
@@ -40,8 +41,13 @@ function registrar_fichaje(PDO $db, array $u, string $tipo, string $origen, arra
         }
         $f = ['usuario_id' => $u['id'], 'tipo' => $tipo, 'momento_utc' => $ahora ?? gmdate('Y-m-d H:i:s'), 'origen' => $origen,
             'centro_id' => $u['centro_id'], 'quiosco_id' => null, 'zona' => null, 'ip' => $d['ip'] ?? '', 'correccion_id' => null];
+        if ($tipo === 'pausa_inicio' && !empty($d['motivo_id'])) {
+            $m = $db->prepare('SELECT id FROM motivos_pausa WHERE id = ? AND activo = 1');
+            $m->execute([(int)$d['motivo_id']]);
+            $f['motivo_id'] = $m->fetchColumn() ?: throw new DomainException('Motivo de pausa no válido.');
+        }
         $gps = null;
-        if ($origen === 'quiosco') {
+        if ($origen === 'quiosco' || $origen === 'qr') {
             $f['centro_id'] = $d['quiosco']['centro_id'];
             $f['quiosco_id'] = $d['quiosco']['id'];
         } else {
@@ -55,6 +61,8 @@ function registrar_fichaje(PDO $db, array $u, string $tipo, string $origen, arra
                 $gps = [$lat, $lng, filter_var($d['precision'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]) ?: null];
                 if ($c && $c['lat'] !== null) $f['zona'] = distancia_m($lat, $lng, (float)$c['lat'], (float)$c['lng']) <= $c['radio_m'] ? 'dentro' : 'fuera';
             }
+            if ($c && $f['zona'] === 'fuera' && $c['fuera_zona'] === 'rechazar') throw new DomainException('Estás fuera de tu centro de trabajo: no se puede fichar desde aquí.');
+            if ($c && !ip_permitida($c['ips'], $f['ip'])) throw new DomainException('No se puede fichar desde esta red. Usa la red del centro.');
         }
         $id = insertar_fichaje($db, $f);
         if ($gps) $db->prepare('INSERT INTO fichajes_gps VALUES (?, ?, ?, ?)')->execute([$id, ...$gps]);
@@ -82,8 +90,19 @@ function insertar_fichaje(PDO $db, array $f): int
 
 function hash_fichaje(array $f): string
 {
-    return hash('sha256', implode('|', [$f['hash_anterior'] ?? '', $f['usuario_id'], $f['tipo'], $f['momento_utc'],
-        $f['origen'], $f['zona'] ?? '', $f['correccion_id'] ?? '', $f['creado_utc']]));
+    $partes = [$f['hash_anterior'] ?? '', $f['usuario_id'], $f['tipo'], $f['momento_utc'], $f['origen'], $f['zona'] ?? '', $f['correccion_id'] ?? '', $f['creado_utc']];
+    // Solo si existe: así los fichajes anteriores a la fase 2 conservan su hash.
+    if (!empty($f['motivo_id'])) $partes[] = 'm' . $f['motivo_id'];
+    return hash('sha256', implode('|', $partes));
+}
+
+// $lista: prefijos separados por comas o espacios ("" = cualquier red). Ej.: "88.12.34.5, 10.0.".
+function ip_permitida(string $lista, string $ip): bool
+{
+    $prefijos = preg_split('/[\s,]+/', trim($lista), -1, PREG_SPLIT_NO_EMPTY);
+    if (!$prefijos) return true;
+    foreach ($prefijos as $p) if ($ip !== '' && str_starts_with($ip, $p)) return true;
+    return false;
 }
 
 // Devuelve el id del primer fichaje manipulado, o null si la cadena está intacta. $filas: un usuario, por id.
@@ -104,38 +123,60 @@ function distancia_m(float $lat1, float $lng1, float $lat2, float $lng2): float
 }
 
 // Agrupa fichajes válidos en jornadas (entrada → salida), aunque crucen la medianoche.
+// Las pausas retribuidas cuentan como trabajo. tramos = intervalos trabajados [inicio, fin] en segundos Unix.
 function jornadas(array $fichajes): array
 {
     $out = [];
     $j = null;
     $desde = $pausa = null;
+    $pagada = false;
+    $cerrar_pausa = function (int $t) use (&$j, &$pausa, &$pagada) {
+        if ($pagada) {
+            $j['trabajado'] += $t - $pausa;
+            $j['tramos'][] = [$pausa, $t];
+        } else {
+            $j['pausa'] += $t - $pausa;
+        }
+        $pausa = null;
+    };
     foreach ($fichajes as $f) {
         if ($f['anulado']) continue;
         $t = strtotime($f['momento_utc'] . ' UTC');
         switch ($f['tipo']) {
             case 'entrada':
                 if ($j) $out[] = $j;
-                $j = ['entrada' => $f['momento_utc'], 'salida' => null, 'trabajado' => 0, 'pausa' => 0];
+                $j = ['entrada' => $f['momento_utc'], 'salida' => null, 'trabajado' => 0, 'pausa' => 0, 'tramos' => []];
                 $desde = $t;
                 $pausa = null;
                 break;
             case 'pausa_inicio':
-                if ($j && $desde) [$j['trabajado'], $desde, $pausa] = [$j['trabajado'] + $t - $desde, null, $t];
+                if ($j && $desde) {
+                    $j['trabajado'] += $t - $desde;
+                    $j['tramos'][] = [$desde, $t];
+                    [$desde, $pausa, $pagada] = [null, $t, !empty($f['retribuida'])];
+                }
                 break;
             case 'pausa_fin':
-                if ($j && $pausa) [$j['pausa'], $pausa, $desde] = [$j['pausa'] + $t - $pausa, null, $t];
+                if ($j && $pausa) {
+                    $cerrar_pausa($t);
+                    $desde = $t;
+                }
                 break;
             case 'salida':
                 if (!$j) break;
-                if ($desde) $j['trabajado'] += $t - $desde;
-                if ($pausa) $j['pausa'] += $t - $pausa;
+                if ($desde) {
+                    $j['trabajado'] += $t - $desde;
+                    $j['tramos'][] = [$desde, $t];
+                }
+                if ($pausa) $cerrar_pausa($t);
                 $j['salida'] = $f['momento_utc'];
                 $out[] = $j;
                 $j = null;
                 break;
         }
     }
-    if ($j) $out[] = $j;
+    // Jornada abierta: en_curso = desde cuándo se está trabajando ahora (null si está en pausa).
+    if ($j) $out[] = $j + ['en_curso' => $desde];
     return $out;
 }
 

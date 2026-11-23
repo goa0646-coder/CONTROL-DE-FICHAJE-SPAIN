@@ -1,6 +1,6 @@
 <?php
-// Cron diario de Hostinger: php /home/USUARIO/.../public_html/app/cron.php
+// Cron de Hostinger cada 15 minutos: php /home/USUARIO/.../public_html/app/cron.php
 if (PHP_SAPI !== 'cli') exit;
 require __DIR__ . '/inicio.php';
-$n = purgar_gps(db());
-auditar(db(), null, 'purga_gps', "coordenadas borradas: $n");
+revisar_avisos(db());
+if ($n = purgar_gps(db())) auditar(db(), null, 'purga_gps', "coordenadas borradas: $n");

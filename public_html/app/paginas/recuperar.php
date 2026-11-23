@@ -15,6 +15,7 @@ if ($token !== '') {
         }
         db()->prepare('UPDATE usuarios SET password_hash = ?, reset_hash = NULL, reset_expira_utc = NULL WHERE id = ?')
             ->execute([password_hash($_POST['nueva'], PASSWORD_DEFAULT), $u['id']]);
+        cerrar_dispositivos(db(), (int)$u['id']);
         auditar(db(), (int)$u['id'], 'recuperar_clave');
         aviso('Contraseña cambiada. Ya puedes entrar.');
         redirigir('login');

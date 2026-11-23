@@ -30,16 +30,31 @@ Otras formas de crear las tablas (elige una):
 
 Si sale un **AVISO de trigger**, tu plan no permite triggers. El sistema sigue funcionando y la página **Auditoría** detecta cualquier cambio en los fichajes. Avísame si pasa.
 
-## 5. Tarea diaria (borra las coordenadas GPS de hace más de 12 meses)
-hPanel → **Avanzado → Cron Jobs** → una vez al día:
+## 5. Tarea programada cada 15 minutos
+Envía los avisos (no has fichado, retrasos, jornada sin cerrar) y borra las coordenadas GPS de hace más de 12 meses.
+hPanel → **Avanzado → Cron Jobs** → «Cada 15 minutos» (`*/15 * * * *`):
 `/usr/bin/php /home/TU_USUARIO/domains/miempresa.com/public_html/app/cron.php`
-(Ajusta la ruta a la de tu subdominio. El administrador de archivos te la muestra.)
+(Ajusta la ruta a la de tu subdominio. El administrador de archivos te la muestra. Si ya tenías el cron diario, cámbialo a cada 15 minutos.)
+
+Los emails salen con `correo_desde` de la configuración: debe ser un buzón de tu dominio creado en hPanel → Emails.
+
+Justificantes y documentos se guardan en la carpeta `inda-archivos`, **junto a** `public_html` (no dentro). Se crea sola. Inclúyela en tus copias de seguridad.
 
 ## 6. Primeros pasos
-1. **Empresa**: revisa el nombre y el CIF. Crea los centros. Para el GPS pon latitud y longitud (en Google Maps: clic derecho sobre el centro).
-2. **Usuarios**: da de alta a las personas. Para el quiosco, ponles nº de empleado y PIN.
-3. **Quioscos**: entra como admin **desde la tablet de la entrada** y pulsa «Activar quiosco aquí».
-4. En el móvil: abre la web → menú del navegador → «Añadir a pantalla de inicio».
+1. **Empresa**: revisa el nombre, el CIF y las horas del convenio. Crea los centros y los departamentos. Para el GPS pon latitud y longitud (en Google Maps: clic derecho sobre el centro).
+2. **Horarios**: crea los horarios (y los turnos, que son horarios con otro nombre), los festivos del año, los motivos de pausa y los tipos de ausencia.
+3. **Usuarios**: da de alta a las personas con su centro, departamento, horario y responsable. Para el quiosco, ponles nº de empleado y PIN.
+4. **Quioscos**: entra como admin **desde la tablet de la entrada** y pulsa «Activar quiosco aquí». La tablet muestra también un QR que cambia cada 30 s para fichar con el móvil.
+5. **Cada persona en su móvil** (sin QR ni tablet): abre `https://inda.miempresa.com`, entra una vez con «Mantener la sesión abierta» marcado y pulsa **Instalar INDA** (Android) o Compartir → «Añadir a pantalla de inicio» (iPhone). Desde entonces abre INDA como una app y ficha con un toque, sin contraseña, durante un año. Si pierde el móvil: Perfil → Dispositivos → Cerrar sesión (o cambiar la contraseña). Dar de baja a la persona cierra todas sus sesiones.
+6. En **Perfil → Activar avisos** cada persona recibe los avisos en el móvil.
+
+## 7. Opcional
+- **Cartel QR fijo** por centro: Empresa → Centros → «Cartel QR» → Imprimir.
+- **Extensión del navegador** (Chrome/Edge): descomprime `inda-extension.zip`, abre `chrome://extensions`, activa «Modo desarrollador» → «Cargar descomprimida». Cada persona crea su código en Perfil.
+- **Slack**: crea una app en api.slack.com → Slash command `/inda` con Request URL `https://inda.miempresa.com/?p=chat&canal=slack`. Copia el *Signing Secret* en `slack_secreto` de `config-inda.php`. Cada persona escribe `/inda vincular CÓDIGO` una vez.
+- **Microsoft Teams**: en el equipo → Aplicaciones → Webhook saliente, URL `https://inda.miempresa.com/?p=chat&canal=teams`. Copia el token en `teams_secreto`. Se usa escribiendo `@INDA entrar`.
+- **Entrar con Google o Microsoft**: registra la app en Google Cloud o Entra ID con la URL de retorno `https://inda.miempresa.com/?p=sso` y rellena `sso` en `config-inda.php`. Solo entran emails que ya existan en INDA.
+- **Gestoría**: el admin crea en Perfil un código «Exportación (lectura)». API: `?p=api&accion=informe|fichajes|ausencias&desde=AAAA-MM-DD&hasta=AAAA-MM-DD` con la cabecera `Authorization: Bearer CÓDIGO`. También vale el Excel (CSV) de Informes.
 
 ## Actualizar a una versión nueva
 1. Sube el ZIP nuevo y sobrescribe los archivos (tu `config-inda.php` / `config-fichaje.php` no se toca).

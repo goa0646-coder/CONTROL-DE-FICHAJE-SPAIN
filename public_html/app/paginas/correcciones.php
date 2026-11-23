@@ -6,6 +6,7 @@ if (es_post()) {
         $d['momento_utc'] = !empty($d['momento']) ? a_utc($d['momento']) : null;
         $id = pedir_correccion(db(), $u, $d, (int)$u['id']);
         auditar(db(), (int)$u['id'], 'correccion_pedida', "correccion=$id");
+        avisar_aprobadores(db(), $u, "correccion:$id", nombre($u) . ' pide una corrección de fichaje: ' . trim($_POST['motivo'] ?? ''));
         aviso('Solicitud enviada. Tu responsable la revisará.');
     } catch (DomainException $e) {
         aviso($e->getMessage(), 'error');

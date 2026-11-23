@@ -1,6 +1,6 @@
-# Diseño — INDA (control horario) (fase 1 en detalle, fases 2–4 en esquema)
+# Diseño — INDA (control horario)
 
-Estado: **aprobado**. Fase 1 implementada.
+Estado: **aprobado**. Fases 1–7 implementadas.
 
 ## 1. Contexto y límites
 
@@ -89,11 +89,20 @@ Reglas de cálculo:
 - Fichaje anulado = existe una corrección aprobada que lo anula. Se sigue mostrando, tachado.
 - Jornada sin salida = "abierta"; el empleado debe pedir corrección.
 
-## 6. Fases 2–4 (solo tablas previstas, se detallan al llegar)
+## 6. Fases 2–7 (implementadas)
 
-- **Fase 2 – Horarios y turnos**: `horarios` (plantillas semanales), `turnos` (fechas concretas), `asignaciones_horario`, `avisos`. Cron cada 15 min detecta retrasos, olvidos de salida y horas extra; aviso por email y en la app.
-- **Fase 3 – Ausencias**: `tipos_ausencia`, `ausencias` (solicitud + aprobación), `saldos_vacaciones` (por año), `festivos` (por centro), vista de calendario de equipo.
-- **Fase 4 – Informes**: `firmas_mensuales` (resumen mensual que el empleado firma con su contraseña: hash del contenido + fecha). PDF = página HTML imprimible ("Guardar como PDF" del navegador); Excel = CSV/XLSX simple. Sin librerías pesadas.
+**Cálculo de horas** (`app/horarios.php`): cada día tiene un horario teórico. Prioridad: `planificacion` (cambio o turno de ese día; NULL = libre) > `festivos` (empresa o centro) > `usuarios.horario_id`. Las ausencias aprobadas ponen el teórico a 0 (por días) o restan sus minutos (por horas). Las horas trabajadas se asignan al día de la entrada. Extra = trabajado − teórico (si es positivo). Nocturnas = 22:00–6:00 hora de Madrid. Bolsa de horas = suma de diferencias de días ya pasados desde el alta + `ajustes_saldo`. Las pausas con motivo retribuido cuentan como trabajo.
+
+- **Fase 2 – Día a día** (`003`): `motivos_pausa` (+ `fichajes.motivo_id`, incluido en el hash solo si existe), `departamentos`, `horarios` + `horario_dias`, `planificacion`, `festivos`, `ajustes_saldo`, `avisos`; centros con `fuera_zona` (aceptar/rechazar) e `ips` permitidas; `empresa.horas_anuales`. Cron cada 15 min: falta la entrada (a la persona), retraso (al responsable), jornada sin cerrar.
+- **Fase 3 – Ausencias** (`004`): `tipos_ausencia` (por días u horas, retribuida, días/año, pide justificante, color), `ausencias` (pendiente/aprobada/rechazada/cancelada), `saldos_ausencia` (asignado por persona y año, con arrastre). Días = laborables según el horario. Calendario de equipo; al aprobar se ven los solapes. Los compañeros ven «ausente», no el tipo (puede ser dato de salud).
+- **Fase 4 – Informes y firma** (`005`): `firmas_mensuales` (solo INSERT, con triggers): la persona firma con su contraseña el hash del contenido del mes; si después hay una corrección, la firma deja de valer y se puede firmar de nuevo. Informes por periodo, departamento y centro; CSV para Excel/gestoría; PDF = imprimir desde el navegador.
+- **Fase 5 – Turnos**: los turnos son horarios. Cuadrante semanal editable y asignación por fechas con secuencia rotativa (opcional escalonada). Cada cambio avisa a la persona.
+- **Fase 6 – Portal** (`006`): `documentos` + `documentos_firmas` (hash del archivo + contraseña), `comunicados` + `comunicados_leidos`, `suscripciones_push` y `ajustes` (claves VAPID). Push sin contenido: el service worker pide a INDA el último aviso.
+- **Fase 7 – Extras** (`007`): origen `qr`/`api`/`chat`; `tokens_api` (personal para extensión y chat; lectura para gestoría); `permisos_rol` (informes, planificar, documentos, comunicados). QR del quiosco cambia cada 30 s (HMAC del token del quiosco); cartel fijo por centro. Slack (firma v0) y Teams (HMAC). Entrar con Google o Microsoft (OIDC; Microsoft exige el ID del directorio).
+
+**Fichar desde el móvil como una app** (`008`): PWA instalable; al entrar con «mantener la sesión» se guarda en `dispositivos` el hash de un token y el móvil recibe una cookie `inda_dispositivo` (HttpOnly, 1 año, se renueva con el uso). Se cierra al salir, desde Perfil, al cambiar la contraseña o al dar de baja. Inspección no puede mantener sesión. Activar un quiosco borra la sesión guardada del admin en esa tablet.
+
+Archivos (justificantes, documentos): fuera de `public_html` (`inda-archivos`), nombre aleatorio, se sirven por `?p=archivo` comprobando permiso.
 
 ## 7. Técnica
 
@@ -113,12 +122,14 @@ tests/                  → PHPUnit (no va en el ZIP)
 - Pruebas: PHPUnit contra MySQL real (local y GitHub Actions). Mínimo: secuencia de fichajes, inmutabilidad, correcciones, permisos por rol, cálculo de horas.
 - Entrega: ZIP + `INSTALAR.md` (crear BD, subir, poner `config.php`, ejecutar migraciones, crear admin).
 
-## 8. Fuera de la fase 1 (a propósito)
+## 8. Fuera de alcance (a propósito)
 
-- Fichar sin conexión (la PWA necesita internet para fichar). Se puede añadir más tarde.
-- Foto o reconocimiento facial en quiosco.
-- Varias empresas en la misma instalación.
-- App nativa.
+- Teletrabajo marcado (descartado por el dueño).
+- Fichar sin conexión (la hora la pone el servidor).
+- Foto o reconocimiento facial en quiosco, y terminales biométricos (requieren hardware y datos biométricos: RGPD art. 9).
+- WhatsApp (requiere cuenta de pago de Meta Business).
+- Varios idiomas (la plantilla trabaja en español).
+- Varias empresas en la misma instalación. App nativa (la PWA cubre móvil).
 
 ## 9. Decisiones (aprobadas)
 

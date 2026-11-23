@@ -9,6 +9,12 @@ if (!$q) {
     return;
 }
 
+// Código QR que cambia cada 30 s: la gente lo escanea con su móvil (con sesión iniciada) para fichar aquí.
+if (isset($_GET['codigo'])) {
+    header('Content-Type: application/json');
+    exit(json_encode(['url' => rtrim(config()['url'] ?? '', '/') . '/?p=fichar&q=' . codigo_quiosco($q)]));
+}
+
 // Tras identificarse, la persona tiene 30 s para pulsar el botón.
 $uid = ($_SESSION['quiosco_hasta'] ?? 0) > time() ? ($_SESSION['quiosco_uid'] ?? null) : null;
 
@@ -23,9 +29,10 @@ if (es_post()) {
         }
     } elseif ($uid && isset($_POST['tipo'])) {
         try {
-            registrar_fichaje(db(), usuario(db(), (int)$uid), $_POST['tipo'], 'quiosco', ['quiosco' => $q, 'ip' => ip()]);
-            auditar(db(), (int)$uid, 'fichaje_quiosco', "quiosco={$q['id']} tipo={$_POST['tipo']}");
-            aviso('Fichaje registrado: ' . TIPOS[$_POST['tipo']] . ' a las ' . local(ahora(), 'H:i') . '.');
+            [$tipo, $motivo] = explode('|', $_POST['tipo'] . '|');
+            registrar_fichaje(db(), usuario(db(), (int)$uid), $tipo, 'quiosco', ['quiosco' => $q, 'ip' => ip(), 'motivo_id' => $motivo]);
+            auditar(db(), (int)$uid, 'fichaje_quiosco', "quiosco={$q['id']} tipo=$tipo");
+            aviso('Fichaje registrado: ' . TIPOS[$tipo] . ' a las ' . local(ahora(), 'H:i') . '.');
         } catch (DomainException $e) {
             aviso($e->getMessage(), 'error');
         }
@@ -46,9 +53,7 @@ if ($u):
   <p class="reloj" data-reloj><?= local(ahora(), 'H:i') ?></p>
   <h2>Hola, <?= e($u['nombre']) ?></h2>
   <p class="estado <?= $estado ?>"><?= ['fuera' => 'Fuera', 'dentro' => 'Trabajando', 'pausa' => 'En pausa'][$estado] ?></p>
-  <?php foreach (PERMITIDOS[$estado] as $t): ?>
-    <button class="grande <?= $t ?>" name="tipo" value="<?= $t ?>"><?= ['entrada' => 'Entrar', 'pausa_inicio' => 'Empezar pausa', 'pausa_fin' => 'Volver de la pausa', 'salida' => 'Salir'][$t] ?></button>
-  <?php endforeach ?>
+  <?= botones_fichaje($estado) ?>
   <button name="cancelar" value="1" class="secundario">No soy yo</button>
 </form>
 <?php else: ?>
@@ -60,5 +65,10 @@ if ($u):
   <label>PIN <input type="password" name="pin" inputmode="numeric" autocomplete="off" required></label>
   <button class="grande">Continuar</button>
 </form>
+<div class="tarjeta centro">
+  <p>O escanea con tu móvil:</p>
+  <div class="qr" data-qr-quiosco></div>
+</div>
+<script src="assets/qrcode.js"></script>
 <?php endif;
 pie();

@@ -14,7 +14,7 @@ if (es_post() && !$hayAdmin) {
         aviso('Revisa los datos (contraseña mínimo 8).', 'error');
         redirigir('instalar', ['clave' => $_GET['clave']]);
     }
-    db()->prepare('INSERT INTO empresa VALUES (1, ?, ?)')->execute([trim($_POST['empresa']), trim($_POST['cif'])]);
+    db()->prepare('INSERT INTO empresa (id, nombre, cif) VALUES (1, ?, ?)')->execute([trim($_POST['empresa']), trim($_POST['cif'])]);
     db()->prepare("INSERT INTO usuarios (nombre, email, password_hash, rol, alta_utc) VALUES (?, ?, ?, 'admin', ?)")
         ->execute([trim($_POST['nombre']), mb_strtolower(trim($_POST['email'])), password_hash($_POST['pass'], PASSWORD_DEFAULT), ahora()]);
     auditar(db(), (int)db()->lastInsertId(), 'instalacion');
