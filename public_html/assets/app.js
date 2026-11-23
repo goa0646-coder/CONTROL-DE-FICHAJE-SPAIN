@@ -121,3 +121,29 @@ for (const caja of document.querySelectorAll('[data-ia-dni]')) {
 
 // Botones con confirmación (p. ej. dar de baja).
 for (const b of document.querySelectorAll('[data-confirmar]')) b.addEventListener('click', ev => { if (b.dataset.confirmar && !confirm(b.dataset.confirmar)) ev.preventDefault(); });
+
+// Perfil: al elegir la foto se sube sola.
+for (const i of document.querySelectorAll('[data-subir-foto]')) i.addEventListener('change', () => { if (i.files.length) i.form.submit(); });
+
+// Nuevo anuncio: buscar personas y contar destinatarios (grupos + personas sueltas, sin repetir).
+for (const f of document.querySelectorAll('[data-anuncio]')) {
+  const personas = [...f.querySelectorAll('[data-persona]')], total = f.querySelector('[data-total]');
+  const contar = () => {
+    const g = [...f.querySelectorAll('[data-grupo]:checked')].map(c => c.value.split(':'));
+    let n = 0;
+    for (const p of personas) {
+      const pt = p.dataset.puestos.split(',');
+      const en = g.some(([t, v]) => t === 'todos' || (t === 'centro' && p.dataset.centro === v) || (t === 'dep' && p.dataset.dep === v) || (t === 'puesto' && pt.includes(v)));
+      p.classList.toggle('incluida', en);
+      if (en || p.querySelector('input').checked) n++;
+    }
+    total.textContent = n;
+  };
+  f.addEventListener('change', contar);
+  f.querySelector('[data-buscar-persona]').addEventListener('input', ev => {
+    const q = ev.target.value.trim().toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+    for (const p of personas) p.hidden = q && !p.dataset.persona.normalize('NFD').replace(/\p{M}/gu, '').includes(q);
+  });
+  f.addEventListener('submit', ev => { if (total.textContent === '0') { ev.preventDefault(); alert('Elige al menos un destinatario.'); } });
+  contar();
+}

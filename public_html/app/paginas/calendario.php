@@ -39,7 +39,7 @@ cabecera('Calendario', $yo);
   <?php foreach ($personas as $p):
       $cal = calendario_teorico(db(), $p, $desde, $hasta);
       $detalle = $jefe || $p['id'] == $yo['id']; ?>
-  <tr><td class="persona"><?= e(nombre($p)) ?></td>
+  <tr><td class="persona"><span class="con-avatar"><?= avatar($p, 'mini') ?> <?= e(nombre($p)) ?></span></td>
     <?php foreach ($cal as $f => $c):
         $clase = ($f === $hoy ? 'hoy ' : '') . (!$c['laborable'] || $c['festivo'] ? 'libre' : '');
         if ($c['ausencia']) {

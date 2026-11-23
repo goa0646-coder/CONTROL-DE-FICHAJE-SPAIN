@@ -46,13 +46,6 @@ function emparejar_nomina(array $d, array $personas): ?array
     return count($hay) === 1 ? ['uid' => $hay[0], 'por' => 'nombre'] : null; // dos posibles = que elija el admin
 }
 
-function comunicados_para(PDO $db, array $u): array
-{
-    return consulta($db, 'SELECT c.*, a.nombre AS autor, l.leido_utc FROM comunicados c JOIN usuarios a ON a.id = c.autor_id
-        LEFT JOIN comunicados_leidos l ON l.comunicado_id = c.id AND l.usuario_id = ?
-        WHERE c.centro_id IS NULL OR c.centro_id = ? ORDER BY c.id DESC LIMIT 50', [$u['id'], $u['centro_id']])->fetchAll();
-}
-
 // Destinatarios activos de un comunicado (todo el centro o toda la plantilla).
 function destinatarios(PDO $db, ?int $centro): array
 {

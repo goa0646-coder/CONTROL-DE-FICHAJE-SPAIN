@@ -53,8 +53,7 @@ $trabajado = 0;
 foreach (jornadas(fichajes_de(db(), (int)$u['id'], a_utc("$hoy -1 day"))) as $j) {
     if (local($j['entrada'], 'Y-m-d') === $hoy || $j['salida'] === null) $trabajado += $j['trabajado'] + (!empty($j['en_curso']) ? time() - $j['en_curso'] : 0);
 }
-$sin_leer = consulta(db(), 'SELECT c.id, c.titulo FROM comunicados c WHERE (c.centro_id IS NULL OR c.centro_id = ?)
-    AND NOT EXISTS (SELECT 1 FROM comunicados_leidos l WHERE l.comunicado_id = c.id AND l.usuario_id = ?) ORDER BY c.id DESC LIMIT 3', [$u['centro_id'], $u['id']])->fetchAll();
+$sin_leer = array_slice(anuncios_pendientes(db(), $u), 0, 3);
 ?>
 <div class="tarjeta centro">
   <p class="reloj" data-reloj><?= local(ahora(), 'H:i') ?></p>
@@ -75,6 +74,6 @@ $sin_leer = consulta(db(), 'SELECT c.id, c.titulo FROM comunicados c WHERE (c.ce
   <p class="nota" data-ios hidden>En iPhone: pulsa <strong>Compartir</strong> y después <strong>«Añadir a pantalla de inicio»</strong>.</p>
 </div>
 <?php foreach ($sin_leer as $c): ?>
-<p class="aviso ok"><a href="?p=comunicados#c<?= e($c['id']) ?>">📣 <?= e($c['titulo']) ?></a></p>
+<p class="aviso ok"><a href="?p=comunicados&id=<?= e($c['id']) ?>">Anuncio pendiente de leer: <?= e($c['titulo']) ?></a></p>
 <?php endforeach;
 pie();
