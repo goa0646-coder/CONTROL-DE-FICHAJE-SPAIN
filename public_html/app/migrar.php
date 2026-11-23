@@ -25,6 +25,26 @@ function migrar(PDO $db): array
     return $log ?: ['Nada pendiente'];
 }
 
+// Al subir una versión nueva por FTP, la primera visita aplica sola las migraciones pendientes
+// (con un bloqueo para que dos visitas a la vez no lo hagan dos veces).
+function migrar_si_hace_falta(PDO $db): bool
+{
+    $archivos = count(glob(__DIR__ . '/migraciones/*.sql'));
+    try {
+        if ((int)$db->query('SELECT COUNT(*) FROM migraciones')->fetchColumn() >= $archivos) return false;
+    } catch (PDOException) {
+        // Sin tabla de migraciones: base de datos vacía, la prepara el asistente o ?p=instalar.
+        return false;
+    }
+    if (!$db->query("SELECT GET_LOCK('inda_migrar', 30)")->fetchColumn()) return false;
+    try {
+        migrar($db);
+    } finally {
+        $db->query("SELECT RELEASE_LOCK('inda_migrar')");
+    }
+    return true;
+}
+
 if (PHP_SAPI === 'cli' && realpath($_SERVER['SCRIPT_FILENAME'] ?? '') === __FILE__) {
     require __DIR__ . '/inicio.php';
     echo implode(PHP_EOL, migrar(db())), PHP_EOL;

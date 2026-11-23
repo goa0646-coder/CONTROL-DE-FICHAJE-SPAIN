@@ -7,6 +7,8 @@ header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: same-origin');
 iniciar_sesion();
 config(); // Sin configuración todavía: muestra el asistente de instalación.
+require_once __DIR__ . '/app/migrar.php';
+migrar_si_hace_falta(db());
 
 $p = $_GET['p'] ?? '';
 if (!preg_match('/^[a-z]+$/', $p) || !is_file(__DIR__ . "/app/paginas/$p.php")) {
