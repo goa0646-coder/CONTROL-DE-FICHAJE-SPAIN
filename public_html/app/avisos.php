@@ -1,14 +1,6 @@
 <?php
 // Avisos dentro de INDA + email. clave evita repetir el mismo aviso.
 
-function enviar_correo(string $para, string $asunto, string $texto): bool
-{
-    $c = config();
-    if (empty($c['correo_desde']) || $para === '') return false;
-    return @mail($para, '=?UTF-8?B?' . base64_encode($asunto) . '?=', $texto,
-        "From: INDA <{$c['correo_desde']}>\r\nContent-Type: text/plain; charset=utf-8");
-}
-
 function notificar(PDO $db, int $uid, string $clave, string $texto, string $enlace = ''): bool
 {
     $s = consulta($db, 'INSERT IGNORE INTO avisos (usuario_id, clave, texto, enlace, creado_utc) VALUES (?, ?, ?, ?, ?)',
@@ -33,6 +25,7 @@ function aprobadores(PDO $db, array $u): array
 function avisar_aprobadores(PDO $db, array $u, string $clave, string $texto, string $enlace = 'equipo'): void
 {
     foreach (aprobadores($db, $u) as $id) notificar($db, $id, $clave, $texto, $enlace);
+    avisar_administracion('INDA: ' . mb_strimwidth($texto, 0, 70, '…'), $texto . "\n\n" . rtrim(config()['url'] ?? '', '/') . "/?p=$enlace");
 }
 
 function avisos_sin_leer(PDO $db, int $uid): int
@@ -66,6 +59,7 @@ function revisar_avisos(PDO $db, ?string $ahora = null): int
     $hoy = local($ahora, 'Y-m-d');
     $hora = local($ahora, 'H:i:s');
     $n = 0;
+    $incidencias = [];
     $suma = fn(string $h, int $min) => date('H:i:s', strtotime("2000-01-01 $h") + 60 * $min);
     foreach ($db->query("SELECT * FROM usuarios WHERE activo = 1 AND rol IN ('empleado','responsable','admin')")->fetchAll() as $u) {
         $c = calendario_teorico($db, $u, $hoy, $hoy)[$hoy];
@@ -75,11 +69,19 @@ function revisar_avisos(PDO $db, ?string $ahora = null): int
             $primera = consulta($db, "SELECT MIN(momento_utc) FROM fichajes f WHERE usuario_id = ? AND tipo = 'entrada' AND momento_utc >= ? AND momento_utc <= ? AND " . NO_ANULADO,
                 [$u['id'], a_utc("$hoy 00:00:00"), $ahora])->fetchColumn();
             if (!$primera && $estado === 'fuera' && $hora > $limite) {
-                $n += notificar($db, (int)$u['id'], "sin_entrada:$hoy", 'No has fichado la entrada de hoy (tu horario empieza a las ' . substr($c['entrada'], 0, 5) . ').', 'fichar');
+                if (notificar($db, (int)$u['id'], "sin_entrada:$hoy", 'No has fichado la entrada de hoy (tu horario empieza a las ' . substr($c['entrada'], 0, 5) . ').', 'fichar')) {
+                    $n++;
+                    $incidencias[] = nombre($u) . ': sin fichar la entrada (horario ' . substr($c['entrada'], 0, 5) . ').';
+                }
             }
-            if ($primera && local($primera, 'H:i:s') > $limite && $u['responsable_id']) {
-                $n += notificar($db, (int)$u['responsable_id'], "retraso:{$u['id']}:$hoy", nombre($u) . ' fichó la entrada a las ' . local($primera, 'H:i')
-                    . ' (horario: ' . substr($c['entrada'], 0, 5) . ').', "historial&u={$u['id']}");
+            if ($primera && local($primera, 'H:i:s') > $limite) {
+                $txt = nombre($u) . ' fichó la entrada a las ' . local($primera, 'H:i') . ' (horario: ' . substr($c['entrada'], 0, 5) . ').';
+                $avisados = 0;
+                foreach (aprobadores($db, $u) as $jefe) $avisados += notificar($db, $jefe, "retraso:{$u['id']}:$hoy", $txt, "historial&u={$u['id']}");
+                if ($avisados) {
+                    $n += $avisados;
+                    $incidencias[] = $txt;
+                }
             }
         }
         if ($estado !== 'fuera') {
@@ -87,10 +89,18 @@ function revisar_avisos(PDO $db, ?string $ahora = null): int
             $abierta = $e ? strtotime("$ahora UTC") - strtotime("{$e['momento_utc']} UTC") : 0;
             $tarde = $c['salida'] && $c['entrada'] && $c['salida'] > $c['entrada'] && $hora > $suma($c['salida'], 60) && local($e['momento_utc'] ?? '', 'Y-m-d') === $hoy;
             if ($e && ($abierta > 12 * 3600 || $tarde)) {
-                $n += notificar($db, (int)$u['id'], "sin_salida:{$e['id']}", 'Tu jornada sigue abierta desde las ' . local($e['momento_utc'], 'H:i')
-                    . ' del ' . local($e['momento_utc'], 'd/m') . '. ¿Olvidaste fichar la salida?', 'fichar');
+                if (notificar($db, (int)$u['id'], "sin_salida:{$e['id']}", 'Tu jornada sigue abierta desde las ' . local($e['momento_utc'], 'H:i')
+                    . ' del ' . local($e['momento_utc'], 'd/m') . '. ¿Olvidaste fichar la salida?', 'fichar')) {
+                    $n++;
+                    $incidencias[] = nombre($u) . ': jornada abierta desde las ' . local($e['momento_utc'], 'H:i') . ' del ' . local($e['momento_utc'], 'd/m') . ' (no ha fichado la salida).';
+                }
             }
         }
+    }
+    // Un solo correo a administración con lo nuevo de esta revisión.
+    if ($incidencias) {
+        avisar_administracion('INDA: ' . count($incidencias) . ' incidencias de fichaje · ' . local($ahora, 'd/m H:i'),
+            'Incidencias detectadas a las ' . local($ahora, 'H:i') . ":\n\n- " . implode("\n- ", $incidencias) . "\n\n" . rtrim(config()['url'] ?? '', '/') . '/?p=equipo');
     }
     return $n;
 }

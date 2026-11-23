@@ -21,6 +21,32 @@ if (es_post()) {
         consulta(db(), 'REPLACE INTO ajustes VALUES (?, ?)', ['convenio', json_encode($cv, JSON_UNESCAPED_UNICODE)]);
         unset($_SESSION['convenio_leido']);
         auditar(db(), (int)$yo['id'], 'convenio_aplicado', $cv['nombre']);
+    } elseif ($que === 'correo' || $que === 'correo_prueba') {
+        $ant = json_decode(ajuste(db(), 'correo') ?? '[]', true) ?: [];
+        $desde = trim($_POST['desde'] ?? '');
+        $admin = trim($_POST['admin'] ?? '');
+        if ($desde !== '' && !filter_var($desde, FILTER_VALIDATE_EMAIL)) {
+            aviso('El email de envío no es válido.', 'error');
+            redirigir('admin');
+        }
+        // La contraseña no se vuelve a mostrar: vacío = mantener la guardada.
+        $clave = ($_POST['smtp_clave'] ?? '') !== '' ? $_POST['smtp_clave'] : ($ant['smtp']['clave'] ?? '');
+        consulta(db(), 'REPLACE INTO ajustes VALUES (?, ?)', ['correo', json_encode(['desde' => $desde, 'admin' => $admin, 'smtp' => [
+            'host' => trim($_POST['smtp_host'] ?? ''), 'puerto' => (int)($_POST['smtp_puerto'] ?? 465), 'usuario' => trim($_POST['smtp_usuario'] ?? '') ?: $desde, 'clave' => $clave]])]);
+        auditar(db(), (int)$yo['id'], 'correo_configurado');
+        if ($que === 'correo_prueba') {
+            $c = correo_cfg();
+            $para = preg_split('/[\s,;]+/', $c['admin'], -1, PREG_SPLIT_NO_EMPTY)[0] ?? $yo['email'];
+            try {
+                if ($c['desde'] === '') throw new RuntimeException('Falta el email de envío.');
+                if (!empty($c['smtp']['host'])) smtp_enviar($c['smtp'], $c['desde'], $para, 'INDA: correo de prueba', "Si lees esto, INDA ya puede enviar avisos por correo.\n\n" . rtrim(config()['url'] ?? '', '/'));
+                elseif (!enviar_correo($para, 'INDA: correo de prueba', 'Si lees esto, INDA ya puede enviar avisos por correo.')) throw new RuntimeException('El servidor no ha aceptado el correo.');
+                aviso("Correo de prueba enviado a $para. Mira también en la carpeta de spam.");
+            } catch (RuntimeException $e) {
+                aviso('No se pudo enviar: ' . $e->getMessage(), 'error');
+            }
+            redirigir('admin');
+        }
     } elseif ($que === 'plantilla_galicia') {
         aplicar_plantilla(db(), PLANTILLA_GALICIA_RESIDENCIAS);
         auditar(db(), (int)$yo['id'], 'plantilla_convenio', 'VI Convenio residencias Galicia');
@@ -113,6 +139,23 @@ cabecera('Empresa y centros', $yo);
   <?php endif ?>
 </div>
 <?php endif ?>
+
+<?php $cc = json_decode(ajuste(db(), 'correo') ?? '[]', true) ?: []; $cf = correo_cfg(); ?>
+<form method="post" class="tarjeta" id="correo">
+  <?= csrf_campo() ?>
+  <h2>Correo</h2>
+  <p class="nota">INDA envía los avisos (no has fichado, solicitudes, turnos ofrecidos, códigos) desde un buzón de vuestro dominio. Créalo en hPanel → Emails (por ejemplo <em>no-responder@vuestrodominio.es</em>) y escribe aquí sus datos.</p>
+  <label>Email de envío <input type="email" name="desde" value="<?= e($cc['desde'] ?? $cf['desde']) ?>" placeholder="no-responder@vuestrodominio.es"></label>
+  <div class="filtros">
+    <label>Servidor SMTP <input name="smtp_host" value="<?= e($cc['smtp']['host'] ?? 'smtp.hostinger.com') ?>"></label>
+    <label>Puerto <select name="smtp_puerto"><?= opciones([465 => '465 (SSL, recomendado)', 587 => '587 (STARTTLS)'], $cc['smtp']['puerto'] ?? 465) ?></select></label>
+  </div>
+  <label>Usuario (normalmente, el mismo email) <input name="smtp_usuario" value="<?= e($cc['smtp']['usuario'] ?? '') ?>" autocomplete="off"></label>
+  <label>Contraseña del buzón <input type="password" name="smtp_clave" autocomplete="new-password" placeholder="<?= !empty($cc['smtp']['clave']) ? 'Guardada · déjalo vacío para no cambiarla' : '' ?>"></label>
+  <label>Correo de administración (recibe las incidencias de fichaje y las solicitudes; varios separados por comas) <input name="admin" value="<?= e($cc['admin'] ?? '') ?>" placeholder="rrhh@vuestrodominio.es"></label>
+  <button name="que" value="correo">Guardar</button>
+  <button name="que" value="correo_prueba" class="secundario">Guardar y enviar correo de prueba</button>
+</form>
 
 <?php $r = reglas(db()); ?>
 <form method="post" class="tarjeta">
