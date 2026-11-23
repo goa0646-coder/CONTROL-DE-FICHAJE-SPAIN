@@ -1,6 +1,7 @@
 <?php
 // Para hostings sin SSH: ?p=instalar&clave=<clave_instalacion de config-inda.php>
 require_once __DIR__ . '/../migrar.php';
+require_once __DIR__ . '/../asistente.php';
 $clave = config()['clave_instalacion'] ?? '';
 if (strlen($clave) < 16 || !hash_equals($clave, (string)($_GET['clave'] ?? ''))) {
     http_response_code(403);
@@ -24,6 +25,11 @@ if (es_post() && !$hayAdmin) {
 cabecera('Instalación');
 ?>
 <pre><?= e(implode("\n", $log)) ?></pre>
+<table>
+  <?php foreach (requisitos() as $n => [$ok, $det, $oblig]): ?>
+  <tr><td><?= e($n) ?></td><td class="<?= $ok ? '' : 'error' ?>"><?= $ok ? '✔' : ($oblig ? '✘ obligatorio' : '⚠ ' . e($det)) ?></td></tr>
+  <?php endforeach ?>
+</table>
 <?php if (!$hayAdmin): ?>
 <form method="post" class="tarjeta">
   <?= csrf_campo() ?>

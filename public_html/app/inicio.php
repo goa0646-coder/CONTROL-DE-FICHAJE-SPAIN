@@ -29,6 +29,11 @@ function config(): array
             if (is_file($f)) return $c = require $f;
         }
     }
+    // Primera vez en el servidor: asistente para crear la configuración.
+    if (PHP_SAPI !== 'cli' && function_exists('cabecera')) {
+        require_once __DIR__ . '/asistente.php';
+        asistente(dirname(__DIR__, 2) . '/config-inda.php');
+    }
     http_response_code(500);
     exit('Falta config-inda.php (ver INSTALAR.md)');
 }
