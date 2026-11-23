@@ -174,13 +174,8 @@ $hz = huecos(db(), $personas, local(ahora(), 'Y-m-d'), date('Y-m-d', strtotime(l
   <?php if (count($hz) > 40): ?><p class="nota">… y <?= count($hz) - 40 ?> más. Genera el cuadrante o revisa las necesidades.</p><?php endif ?>
 </div>
 <?php endif ?>
-<?php // Turnos que se ofrecen a cada persona: los de su departamento y los generales, con su letra delante.
-$hinfo = db()->query('SELECT id, nombre, abreviatura, departamento_id FROM horarios WHERE activo = 1 ORDER BY nombre')->fetchAll(PDO::FETCH_UNIQUE);
-$turnos_de = function (array $p) use ($hinfo) {
-    $out = [];
-    foreach ($hinfo as $id => $h) if (!$h['departamento_id'] || !$p['departamento_id'] || $h['departamento_id'] == $p['departamento_id']) $out[$id] = ($h['abreviatura'] !== '' ? $h['abreviatura'] . ' · ' : '') . $h['nombre'];
-    return $out;
-}; ?>
+<?php $hfull = horarios(db()); ?>
+<?php if (!array_filter($hfull, fn($h) => $h['activo'])): ?><p class="aviso error">Aún no hay turnos creados: ve a <a href="?p=horarios">Horarios</a> y pulsa «Cargar los turnos de la residencia». Después saldrán aquí en cada casilla.</p><?php endif ?>
 <h2>Cuadrante semanal</h2>
 <form class="filtros">
   <input type="hidden" name="p" value="planificacion">
@@ -192,13 +187,14 @@ $turnos_de = function (array $p) use ($hinfo) {
 <?php if (!$hors): ?><p class="aviso error">Primero crea horarios (turnos) en <a href="?p=horarios">Horarios</a>.</p><?php endif ?>
 <form method="post">
   <?= csrf_campo() ?>
-  <table class="calendario">
+  <table class="calendario cuadrante">
     <tr><th class="persona">Persona</th><?php foreach ($dias as $f): ?><th><?= mb_substr(DIAS[(int)date('N', strtotime($f))], 0, 3) ?> <?= date('d/m', strtotime($f)) ?></th><?php endforeach ?></tr>
     <?php foreach ($personas as $p): $cal = calendario_teorico(db(), $p, $dias[0], $dias[6]); ?>
     <tr><td class="persona"><?= e(nombre($p)) ?></td>
       <?php foreach ($dias as $f): $c = $cal[$f]; ?>
       <td style="<?= $c['ausencia'] ? 'background:' . e($c['ausencia']['color']) : '' ?>" title="<?= e($c['ausencia']['tipo'] ?? $c['festivo'] ?? '') ?>">
-        <select name="c[<?= e($p['id']) ?>][<?= $f ?>]"><?= opciones(['' => $c['festivo'] && !isset($plan[$p['id']][$f]) ? 'Festivo' : 'Habitual', 'L' => 'D · Descanso'] + $turnos_de($p) + (isset($hors[$plan[$p['id']][$f] ?? 0]) ? [$plan[$p['id']][$f] => $hors[$plan[$p['id']][$f]]] : []), $plan[$p['id']][$f] ?? '') ?></select>
+        <select name="c[<?= e($p['id']) ?>][<?= $f ?>]" style="<?= ($x = $hfull[$plan[$p['id']][$f] ?? 0] ?? null) && $x['color'] ? 'background-color:' . e($x['color']) . ';color:#fff' : '' ?>"><?= opciones(['' => $c['festivo'] && !isset($plan[$p['id']][$f]) ? 'Festivo' : 'Habitual' . ($p['horario_id'] && isset($hfull[$p['horario_id']]) ? ' (' . ($hfull[$p['horario_id']]['abreviatura'] ?: $hfull[$p['horario_id']]['nombre']) . ')' : ''), 'L' => 'D · Descanso'], $plan[$p['id']][$f] ?? '') ?>
+          <?php foreach (opciones_turno($hfull, $p) as $grupo => $ops): ?><optgroup label="<?= e($grupo) ?>"><?= opciones($ops, $plan[$p['id']][$f] ?? '') ?></optgroup><?php endforeach ?></select>
       </td>
       <?php endforeach ?></tr>
     <?php endforeach ?>

@@ -322,3 +322,20 @@ button.enlace { background: none; color: var(--acento); padding: 0; min-height: 
 .turnos-plantilla td { padding: .35rem .4rem; }
 .calendario td.turno { color: #fff; font-weight: 700; }
 .calendario td.descanso { color: var(--gris); }
+/* Cuadrante: cada persona separada con un tono alterno y línea más marcada */
+.cuadrante tr:nth-child(even) td { background-color: color-mix(in srgb, var(--acento) 5%, var(--tarjeta)); }
+.cuadrante tr:nth-child(even) td.persona { background-color: color-mix(in srgb, var(--acento) 7%, var(--tarjeta)); }
+.cuadrante td { border-bottom: 2px solid var(--linea); }
+.cuadrante td.editable { cursor: pointer; }
+.cuadrante td.editable:hover { outline: 2px solid var(--acento); outline-offset: -2px; }
+.cuadrante select { min-width: 5.5rem; }
+dialog.elegir-turno { border: 0; border-radius: var(--radio); padding: 1.3rem; width: min(26rem, calc(100vw - 2rem)); background: var(--tarjeta); color: var(--texto); box-shadow: 0 20px 60px rgba(0, 0, 0, .3); }
+dialog.elegir-turno::backdrop { background: rgba(0, 0, 0, .35); }
+.opciones-turno { display: flex; flex-direction: column; gap: .35rem; max-height: 60vh; overflow-y: auto; margin: .6rem 0; }
+.op-turno { justify-content: flex-start; gap: .7rem; background: var(--relleno); color: var(--texto); font-weight: 500; text-align: left; }
+.op-turno span:last-child { display: flex; flex-direction: column; line-height: 1.2; }
+.op-turno small { color: var(--gris); font-weight: 400; }
+.grupo-op { margin: .6rem 0 .1rem; font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--gris); }
+.cuadrante tr td.corto, .cuadrante tr th.corto { background-color: rgba(224, 53, 43, .14); color: var(--rojo); }
+.cuadrante tr.totales td { background-color: var(--relleno); }
+.cuadrante tr td.libre { background-color: color-mix(in srgb, var(--relleno) 80%, transparent); }
