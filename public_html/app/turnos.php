@@ -155,3 +155,39 @@ function cerrar_jornadas(PDO $db, ?string $ahora = null): int
     if ($lineas) avisar_administracion('INDA: ' . count($lineas) . ' salidas cerradas automáticamente', implode("\n", $lineas) . "\n\n" . rtrim(config()['url'] ?? '', '/') . '/?p=equipo');
     return $n;
 }
+
+// Cambia el turno de una persona un día: '' = su horario habitual, 'L' = descanso, número = turno.
+// Comprueba el convenio: si algo bloquea, no se guarda y lanza el motivo. Devuelve los avisos (no bloquean).
+function cambiar_dia(PDO $db, array $yo, array $u, string $fecha, string $v): array
+{
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) throw new DomainException('Fecha no válida.');
+    if ($v !== '' && $v !== 'L' && !isset(horarios($db)[(int)$v])) throw new DomainException('Turno no válido.');
+    $db->beginTransaction();
+    try {
+        if ($v === '') consulta($db, 'DELETE FROM planificacion WHERE usuario_id = ? AND fecha = ?', [$u['id'], $fecha]);
+        else consulta($db, 'REPLACE INTO planificacion (usuario_id, fecha, horario_id) VALUES (?, ?, ?)', [$u['id'], $fecha, $v === 'L' ? null : (int)$v]);
+        $mal = comprobar_plan($db, $u, $fecha, date('Y-m-d', strtotime("$fecha +1 day"))); // también el descanso hasta el día siguiente
+        if ($b = array_values(array_filter($mal, fn($m) => $m[3] === 'bloqueo'))) throw new DomainException('No se puede: ' . $b[0][2]);
+        $db->commit();
+    } catch (Throwable $e) {
+        $db->rollBack();
+        throw $e;
+    }
+    notificar($db, (int)$u['id'], 'horario:' . ahora() . ":{$u['id']}:$fecha", 'Tu turno del ' . date('d/m', strtotime($fecha)) . ' ha cambiado. Revísalo en el calendario.', 'calendario');
+    auditar($db, (int)$yo['id'], 'planificacion', "usuario={$u['id']} fecha=$fecha valor=" . ($v === '' ? 'habitual' : $v));
+    return array_column($mal, 2);
+}
+
+// Opciones de turno para una persona: primero los de su departamento, luego el resto. [grupo => [id => texto]].
+function opciones_turno(array $hors, array $u): array
+{
+    $suyos = $otros = [];
+    foreach ($hors as $id => $h) {
+        if (!$h['activo']) continue;
+        $d1 = $h['dias'] ? reset($h['dias']) : null;
+        $txt = ($h['abreviatura'] !== '' ? $h['abreviatura'] . ' · ' : '') . $h['nombre'] . ($d1 && $d1['entrada'] && !$h['flexible'] ? ' (' . substr($d1['entrada'], 0, 5) . '–' . substr($d1['salida'], 0, 5) . ')' : '');
+        if ($h['departamento_id'] && $u['departamento_id'] && $h['departamento_id'] == $u['departamento_id']) $suyos[$id] = $txt;
+        else $otros[$id] = $txt;
+    }
+    return array_filter(['Su departamento' => $suyos, $suyos ? 'Otros turnos' : 'Turnos' => $otros]);
+}

@@ -147,3 +147,40 @@ for (const f of document.querySelectorAll('[data-anuncio]')) {
   f.addEventListener('submit', ev => { if (total.textContent === '0') { ev.preventDefault(); alert('Elige al menos un destinatario.'); } });
   contar();
 }
+
+// Calendario: pulsar el día de una persona → elegir turno → se guarda al momento.
+for (const dlg of document.querySelectorAll('dialog.elegir-turno')) {
+  const turnos = JSON.parse(dlg.dataset.turnos), ops = dlg.querySelector('[data-opciones]'), estado = dlg.querySelector('[data-estado]');
+  let celda = null;
+  const boton = (v, letra, color, txt, sub) => `<button type="button" data-v="${v}" class="op-turno"><span class="letra-turno" style="background:${color || '#6b7280'}">${letra}</span><span>${txt}${sub ? `<small>${sub}</small>` : ''}</span></button>`;
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const abrir = td => {
+    celda = td;
+    const dep = td.dataset.d, [a, m, d] = td.dataset.f.split('-');
+    dlg.querySelector('[data-titulo]').textContent = `${td.dataset.n} · ${d}/${m}/${a}`;
+    const suyos = turnos.filter(t => dep && t.dep == dep), otros = turnos.filter(t => !(dep && t.dep == dep));
+    const lista = l => l.map(t => boton(t.id, esc(t.letra || '·'), t.color, esc(t.nombre), t.horas)).join('');
+    ops.innerHTML = boton('L', 'D', '#9ca3af', 'Descanso', '') + boton('', '↺', '#9ca3af', 'Su horario habitual', '')
+      + (suyos.length ? '<p class="grupo-op">Su departamento</p>' + lista(suyos) : '') + (otros.length ? `<p class="grupo-op">${suyos.length ? 'Otros turnos' : 'Turnos'}</p>` + lista(otros) : '')
+      + (turnos.length ? '' : '<p class="nota">No hay turnos creados. Ve a Horarios → «Cargar los turnos de la residencia».</p>');
+    estado.textContent = '';
+    dlg.showModal();
+  };
+  document.addEventListener('click', ev => { const td = ev.target.closest('td.editable'); if (td) abrir(td); });
+  document.addEventListener('keydown', ev => { const td = ev.target.closest?.('td.editable'); if (td && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); abrir(td); } });
+  ops.addEventListener('click', async ev => {
+    const b = ev.target.closest('[data-v]');
+    if (!b || !celda) return;
+    estado.textContent = 'Guardando…';
+    const f = new FormData();
+    f.append('csrf', dlg.dataset.csrf); f.append('que', 'celda'); f.append('u', celda.dataset.u); f.append('f', celda.dataset.f); f.append('v', b.dataset.v);
+    try {
+      const r = await fetch(location.href, { method: 'POST', body: f });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'No se pudo guardar');
+      celda.textContent = j.txt; celda.title = j.titulo; celda.style.background = j.fondo || '';
+      celda.classList.toggle('turno', !!j.fondo); celda.classList.toggle('descanso', j.txt === 'D');
+      if (j.avisos.length) { estado.textContent = 'Guardado. Ojo: ' + j.avisos.join(' '); } else dlg.close();
+    } catch (e) { estado.textContent = e.message; }
+  });
+}

@@ -5,6 +5,23 @@ $desde = "$mes-01";
 $hasta = (new DateTime($desde))->modify('last day of this month')->format('Y-m-d');
 $dep = (int)($_GET['dep'] ?? 0);
 $jefe = $yo['rol'] !== 'empleado';
+$editar = $jefe && puede($yo, 'planificar');
+
+// Pulsar un día de una persona y elegir turno: se guarda al momento (con las reglas del convenio).
+if (es_post() && ($_POST['que'] ?? '') === 'celda') {
+    header('Content-Type: application/json; charset=utf-8');
+    try {
+        $u = usuario(db(), (int)($_POST['u'] ?? 0));
+        if (!$editar || !$u || !$u['activo'] || !puede_ver($yo, $u) || $u['rol'] === 'inspeccion') throw new DomainException('No puedes cambiar el turno de esta persona.');
+        $f = (string)($_POST['f'] ?? '');
+        $avisos = cambiar_dia(db(), $yo, $u, $f, (string)($_POST['v'] ?? ''));
+        [$txt, $fondo, $titulo] = celda_turno(calendario_teorico(db(), $u, $f, $f)[$f], horarios(db()), true);
+        exit(json_encode(['txt' => $txt, 'fondo' => $fondo, 'titulo' => $titulo, 'avisos' => $avisos], JSON_UNESCAPED_UNICODE));
+    } catch (DomainException $e) {
+        http_response_code(422);
+        exit(json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_UNICODE));
+    }
+}
 
 // Responsable/admin: su equipo con el tipo de ausencia. Empleado: sus compañeros, solo "ausente" (RGPD: el tipo puede ser dato de salud).
 if ($jefe) {
@@ -45,7 +62,7 @@ cabecera('Calendario', $yo);
   <?php if ($jefe && $deps): ?><label><select name="dep"><?= opciones(['' => 'Todos los departamentos'] + $deps, $dep) ?></select></label><?php endif ?>
   <button>Ver</button>
 </form>
-<table class="calendario">
+<table class="calendario cuadrante">
   <tr><th class="persona"></th><?php foreach ($fechas as $f): ?><th class="<?= isset($cortos[$f]) ? 'corto' : '' ?>"><?= mb_substr(DIAS[(int)date('N', strtotime($f))], 0, 1) ?><br><?= (int)substr($f, 8) ?></th><?php endforeach ?></tr>
   <?php if ($jefe): ?>
   <tr class="totales"><td class="persona"><small>Trabajan</small></td><?php foreach ($fechas as $f): ?><td class="<?= isset($cortos[$f]) ? 'corto' : '' ?>" title="<?= isset($cortos[$f]) ? 'Faltan ' . $cortos[$f] . ' para el mínimo' : '' ?>"><?= $trabajan[$f] ?></td><?php endforeach ?></tr>
@@ -65,10 +82,25 @@ cabecera('Calendario', $yo);
         [$txt, $fondo, $titulo] = celda_turno($c, $hors, $detalle);
         if ($fondo) $clase .= 'turno';
         elseif ($txt === 'D') $clase .= 'descanso';
-        echo '<td class="' . $clase . '" title="' . e($titulo) . '"' . ($fondo ? ' style="background:' . e($fondo) . '"' : '') . '>' . e($txt) . '</td>';
+        $editable = $editar && $p['activo'] && puede_ver($yo, $p);
+        echo '<td class="' . $clase . ($editable ? ' editable' : '') . '" title="' . e($titulo) . '"' . ($fondo ? ' style="background:' . e($fondo) . '"' : '')
+            . ($editable ? ' data-u="' . e($p['id']) . '" data-f="' . $f . '" data-n="' . e(nombre($p)) . '" data-d="' . e($p['departamento_id']) . '" tabindex="0"' : '') . '>' . e($txt) . '</td>';
     endforeach ?></tr>
   <?php endforeach ?>
 </table>
+<?php if ($editar):
+    $turnos = array_values(array_map(fn($h) => ['id' => (int)$h['id'], 'letra' => $h['abreviatura'], 'color' => $h['color'], 'nombre' => $h['nombre'], 'dep' => $h['departamento_id'] ? (int)$h['departamento_id'] : null,
+        'horas' => ($d1 = $h['dias'] ? reset($h['dias']) : null) && $d1['entrada'] && !$h['flexible'] ? substr($d1['entrada'], 0, 5) . '–' . substr($d1['salida'], 0, 5) : ''], array_filter($hors, fn($h) => $h['activo']))); ?>
+<dialog class="elegir-turno" data-turnos="<?= e(json_encode($turnos, JSON_UNESCAPED_UNICODE)) ?>" data-csrf="<?= e($_SESSION['csrf']) ?>">
+  <form method="dialog">
+    <h3 data-titulo></h3>
+    <div class="opciones-turno" data-opciones></div>
+    <p class="nota" data-estado></p>
+    <button value="cancelar" class="secundario">Cerrar</button>
+  </form>
+</dialog>
+<p class="nota">Pulsa en el día de una persona para cambiar su turno. Se guarda al momento, con las reglas del convenio, y se le avisa.</p>
+<?php endif ?>
 <?php if ($cortos): ?><p class="aviso error">Hay <?= count($cortos) ?> días que no llegan al mínimo de personal (en rojo). Revísalos en <a href="?p=planificacion">Planificación</a> o busca sustituto.</p><?php endif ?>
 <?php $con_letra = array_filter($hors, fn($h) => $h['abreviatura'] !== '' && $h['activo'] && (!$dep || !$h['departamento_id'] || $h['departamento_id'] == $dep)); ?>
 <?php if ($con_letra): ?><p class="nota leyenda-turnos">Turnos: <?php foreach ($con_letra as $h): ?><span class="letra-turno" style="background:<?= e($h['color'] ?: '#6b7280') ?>"><?= e($h['abreviatura']) ?></span> <?= e($h['nombre']) ?> <?php endforeach ?></p><?php endif ?>
