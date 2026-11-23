@@ -69,13 +69,14 @@ function revisar_avisos(PDO $db, ?string $ahora = null): int
             $primera = consulta($db, "SELECT MIN(momento_utc) FROM fichajes f WHERE usuario_id = ? AND tipo = 'entrada' AND momento_utc >= ? AND momento_utc <= ? AND " . NO_ANULADO,
                 [$u['id'], a_utc("$hoy 00:00:00"), $ahora])->fetchColumn();
             if (!$primera && $estado === 'fuera' && $hora > $limite) {
-                if (notificar($db, (int)$u['id'], "sin_entrada:$hoy", 'No has fichado la entrada de hoy (tu horario empieza a las ' . substr($c['entrada'], 0, 5) . ').', 'fichar')) {
+                $v = ['nombre' => $u['nombre'], 'fecha' => local($ahora, 'd/m/Y'), 'hora' => substr($c['entrada'], 0, 5), 'turno' => $c['horario'] ?? '', 'fichado' => ''];
+                if (notificar($db, (int)$u['id'], "sin_entrada:$hoy", texto_aviso($db, 'sin_entrada', $v), 'fichar')) {
                     $n++;
                     $incidencias[] = nombre($u) . ': sin fichar la entrada (horario ' . substr($c['entrada'], 0, 5) . ').';
                 }
             }
             if ($primera && local($primera, 'H:i:s') > $limite) {
-                $txt = nombre($u) . ' fichó la entrada a las ' . local($primera, 'H:i') . ' (horario: ' . substr($c['entrada'], 0, 5) . ').';
+                $txt = texto_aviso($db, 'retraso', ['nombre' => nombre($u), 'fecha' => local($ahora, 'd/m/Y'), 'hora' => substr($c['entrada'], 0, 5), 'turno' => $c['horario'] ?? '', 'fichado' => local($primera, 'H:i')]);
                 $avisados = 0;
                 foreach (aprobadores($db, $u) as $jefe) $avisados += notificar($db, $jefe, "retraso:{$u['id']}:$hoy", $txt, "historial&u={$u['id']}");
                 if ($avisados) {
@@ -89,8 +90,8 @@ function revisar_avisos(PDO $db, ?string $ahora = null): int
             $abierta = $e ? strtotime("$ahora UTC") - strtotime("{$e['momento_utc']} UTC") : 0;
             $tarde = $c['salida'] && $c['entrada'] && $c['salida'] > $c['entrada'] && $hora > $suma($c['salida'], 60) && local($e['momento_utc'] ?? '', 'Y-m-d') === $hoy;
             if ($e && ($abierta > 12 * 3600 || $tarde)) {
-                if (notificar($db, (int)$u['id'], "sin_salida:{$e['id']}", 'Tu jornada sigue abierta desde las ' . local($e['momento_utc'], 'H:i')
-                    . ' del ' . local($e['momento_utc'], 'd/m') . '. ¿Olvidaste fichar la salida?', 'fichar')) {
+                $v = ['nombre' => $u['nombre'], 'fecha' => local($e['momento_utc'], 'd/m'), 'hora' => substr((string)$c['salida'], 0, 5), 'turno' => $c['horario'] ?? '', 'fichado' => local($e['momento_utc'], 'H:i')];
+                if (notificar($db, (int)$u['id'], "sin_salida:{$e['id']}", texto_aviso($db, 'sin_salida', $v), 'fichar')) {
                     $n++;
                     $incidencias[] = nombre($u) . ': jornada abierta desde las ' . local($e['momento_utc'], 'H:i') . ' del ' . local($e['momento_utc'], 'd/m') . ' (no ha fichado la salida).';
                 }

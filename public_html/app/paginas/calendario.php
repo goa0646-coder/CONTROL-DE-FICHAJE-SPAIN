@@ -33,6 +33,7 @@ $cortos = [];
 // El ratio es de toda la plantilla, aunque se esté viendo un equipo o departamento.
 if ($jefe) foreach (huecos(db(), db()->query("SELECT * FROM usuarios WHERE activo = 1 AND rol <> 'inspeccion'")->fetchAll(), $desde, $hasta) as [$f, , , $faltan]) $cortos[$f] = ($cortos[$f] ?? 0) + $faltan;
 $pts = puestos(db());
+$hors = horarios(db());
 $pp = puestos_por_persona(db());
 cabecera('Calendario', $yo);
 ?>
@@ -56,23 +57,22 @@ cabecera('Calendario', $yo);
   <tr><td class="persona"><span class="con-avatar"><?= avatar($p, 'mini') ?> <span class="quien-cal"><?= e(nombre($p)) ?>
     <?php if ($jefe): ?><small><?= horas($mes_min * 60) ?> h<?= ($pp[$p['id']] ?? []) ? ' · ' . e(implode(', ', array_intersect_key($pts, array_flip($pp[$p['id']])))) : '' ?></small><?php endif ?></span></span></td>
     <?php foreach ($cal as $f => $c):
-        $clase = ($f === $hoy ? 'hoy ' : '') . (!$c['laborable'] || $c['festivo'] ? 'libre' : '');
-        if ($c['ausencia']) {
-            // Iniciales (Vacaciones → V, Visita médica → VM) para no confundir tipos.
-            $txt = $detalle ? implode('', array_map(fn($w) => mb_strtoupper(mb_substr($w, 0, 1)), array_filter(explode(' ', $c['ausencia']['tipo']), fn($w) => mb_strlen($w) > 3 || $w === 'IT'))) : '·';
-            $titulo = $detalle ? $c['ausencia']['tipo'] : 'Ausente';
-            echo '<td class="' . $clase . '" title="' . e($titulo) . '" style="background:' . e($detalle ? $c['ausencia']['color'] : '#6b7280') . ';color:#fff">' . e($txt) . '</td>';
-        } elseif (isset($pendientes[$p['id']][$f])) {
-            echo '<td class="' . $clase . '" title="Pendiente de aprobar">?</td>';
-        } else {
-            $titulo = $c['festivo'] ?: ($c['horario'] ? $c['horario'] . ($c['entrada'] && !$c['flexible'] ? ' ' . substr($c['entrada'], 0, 5) : '') : '');
-            echo '<td class="' . $clase . '" title="' . e($titulo) . '">' . ($c['festivo'] ? 'F' : ($c['minutos'] ? e(rtrim(rtrim(number_format($c['minutos'] / 60, 1, ',', ''), '0'), ',')) : '')) . '</td>';
+        $clase = ($f === $hoy ? 'hoy ' : '') . (!$c['laborable'] || $c['festivo'] ? 'libre ' : '');
+        if (!$c['ausencia'] && isset($pendientes[$p['id']][$f])) {
+            echo '<td class="' . $clase . '" title="Ausencia pendiente de aprobar">?</td>';
+            continue;
         }
+        [$txt, $fondo, $titulo] = celda_turno($c, $hors, $detalle);
+        if ($fondo) $clase .= 'turno';
+        elseif ($txt === 'D') $clase .= 'descanso';
+        echo '<td class="' . $clase . '" title="' . e($titulo) . '"' . ($fondo ? ' style="background:' . e($fondo) . '"' : '') . '>' . e($txt) . '</td>';
     endforeach ?></tr>
   <?php endforeach ?>
 </table>
 <?php if ($cortos): ?><p class="aviso error">Hay <?= count($cortos) ?> días que no llegan al mínimo de personal (en rojo). Revísalos en <a href="?p=planificacion">Planificación</a> o busca sustituto.</p><?php endif ?>
-<p class="nota">Números = horas previstas. F = festivo. ? = ausencia pendiente. Pasa el ratón (o mantén pulsado) para ver el detalle.</p>
+<?php $con_letra = array_filter($hors, fn($h) => $h['abreviatura'] !== '' && $h['activo'] && (!$dep || !$h['departamento_id'] || $h['departamento_id'] == $dep)); ?>
+<?php if ($con_letra): ?><p class="nota leyenda-turnos">Turnos: <?php foreach ($con_letra as $h): ?><span class="letra-turno" style="background:<?= e($h['color'] ?: '#6b7280') ?>"><?= e($h['abreviatura']) ?></span> <?= e($h['nombre']) ?> <?php endforeach ?></p><?php endif ?>
+<p class="nota">D = descanso. F = festivo. Números = horas de turnos sin letra. ? = ausencia pendiente. Pasa el ratón (o mantén pulsado) para ver el detalle.</p>
 <?php if ($jefe): ?>
 <p class="nota">Leyenda: <?php foreach (tipos_ausencia(db()) as $t): ?><span class="etiqueta" style="background:<?= e($t['color']) ?>"><?= e($t['nombre']) ?></span> <?php endforeach ?></p>
 <?php endif;

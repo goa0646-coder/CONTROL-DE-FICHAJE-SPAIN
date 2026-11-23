@@ -21,6 +21,13 @@ if (es_post()) {
         consulta(db(), 'REPLACE INTO ajustes VALUES (?, ?)', ['convenio', json_encode($cv, JSON_UNESCAPED_UNICODE)]);
         unset($_SESSION['convenio_leido']);
         auditar(db(), (int)$yo['id'], 'convenio_aplicado', $cv['nombre']);
+    } elseif ($que === 'plantillas') {
+        $t = [];
+        foreach (PLANTILLAS_AVISO as $k => $_) $t[$k] = mb_substr(trim(str_replace("\r", '', $_POST["plantilla_$k"] ?? '')), 0, 1500);
+        consulta(db(), 'REPLACE INTO ajustes VALUES (?, ?)', ['plantillas_aviso', json_encode($t, JSON_UNESCAPED_UNICODE)]);
+        auditar(db(), (int)$yo['id'], 'plantillas_aviso_guardadas');
+        aviso('Mensajes de aviso guardados.');
+        redirigir('admin');
     } elseif ($que === 'correo' || $que === 'correo_prueba') {
         $ant = json_decode(ajuste(db(), 'correo') ?? '[]', true) ?: [];
         $desde = trim($_POST['desde'] ?? '');
@@ -181,6 +188,16 @@ cabecera('Empresa y centros', $yo);
 </form>
 
 <?php $r = reglas(db()); ?>
+<form method="post" class="tarjeta">
+  <?= csrf_campo() ?>
+  <h2>Mensajes de aviso por email</h2>
+  <p class="nota">Lo que reciben por email (y en INDA) cuando no fichan a tiempo. Puedes usar {nombre}, {fecha}, {hora} (hora del turno), {turno} y {fichado} (hora a la que fichó). Déjalo vacío para usar el texto de INDA. El margen de cortesía de cada turno se pone en Horarios.</p>
+  <?php foreach (PLANTILLAS_AVISO as $k => [$quien, $def]): ?>
+  <label><?= e($quien) ?> <textarea name="plantilla_<?= $k ?>" rows="4" placeholder="<?= e($def) ?>"><?= e(plantilla_aviso(db(), $k) === $def ? '' : plantilla_aviso(db(), $k)) ?></textarea></label>
+  <?php endforeach ?>
+  <button name="que" value="plantillas">Guardar mensajes</button>
+</form>
+
 <form method="post" class="tarjeta">
   <?= csrf_campo() ?>
   <h2>Reglas de jornada</h2>

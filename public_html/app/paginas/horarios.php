@@ -25,16 +25,24 @@ if (es_post()) {
             }
             db()->beginTransaction();
             $id = (int)($_POST['id'] ?? 0);
-            $d = [$nombre, isset($_POST['flexible']) ? 1 : 0, max(0, (int)($_POST['margen_min'] ?? 10)), isset($_POST['activo']) ? 1 : 0];
-            if ($id) consulta(db(), 'UPDATE horarios SET nombre = ?, flexible = ?, margen_min = ?, activo = ? WHERE id = ?', [...$d, $id]);
+            $d = [$nombre, isset($_POST['flexible']) ? 1 : 0, max(0, (int)($_POST['margen_min'] ?? 10)), isset($_POST['activo']) ? 1 : 0,
+                mb_substr(mb_strtoupper(trim($_POST['abreviatura'] ?? '')), 0, 3), preg_match('/^#[0-9a-f]{6}$/i', $_POST['color'] ?? '') ? $_POST['color'] : '', (int)($_POST['departamento_id'] ?? 0) ?: null];
+            if ($id) consulta(db(), 'UPDATE horarios SET nombre = ?, flexible = ?, margen_min = ?, activo = ?, abreviatura = ?, color = ?, departamento_id = ? WHERE id = ?', [...$d, $id]);
             else {
-                consulta(db(), 'INSERT INTO horarios (nombre, flexible, margen_min, activo) VALUES (?, ?, ?, ?)', $d);
+                consulta(db(), 'INSERT INTO horarios (nombre, flexible, margen_min, activo, abreviatura, color, departamento_id) VALUES (?, ?, ?, ?, ?, ?, ?)', $d);
                 $id = (int)db()->lastInsertId();
             }
             consulta(db(), 'DELETE FROM horario_dias WHERE horario_id = ?', [$id]);
             foreach ($dias as $n => $x) consulta(db(), 'INSERT INTO horario_dias VALUES (?, ?, ?, ?, ?)', [$id, $n, ...$x]);
             db()->commit();
             auditar(db(), (int)$yo['id'], 'horario_guardado', "horario=$id");
+        } elseif ($que === 'turnos') {
+            $filas = [];
+            foreach ((array)($_POST['t'] ?? []) as $t) if (!empty($t['usar'])) $filas[] = [$t['nombre'] ?? '', $t['letra'] ?? '', $t['color'] ?? '', $t['e'] ?? '', $t['s'] ?? '', $t['h'] ?? '', $t['dep'] ?? ''];
+            [$c, $a] = guardar_turnos(db(), $filas);
+            auditar(db(), (int)$yo['id'], 'turnos_cargados', "nuevos=$c actualizados=$a");
+            aviso("Turnos guardados: $c nuevos y $a actualizados. Ahora asígnalos en Usuarios (turno habitual) o en Planificación (día a día).");
+            redirigir('horarios');
         } elseif ($que === 'festivo') {
             $f = $_POST['fecha'] ?? '';
             if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $f) || trim($_POST['nombre'] ?? '') === '') throw new DomainException('Pon fecha y nombre del festivo.');
@@ -90,7 +98,8 @@ if (es_post()) {
 }
 
 $lista = horarios(db());
-$h = $lista[(int)($_GET['h'] ?? 0)] ?? ['id' => '', 'nombre' => '', 'flexible' => 0, 'margen_min' => 10, 'activo' => 1, 'dias' => []];
+$h = $lista[(int)($_GET['h'] ?? 0)] ?? ['id' => '', 'nombre' => '', 'flexible' => 0, 'margen_min' => 10, 'activo' => 1, 'dias' => [], 'abreviatura' => '', 'color' => '', 'departamento_id' => null];
+$deps = db()->query('SELECT id, nombre FROM departamentos WHERE activo = 1 ORDER BY nombre')->fetchAll(PDO::FETCH_KEY_PAIR);
 $anio = (int)($_GET['anio'] ?? local(ahora(), 'Y'));
 $festivos = consulta(db(), 'SELECT f.*, c.nombre AS centro FROM festivos f LEFT JOIN centros c ON c.id = f.centro_id WHERE YEAR(f.fecha) = ? ORDER BY f.fecha', [$anio])->fetchAll();
 $centros = db()->query('SELECT id, nombre FROM centros WHERE activo = 1 ORDER BY nombre')->fetchAll(PDO::FETCH_KEY_PAIR);
@@ -100,11 +109,41 @@ $hm = fn(?string $t) => $t ? substr($t, 0, 5) : '';
 cabecera('Horarios, festivos y ausencias', $yo);
 ?>
 <h2>Horarios</h2>
+<?php $existentes = [];
+foreach ($lista as $x) $existentes[normalizar($x['nombre'])] = $x; ?>
+<details class="tarjeta" <?= $lista ? '' : 'open' ?>>
+  <summary>Cargar los turnos de la residencia (mañana, tarde, noche, partido, limpieza)</summary>
+  <form method="post">
+    <?= csrf_campo() ?>
+    <p class="nota">Revisa las horas antes de guardar: mañana y limpieza salen de los fichajes que me enviaste; tarde, noche y partido son las habituales en residencias. Como horario habitual valen de lunes a viernes; los fines de semana, rotaciones y descansos («D») se ponen en Planificación, donde cada turno sirve para cualquier día. Si ya existe un turno con ese nombre, se actualiza.</p>
+    <table class="turnos-plantilla">
+      <tr><th></th><th>Nombre</th><th>Letra</th><th>Color</th><th>Entrada</th><th>Salida</th><th>Horas</th><th>Departamento</th></tr>
+      <?php foreach ([...TURNOS_RESIDENCIA, ['', '', '#64748b', '', '', '', ''], ['', '', '#64748b', '', '', '', '']] as $i => [$n, $l, $col, $en, $sa, $ho, $de]):
+          if ($n !== '' && ($x = $existentes[normalizar($n)] ?? null)) { // valores actuales si ya existe
+              $d1 = reset($x['dias']) ?: null;
+              [$l, $col, $en, $sa, $ho, $de] = [$x['abreviatura'] ?: $l, $x['color'] ?: $col, $d1 ? $hm($d1['entrada']) : $en, $d1 ? $hm($d1['salida']) : $sa, $d1 ? horas($d1['minutos'] * 60) : $ho, $deps[$x['departamento_id']] ?? $de];
+          } ?>
+      <tr><td><input type="checkbox" name="t[<?= $i ?>][usar]" value="1" <?= $n !== '' ? 'checked' : '' ?>></td>
+        <td><input name="t[<?= $i ?>][nombre]" value="<?= e($n) ?>" placeholder="Otro turno"></td>
+        <td><input name="t[<?= $i ?>][letra]" value="<?= e($l) ?>" maxlength="3" size="2"></td>
+        <td><input type="color" name="t[<?= $i ?>][color]" value="<?= e($col) ?>"></td>
+        <td><input type="time" name="t[<?= $i ?>][e]" value="<?= e($en) ?>"></td>
+        <td><input type="time" name="t[<?= $i ?>][s]" value="<?= e($sa) ?>"></td>
+        <td><input name="t[<?= $i ?>][h]" value="<?= e($ho) ?>" size="4"></td>
+        <td><input name="t[<?= $i ?>][dep]" value="<?= e($de) ?>" list="lista-deps"></td></tr>
+      <?php endforeach ?>
+    </table>
+    <datalist id="lista-deps"><?php foreach ($deps as $dn): ?><option value="<?= e($dn) ?>"><?php endforeach ?></datalist>
+    <button name="que" value="turnos">Guardar turnos marcados</button>
+  </form>
+</details>
 <table>
-  <tr><th>Nombre</th><th>Semana</th><th>Tipo</th><th>Personas</th><th></th></tr>
+  <tr><th>Nombre</th><th>Letra</th><th>Departamento</th><th>Semana</th><th>Tipo</th><th>Personas</th><th></th></tr>
   <?php foreach ($lista as $x):
       $n = consulta(db(), 'SELECT COUNT(*) FROM usuarios WHERE horario_id = ? AND activo = 1', [$x['id']])->fetchColumn(); ?>
   <tr class="<?= $x['activo'] ? '' : 'anulado' ?>"><td><?= e($x['nombre']) ?></td>
+    <td><?= $x['abreviatura'] !== '' ? '<span class="letra-turno" style="background:' . e($x['color'] ?: '#6b7280') . '">' . e($x['abreviatura']) . '</span>' : '' ?></td>
+    <td><?= e($deps[$x['departamento_id']] ?? 'Todos') ?></td>
     <td><?= horas(60 * array_sum(array_column($x['dias'], 'minutos'))) ?> h</td><td><?= $x['flexible'] ? 'Flexible' : 'Fijo' ?></td><td><?= e($n) ?></td>
     <td><a href="?p=horarios&h=<?= e($x['id']) ?>">Editar</a></td></tr>
   <?php endforeach ?>
@@ -115,7 +154,12 @@ cabecera('Horarios, festivos y ausencias', $yo);
   <h3><?= $h['id'] ? 'Editar horario' : 'Nuevo horario' ?></h3>
   <label>Nombre <input name="nombre" value="<?= e($h['nombre']) ?>" required placeholder="Oficina L-V 8:00–17:00"></label>
   <label><input type="checkbox" name="flexible" <?= $h['flexible'] ? 'checked' : '' ?>> Flexible (solo cuentan las horas; no hay hora fija de entrada)</label>
-  <label>Margen de cortesía (minutos) <input type="number" name="margen_min" min="0" value="<?= e($h['margen_min']) ?>"></label>
+  <div class="filtros">
+    <label>Letra en el calendario <input name="abreviatura" maxlength="3" value="<?= e($h['abreviatura']) ?>" placeholder="M, T, N, P…"></label>
+    <label>Color <input type="color" name="color" value="<?= e($h['color'] ?: '#2563eb') ?>"></label>
+    <label>Departamento <select name="departamento_id"><?= opciones(['' => 'Todos'] + $deps, $h['departamento_id']) ?></select></label>
+  </div>
+  <label>Margen de cortesía (minutos): pasado este tiempo sin fichar, se envía el aviso <input type="number" name="margen_min" min="0" value="<?= e($h['margen_min']) ?>"></label>
   <table>
     <tr><th>Día</th><th>Entrada</th><th>Salida</th><th>Horas a trabajar</th></tr>
     <?php foreach (DIAS as $n => $dia): $x = $h['dias'][$n] ?? null; ?>
