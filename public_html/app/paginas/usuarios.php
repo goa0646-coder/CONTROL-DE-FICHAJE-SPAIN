@@ -70,7 +70,9 @@ if (es_post()) {
     $activo = isset($p['activo']) ? 1 : 0;
     $campos = [
         'num_empleado' => $p['num_empleado'] ?: null, 'nombre' => $p['nombre'], 'apellidos' => $p['apellidos'], 'dni' => strtoupper($p['dni']),
-        'email' => mb_strtolower($p['email']), 'rol' => $p['rol'], 'centro_id' => (int)$p['centro_id'] ?: null,
+        'email' => mb_strtolower($p['email']), 'rol' => $p['rol'],
+        'telefono' => mb_substr($p['telefono'] ?? '', 0, 30) ?: null, 'nss' => mb_substr(preg_replace('/\s+/', '', $p['nss'] ?? ''), 0, 20) ?: null,
+        'fecha_nacimiento' => fecha_iso($p['fecha_nacimiento'] ?? ''), 'centro_id' => (int)$p['centro_id'] ?: null,
         'responsable_id' => (int)$p['responsable_id'] ?: null,
         'departamento_id' => (int)($p['departamento_id'] ?? 0) ?: null, 'horario_id' => (int)($p['horario_id'] ?? 0) ?: null, 'gps_modo' => isset($gps[$p['gps_modo']]) && $p['gps_modo'] !== '' ? $p['gps_modo'] : null,
         'acceso_hasta' => $p['rol'] === 'inspeccion' ? ($p['acceso_hasta'] ?: gmdate('Y-m-d', strtotime('+30 days'))) : null,
@@ -135,6 +137,11 @@ cabecera('Usuarios', $yo);
   <label>Apellidos <input name="apellidos" value="<?= e($u['apellidos']) ?>"></label>
   <label>DNI/NIE <input name="dni" value="<?= e($u['dni']) ?>"></label>
   <label>Email <input type="email" name="email" value="<?= e($u['email']) ?>" required></label>
+  <div class="filtros">
+    <label>Teléfono <input type="tel" name="telefono" value="<?= e($u['telefono'] ?? '') ?>" maxlength="30"></label>
+    <label>Nº Seguridad Social <input name="nss" value="<?= e($u['nss'] ?? '') ?>" maxlength="20"></label>
+    <label>Fecha de nacimiento <input type="date" name="fecha_nacimiento" value="<?= e($u['fecha_nacimiento'] ?? '') ?>"></label>
+  </div>
   <label>Rol <select name="rol"><?= opciones($roles, $u['rol']) ?></select></label>
   <label>Centro <select name="centro_id"><?= opciones(['' => '—'] + $centros, $u['centro_id']) ?></select></label>
   <label>Departamento <select name="departamento_id"><?= opciones(['' => '—'] + $deps, $u['departamento_id']) ?></select></label>

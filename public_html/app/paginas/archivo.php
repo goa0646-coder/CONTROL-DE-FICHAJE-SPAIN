@@ -10,8 +10,9 @@ if (isset($_GET['a'])) {
 }
 if (isset($_GET['c'])) {
     $c = anuncio(db(), (int)$_GET['c']);
-    if (!$c || !$c['archivo'] || !puede_ver_anuncio(db(), $c, $yo)) exit('No disponible.');
-    enviar_archivo($c['archivo'], $c['nombre_original'] ?: 'adjunto');
+    if (!$c || !puede_ver_anuncio(db(), $c, $yo)) exit('No disponible.');
+    foreach (adjuntos_anuncio(db(), $c) as $a) if ($a['id'] == (int)($_GET['adj'] ?? 0)) enviar_archivo($a['archivo'], $a['nombre_original']);
+    exit('No disponible.');
 }
 if (isset($_GET['e'])) {
     $en = envio(db(), (int)$_GET['e']);

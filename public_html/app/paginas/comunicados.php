@@ -18,9 +18,7 @@ if (es_post()) {
         }
         if ($que === 'publicar' && $puede) {
             $uids = resolver_destinatarios(db(), $yo, (array)($_POST['para'] ?? []));
-            $f = $_FILES['adjunto'] ?? null;
-            $archivo = guardar_archivo($f);
-            $id = crear_anuncio(db(), $yo, $_POST['titulo'] ?? '', $_POST['texto'] ?? '', $uids, $archivo, $archivo ? basename($f['name']) : null);
+            $id = crear_anuncio(db(), $yo, $_POST['titulo'] ?? '', $_POST['texto'] ?? '', $uids, guardar_varios($_FILES['adjuntos'] ?? null));
             aviso('Anuncio enviado a ' . count($uids) . (count($uids) === 1 ? ' persona' : ' personas') . '. Les llega aviso en INDA y por email.');
             redirigir('comunicados', ['ver' => 'enviados', 'id' => $id]);
         }
@@ -66,7 +64,7 @@ cabecera('Anuncios', $yo);
   <h2>Nuevo anuncio</h2>
   <label>Asunto <input name="titulo" required maxlength="150"></label>
   <label>Mensaje <textarea name="texto" rows="6" required></textarea></label>
-  <label>Adjunto (opcional) <input type="file" name="adjunto"></label>
+  <label>Adjuntos (opcional, puedes elegir varios) <input type="file" name="adjuntos[]" multiple></label>
   <fieldset class="destinatarios">
     <legend>Para <b data-total>0</b> personas</legend>
     <div class="grupos-para">
@@ -98,7 +96,7 @@ cabecera('Anuncios', $yo);
       <?php if ($ver === 'enviados'): [$l, $t] = $cuentas[$c['id']]; ?>
       <span class="pildora<?= $l >= $t ? ' ok' : '' ?>">Leído <?= $l ?>/<?= $t ?></span>
       <?php else: ?><span class="pildora<?= $c['leido_utc'] ? ' ok' : ' pendiente' ?>"><?= $c['leido_utc'] ? 'Leído' : 'Pendiente de leer' ?></span><?php endif ?>
-      <?php if ($c['archivo']): ?><span class="clip" title="Con adjunto">📎</span><?php endif ?>
+      <?php if ($c['con_adjunto']): ?><span class="clip" title="Con adjunto">📎</span><?php endif ?>
     </a>
     <?php endforeach ?>
   </div>
@@ -110,7 +108,12 @@ cabecera('Anuncios', $yo);
     <h2><?= e($abierto['titulo']) ?></h2>
     <p class="nota"><?= e(trim($abierto['autor'] . ' ' . $abierto['autor_apellidos'])) ?> · <?= local($abierto['creado_utc']) ?></p>
     <div class="texto-anuncio"><?= nl2br(e($abierto['texto'])) ?></div>
-    <?php if ($abierto['archivo']): ?><p><a class="adjunto" href="?p=archivo&c=<?= e($abierto['id']) ?>"><?= icono('documentos') ?> <?= e($abierto['nombre_original']) ?></a></p><?php endif ?>
+    <?php if ($autor): $dest = array_filter(array_map(fn($id) => usuario(db(), $id), destinatarios_anuncio(db(), $abierto)));
+        $nombres = array_map('nombre', $dest); ?>
+    <details class="para"><summary>Para <?= count($nombres) ?> destinatarios: <?= e(mb_strimwidth(implode(', ', $nombres), 0, 110, '…')) ?> <span>Ver todos</span></summary>
+      <p class="nota"><?= e(implode(', ', $nombres)) ?></p></details>
+    <?php endif ?>
+    <?php if ($adj = adjuntos_anuncio(db(), $abierto)): ?><p class="adjuntos"><?php foreach ($adj as $a): ?><a class="adjunto" href="?p=archivo&c=<?= e($abierto['id']) ?>&adj=<?= e($a['id']) ?>"><?= icono('documentos') ?> <?= e($a['nombre_original']) ?></a> <?php endforeach ?></p><?php endif ?>
     <?php if ($para_mi): ?>
       <?php if ($mio): ?><p class="aviso ok">Confirmaste la lectura el <?= local($mio['leido_utc']) ?>.</p>
       <?php else: ?><form method="post"><?= csrf_campo() ?><input type="hidden" name="id" value="<?= e($abierto['id']) ?>"><button name="que" value="leido">Confirmo que lo he leído</button></form><?php endif ?>

@@ -92,7 +92,7 @@ function ia_validar(string $tarea, array $d): array
     if ($tarea === 'dni') {
         $dni = strtoupper(preg_replace('/[^0-9A-Za-z]/', '', (string)($d['dni'] ?? '')));
         return ['nombre' => trim((string)($d['nombre'] ?? '')), 'apellidos' => trim((string)($d['apellidos'] ?? '')),
-            'dni' => $dni, 'dni_valido' => dni_valido($dni), 'caducidad' => $fecha($d['caducidad'] ?? '')];
+            'dni' => $dni, 'dni_valido' => dni_valido($dni), 'caducidad' => $fecha($d['caducidad'] ?? ''), 'fecha_nacimiento' => $fecha($d['fecha_nacimiento'] ?? '')];
     }
     if ($tarea === 'nomina') {
         $dni = strtoupper(preg_replace('/[^0-9A-Za-z]/', '', (string)($d['dni'] ?? '')));

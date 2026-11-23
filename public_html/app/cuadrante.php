@@ -18,11 +18,13 @@ function puestos_por_persona(PDO $db): array
 // Necesidades de un día: [[horario_id, puesto_id|null, personas], …]. Las de un día concreto sustituyen a las de «todos los días».
 function necesidades_dia(PDO $db, string $fecha, ?int $centro = null): array
 {
-    $todas = $db->query('SELECT * FROM necesidades')->fetchAll();
+    $todas = consulta($db, 'SELECT * FROM necesidades WHERE activo = 1 AND (desde IS NULL OR desde <= ?) AND (hasta IS NULL OR hasta >= ?)', [$fecha, $fecha])->fetchAll();
     $n = (int)date('N', strtotime($fecha));
+    $festivo = fn($c) => (bool)consulta($db, 'SELECT 1 FROM festivos WHERE fecha = ? AND (centro_id IS NULL OR centro_id = ?)', [$fecha, $c])->fetchColumn();
     $out = [];
     foreach ($todas as $x) {
         if ($centro && $x['centro_id'] && $x['centro_id'] != $centro) continue;
+        if (!$x['festivos'] && $festivo($x['centro_id'] ?? $centro)) continue; // regla que no se aplica en festivos
         if ($x['dia'] && $x['dia'] != $n) continue;
         $clave = $x['horario_id'] . ':' . ($x['puesto_id'] ?? '');
         if (!isset($out[$clave]) || $x['dia']) $out[$clave] = [(int)$x['horario_id'], $x['puesto_id'] ? (int)$x['puesto_id'] : null, (int)$x['personas']];
@@ -153,4 +155,47 @@ function guardar_cuadrante(PDO $db, array $plan): void
             consulta($db, 'REPLACE INTO planificacion (usuario_id, fecha, horario_id, puesto_id) VALUES (?, ?, ?, ?)', [$uid, $f, $x['horario_id'] ?? null, $x['puesto_id'] ?? null]);
         }
     }
+}
+
+// Ratios de AS FRAGAS (capturas de su configuración anterior): turno => mínimo de personas.
+// La tarde no venía en las capturas: se deja para que la empresa la añada con su número.
+const RATIOS_RESIDENCIA = ['RATIO AUXILIARES MAÑANA' => ['AUXILIAR MAÑANA', 4], 'RATIO AUXILIARES NOCHE' => ['AUXILIAR NOCHE', 2], 'RATIO PARTIDO' => ['COORDINACIÓN PARTIDO', 2]];
+
+// Crea las reglas cuyo turno ya existe (por nombre, sin importar mayúsculas ni tildes). Devuelve [creadas, turnos que faltan].
+function cargar_ratios(PDO $db, array $ratios = RATIOS_RESIDENCIA): array
+{
+    $hors = [];
+    foreach ($db->query('SELECT id, nombre FROM horarios WHERE activo = 1') as $h) $hors[normalizar($h['nombre'])] = (int)$h['id'];
+    $creadas = $faltan = [];
+    foreach ($ratios as $nombre => [$turno, $min]) {
+        $hid = $hors[normalizar($turno)] ?? null;
+        if (!$hid) { $faltan[] = $turno; continue; }
+        if (consulta($db, 'SELECT 1 FROM necesidades WHERE nombre = ?', [$nombre])->fetchColumn()) continue;
+        consulta($db, 'INSERT INTO necesidades (nombre, horario_id, puesto_id, dia, personas) VALUES (?, ?, NULL, 0, ?)', [$nombre, $hid, $min]);
+        $creadas[] = $nombre;
+    }
+    return [$creadas, $faltan];
+}
+
+// Cron: si hoy o mañana no se llega al ratio (bajas, vacaciones…), avisa a administración una vez por día y turno.
+function revisar_ratios(PDO $db, ?string $ahora = null): int
+{
+    $ahora ??= ahora();
+    $personas = $db->query("SELECT * FROM usuarios WHERE activo = 1 AND rol IN ('empleado','responsable','admin')")->fetchAll();
+    if (!$personas || !$db->query('SELECT 1 FROM necesidades WHERE activo = 1 LIMIT 1')->fetchColumn()) return 0;
+    $hoy = local($ahora, 'Y-m-d');
+    $manana = date('Y-m-d', strtotime("$hoy +1 day"));
+    $hors = horarios($db);
+    $pn = puestos($db);
+    $admins = array_map('intval', $db->query("SELECT id FROM usuarios WHERE rol = 'admin' AND activo = 1")->fetchAll(PDO::FETCH_COLUMN));
+    $n = 0;
+    $lineas = [];
+    foreach (huecos($db, $personas, $hoy, $manana) as [$f, $h, $p, $faltan]) {
+        $txt = ($f === $hoy ? 'Hoy' : 'Mañana') . ' faltan ' . $faltan . ' en ' . ($hors[$h]['nombre'] ?? 'turno') . ($p ? ' (' . ($pn[$p] ?? '') . ')' : '') . ' para llegar al mínimo.';
+        $nuevo = false;
+        foreach ($admins as $a) $nuevo = notificar($db, $a, "ratio:$f:$h:" . ($p ?? '') . ":$faltan", $txt, 'planificacion&semana=' . $f) || $nuevo;
+        if ($nuevo) { $n++; $lineas[] = $txt; }
+    }
+    if ($lineas) avisar_administracion('INDA: no se llega al mínimo de personal', implode("\n", $lineas) . "\n\n" . rtrim(config()['url'] ?? '', '/') . '/?p=planificacion');
+    return $n;
 }
