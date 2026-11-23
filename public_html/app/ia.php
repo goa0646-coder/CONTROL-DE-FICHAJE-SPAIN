@@ -21,6 +21,12 @@ const IA_ESQUEMAS = [
         'descanso_entre_jornadas_h' => ['type' => 'NUMBER', 'nullable' => true],
         'otras_reglas' => ['type' => 'ARRAY', 'items' => ['type' => 'STRING'], 'description' => 'Otras reglas de jornada, permisos o turnos, con su artículo'],
     ], 'required' => ['nombre', 'vacaciones_tipo', 'otras_reglas']],
+    'nomina' => ['type' => 'OBJECT', 'properties' => [
+        'nombre' => ['type' => 'STRING', 'description' => 'Nombre y apellidos del trabajador'],
+        'dni' => ['type' => 'STRING', 'description' => 'DNI o NIE del trabajador (no el CIF de la empresa)'],
+        'periodo' => ['type' => 'STRING', 'description' => 'Mes de la nómina en formato AAAA-MM'],
+        'es_nomina' => ['type' => 'BOOLEAN', 'description' => 'true si la página es una nómina o recibo de salarios'],
+    ], 'required' => ['nombre', 'dni', 'periodo', 'es_nomina']],
     'festivos' => ['type' => 'OBJECT', 'properties' => [
         'festivos' => ['type' => 'ARRAY', 'items' => ['type' => 'OBJECT', 'properties' => [
             'fecha' => ['type' => 'STRING', 'description' => 'AAAA-MM-DD'], 'nombre' => ['type' => 'STRING'],
@@ -32,6 +38,7 @@ const IA_ESQUEMAS = [
 const IA_INSTRUCCIONES = [
     'dni' => 'Lee este documento de identidad español (DNI o NIE). Devuelve solo los datos que veas con claridad; si un dato no se lee, déjalo vacío. No inventes nada.',
     'convenio' => 'Eres experto en derecho laboral español. Lee este convenio colectivo y extrae las reglas de jornada. Usa null si el convenio no lo regula. No apliques el Estatuto de los Trabajadores por tu cuenta: solo lo que diga el texto.',
+    'nomina' => 'Esta página es parte de un PDF de nóminas españolas. Devuelve el nombre, el DNI/NIE del TRABAJADOR (no el CIF de la empresa) y el mes de liquidación. Si la página no es una nómina (portada, resumen, continuación sin datos), es_nomina = false. No inventes datos.',
     'festivos' => 'Lee este calendario laboral oficial y lista todos los días festivos que aparezcan, con su fecha y ámbito. No añadas festivos que no estén en el documento.',
 ];
 
@@ -86,6 +93,11 @@ function ia_validar(string $tarea, array $d): array
         $dni = strtoupper(preg_replace('/[^0-9A-Za-z]/', '', (string)($d['dni'] ?? '')));
         return ['nombre' => trim((string)($d['nombre'] ?? '')), 'apellidos' => trim((string)($d['apellidos'] ?? '')),
             'dni' => $dni, 'dni_valido' => dni_valido($dni), 'caducidad' => $fecha($d['caducidad'] ?? '')];
+    }
+    if ($tarea === 'nomina') {
+        $dni = strtoupper(preg_replace('/[^0-9A-Za-z]/', '', (string)($d['dni'] ?? '')));
+        $per = preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', (string)($d['periodo'] ?? '')) ? $d['periodo'] : '';
+        return ['nombre' => trim((string)($d['nombre'] ?? '')), 'dni' => dni_valido($dni) ? $dni : '', 'periodo' => $per, 'es_nomina' => !empty($d['es_nomina'])];
     }
     if ($tarea === 'festivos') {
         $out = [];

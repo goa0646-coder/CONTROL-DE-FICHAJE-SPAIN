@@ -14,6 +14,7 @@ const ICONOS = [
     'informes' => '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
     'planificacion' => '<rect x="3.5" y="3.5" width="17" height="17" rx="3"/><path d="M3.5 9.5h17M9.5 3.5v17"/>',
     'necesidades' => '<path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/>',
+    'nominas' => '<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 9.5h17M7.5 14h4M7.5 16.5h2.5"/><circle cx="16" cy="15" r="1.6"/>',
     'admin' => '<path d="M4 21V7l8-4 8 4v14"/><path d="M9 21v-6h6v6M9 10h.01M15 10h.01"/>',
     'usuarios' => '<circle cx="10" cy="8" r="4"/><path d="M3 21c.9-4 3.8-6 7-6 1.5 0 2.9.4 4 1.2M18 15v6M15 18h6"/>',
     'horarios' => '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/>',
@@ -43,16 +44,29 @@ function menu_de(array $u): array
     if ($r !== 'empleado') $e['equipo'] = $r === 'responsable' ? 'Mi equipo' : 'Personas';
     if (puede($u, 'informes')) $e['informes'] = 'Informes';
     if (puede($u, 'planificar') && $r !== 'empleado') $e += ['planificacion' => 'Planificación', 'necesidades' => 'Necesidades'];
-    if ($e) $g['Equipo'] = $e;
     $a = [];
+    if (puede($u, 'documentos') && $r !== 'empleado') $e['nominas'] = 'Nóminas';
+    if ($e) $g['Equipo'] = $e;
     if ($r === 'admin') $a = ['admin' => 'Empresa', 'usuarios' => 'Usuarios', 'horarios' => 'Horarios', 'quioscos' => 'Quioscos'];
     if (in_array($r, ['admin', 'inspeccion'], true)) $a['auditoria'] = 'Auditoría';
     if ($a) $g['Administración'] = $a;
     return $g;
 }
 
+// URL del logo de la empresa (con la fecha de subida para que el navegador no use uno viejo), o null.
+function logo_empresa(): ?string
+{
+    try {
+        $n = ajuste(db(), 'logo');
+    } catch (Throwable) {
+        return null; // sin BD todavía (asistente)
+    }
+    return $n ? '?p=logo&v=' . substr($n, 0, 8) : null;
+}
+
 function cabecera(string $titulo, ?array $u = null): void
 {
+    $logo = logo_empresa();
     $grupos = $u ? menu_de($u) : [];
     $actual = $_GET['p'] ?? '';
     $n = $u ? avisos_sin_leer(db(), (int)$u['id']) : 0;
@@ -82,6 +96,7 @@ function cabecera(string $titulo, ?array $u = null): void
 <body class="<?= $u ? 'con-menu' : 'sin-menu' ?>">
 <?php if ($u): ?>
 <aside class="lateral" id="menu" aria-label="Menú">
+  <?php if ($logo): ?><a class="logo-empresa" href="?"><img src="<?= e($logo) ?>" alt="Logo de la empresa"></a><?php endif ?>
   <a class="logo" href="?"><img src="assets/icono.svg" alt=""> INDA</a>
   <?php foreach ($grupos as $g => $items): ?>
   <p class="grupo"><?= e($g) ?></p>
@@ -107,7 +122,11 @@ function cabecera(string $titulo, ?array $u = null): void
 </nav>
 <?php endif ?>
 <main>
-<?php if (!$u): ?><p class="marca-grande"><img src="assets/icono.svg" alt=""> INDA</p><?php endif ?>
+<?php if (!$u): ?>
+<?php if ($logo): ?><p class="logo-entrada"><img src="<?= e($logo) ?>" alt="Logo de la empresa"></p><?php endif ?>
+<p class="marca-grande<?= $logo ? ' pequena' : '' ?>"><img src="assets/icono.svg" alt=""> INDA</p>
+<?php endif ?>
+<?php if ($logo): ?><p class="solo-imprimir logo-impreso"><img src="<?= e($logo) ?>" alt=""></p><?php endif ?>
 <h1><?= e($titulo) ?></h1>
 <?php if ($aviso): ?><p class="aviso <?= e($aviso[1]) ?>" role="status"><?= e($aviso[0]) ?></p><?php endif ?>
 <?php

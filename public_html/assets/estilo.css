@@ -214,3 +214,13 @@ td .filtros { margin: 0; }
 td:first-child { white-space: nowrap; }
 .sin-menu .tarjeta form > button:not(.secundario), .sin-menu form.tarjeta > button:not(.secundario) { width: 100%; }
 .tarjeta.centro ~ .aviso, .tarjeta.centro ~ .tarjeta.centro { max-width: 28rem; margin-left: auto; margin-right: auto; }
+.acciones { white-space: nowrap; } .acciones a { margin-right: .6rem; }
+.logo-empresa { display: block; padding: .2rem .6rem .8rem; }
+.logo-empresa img { display: block; max-width: 100%; max-height: 64px; object-fit: contain; }
+.logo-entrada { text-align: center; margin: 0 0 1.2rem; }
+.logo-entrada img { max-width: 240px; max-height: 110px; object-fit: contain; }
+.marca-grande.pequena { font-size: 1.1rem; gap: .45rem; color: var(--gris); }
+.marca-grande.pequena img { width: 26px; height: 26px; border-radius: 7px; box-shadow: none; }
+.logo-impreso img { max-height: 50px; }
+@media (max-width: 860px) { .lateral .logo-empresa { display: none; } }
+select.falta { border-color: var(--rojo); }

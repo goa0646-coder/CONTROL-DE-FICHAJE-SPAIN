@@ -31,6 +31,21 @@ function firmar_documento(PDO $db, array $u, int $id, string $clave): string
     return $hash;
 }
 
+// ¿De quién es esta nómina? Primero por DNI (exacto) y, si no, por nombre completo (mismas palabras, en cualquier orden).
+function emparejar_nomina(array $d, array $personas): ?array
+{
+    if ($d['dni'] !== '') foreach ($personas as $p) if (strtoupper($p['dni']) === $d['dni']) return ['uid' => (int)$p['id'], 'por' => 'dni'];
+    $palabras = fn($s) => array_filter(explode(' ', preg_replace('/[^\p{L}\p{N}]+/u', ' ', normalizar($s))), fn($w) => strlen($w) > 2); // «NÚÑEZ, JOSÉ» también vale
+    $leido = $palabras($d['nombre']);
+    if (!$leido) return null;
+    $hay = [];
+    foreach ($personas as $p) {
+        $suyo = $palabras(nombre($p));
+        if ($suyo && !array_diff($suyo, $leido)) $hay[] = (int)$p['id'];
+    }
+    return count($hay) === 1 ? ['uid' => $hay[0], 'por' => 'nombre'] : null; // dos posibles = que elija el admin
+}
+
 function comunicados_para(PDO $db, array $u): array
 {
     return consulta($db, 'SELECT c.*, a.nombre AS autor, l.leido_utc FROM comunicados c JOIN usuarios a ON a.id = c.autor_id
