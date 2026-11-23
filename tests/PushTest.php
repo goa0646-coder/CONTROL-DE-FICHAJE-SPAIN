@@ -12,7 +12,11 @@ class PushTest extends Base
         $raw = base64_decode(strtr($firma, '-_', '+/') . str_repeat('=', (4 - strlen($firma) % 4) % 4));
         $this->assertSame(64, strlen($raw));
         // r||s → DER para comprobarla con OpenSSL.
-        $int = fn($b) => "\x02" . chr(strlen($b = (ord($b[0]) & 0x80 ? "\0" : '') . ltrim($b, "\0") ?: "\0")) . $b;
+        $int = function (string $b): string {
+            $b = ltrim($b, "\0") ?: "\0";            // primero quitar ceros a la izquierda…
+            if (ord($b[0]) & 0x80) $b = "\0$b";       // …y luego evitar que se lea como negativo
+            return "\x02" . chr(strlen($b)) . $b;
+        };
         $seq = $int(substr($raw, 0, 32)) . $int(substr($raw, 32));
         $der = "\x30" . chr(strlen($seq)) . $seq;
         $this->assertSame(1, openssl_verify("$h.$c", $der, openssl_pkey_get_details(openssl_pkey_get_private($pem))['key'], OPENSSL_ALGO_SHA256));
