@@ -47,7 +47,9 @@ function registrar_fichaje(PDO $db, array $u, string $tipo, string $origen, arra
             $f['motivo_id'] = $m->fetchColumn() ?: throw new DomainException('Motivo de pausa no válido.');
         }
         $gps = null;
-        if ($origen === 'quiosco' || $origen === 'qr') {
+        if ($origen === 'automatico') {
+            // Cierre automático de INDA: sin GPS ni IP (no lo hace la persona).
+        } elseif ($origen === 'quiosco' || $origen === 'qr') {
             $f['centro_id'] = $d['quiosco']['centro_id'];
             $f['quiosco_id'] = $d['quiosco']['id'];
         } else {

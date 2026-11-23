@@ -112,7 +112,7 @@ cabecera($propio ? 'Mi registro' : 'Registro de ' . nombre($u), $yo);
   <?php foreach ($fichajes as $f): ?>
   <tr class="<?= $f['anulado'] ? 'anulado' : '' ?>">
     <td><?= local($f['momento_utc'], 'd/m/Y H:i:s') ?></td><td><?= TIPOS[$f['tipo']] ?><?= $f['motivo'] ? ' · ' . e($f['motivo']) : '' ?></td>
-    <td><?= e($f['origen']) ?><?= $f['correccion_id'] ? ' nº' . e($f['correccion_id']) : '' ?></td>
+    <td><?= $f['origen'] === 'automatico' ? '<span class="pildora pendiente">Automática</span>' : e($f['origen']) ?><?= $f['correccion_id'] ? ' nº' . e($f['correccion_id']) : '' ?></td>
     <td><?= e($f['zona'] ?? '') ?></td>
     <td class="no-imprimir"><?= $f['anulado'] ? 'anulado' : ($propio && $yo['rol'] !== 'inspeccion' ? '<a href="?p=correcciones&f=' . e($f['id']) . '">Corregir</a>' : '') ?></td>
   </tr>
