@@ -69,6 +69,11 @@ $sin_leer = consulta(db(), 'SELECT c.id, c.titulo FROM comunicados c WHERE (c.ce
     · Llevas <?= horas($trabajado) ?> h</p>
   <?php if ($modo !== 'no'): ?><p class="nota">Se guardará tu ubicación solo al fichar<?= $modo === 'opcional' ? ' (si la permites)' : '' ?>.</p><?php endif ?>
 </div>
+<div class="tarjeta centro" data-instalar hidden>
+  <p>Instala INDA en tu teléfono y ficha con un toque, como una app.</p>
+  <button type="button" data-instalar-boton>Instalar INDA</button>
+  <p class="nota" data-ios hidden>En iPhone: pulsa <strong>Compartir</strong> y después <strong>«Añadir a pantalla de inicio»</strong>.</p>
+</div>
 <?php foreach ($sin_leer as $c): ?>
 <p class="aviso ok"><a href="?p=comunicados#c<?= e($c['id']) ?>">📣 <?= e($c['titulo']) ?></a></p>
 <?php endforeach;

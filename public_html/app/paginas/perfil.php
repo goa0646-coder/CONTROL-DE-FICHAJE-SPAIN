@@ -8,8 +8,9 @@ if (es_post()) {
             if (!password_verify($_POST['actual'] ?? '', $u['password_hash'])) throw new DomainException('La contraseña actual no es correcta.');
             if (strlen($_POST['nueva'] ?? '') < 8) throw new DomainException('La nueva contraseña debe tener al menos 8 caracteres.');
             consulta(db(), 'UPDATE usuarios SET password_hash = ? WHERE id = ?', [password_hash($_POST['nueva'], PASSWORD_DEFAULT), $u['id']]);
+            cerrar_dispositivos(db(), (int)$u['id'], $_COOKIE[DISPOSITIVO_COOKIE] ?? '');
             auditar(db(), (int)$u['id'], 'cambio_clave');
-            aviso('Contraseña cambiada.');
+            aviso('Contraseña cambiada. Se han cerrado las sesiones de tus otros dispositivos.');
         } elseif ($que === 'push') {
             suscribir_push(db(), (int)$u['id'], (string)($_POST['endpoint'] ?? ''));
             exit('ok');
@@ -17,6 +18,10 @@ if (es_post()) {
             $alcance = $u['rol'] === 'admin' && ($_POST['alcance'] ?? '') === 'lectura' ? 'lectura' : 'personal';
             $_SESSION['token_nuevo'] = crear_token(db(), (int)$u['id'], trim($_POST['nombre'] ?? ''), $alcance);
             auditar(db(), (int)$u['id'], 'token_creado', $alcance);
+        } elseif ($que === 'cerrar_dispositivo') {
+            consulta(db(), 'UPDATE dispositivos SET activo = 0 WHERE id = ? AND usuario_id = ?', [(int)$_POST['id'], $u['id']]);
+            auditar(db(), (int)$u['id'], 'dispositivo_cerrado', 'dispositivo=' . (int)$_POST['id']);
+            aviso('Sesión cerrada en ese dispositivo.');
         } elseif ($que === 'revocar') {
             consulta(db(), 'UPDATE tokens_api SET activo = 0 WHERE id = ? AND usuario_id = ?', [(int)$_POST['id'], $u['id']]);
             auditar(db(), (int)$u['id'], 'token_revocado', 'token=' . (int)$_POST['id']);
@@ -30,6 +35,8 @@ if (es_post()) {
 }
 $token_nuevo = $_SESSION['token_nuevo'] ?? null;
 unset($_SESSION['token_nuevo']);
+$actual = hash('sha256', $_COOKIE[DISPOSITIVO_COOKIE] ?? '');
+$dispositivos = consulta(db(), 'SELECT * FROM dispositivos WHERE usuario_id = ? AND activo = 1 ORDER BY usado_utc DESC', [$u['id']])->fetchAll();
 $tokens = consulta(db(), 'SELECT * FROM tokens_api WHERE usuario_id = ? AND activo = 1 ORDER BY id DESC', [$u['id']])->fetchAll();
 $c = $u['centro_id'] ? centro(db(), (int)$u['centro_id']) : null;
 $jefe = $u['responsable_id'] ? usuario(db(), (int)$u['responsable_id']) : null;
@@ -52,6 +59,19 @@ cabecera('Mi perfil', $u);
   <label>Nueva (mínimo 8) <input type="password" name="nueva" required minlength="8" autocomplete="new-password"></label>
   <button name="que" value="clave">Guardar</button>
 </form>
+
+<?php if ($dispositivos): ?>
+<div class="tarjeta">
+  <h2>Dispositivos con la sesión abierta</h2>
+  <table>
+    <?php foreach ($dispositivos as $d): ?>
+    <tr><td><?= e($d['nombre'] ?: 'Dispositivo') ?><?= hash_equals($d['token_hash'], $actual) ? ' <strong>(este)</strong>' : '' ?></td><td>Último uso <?= local($d['usado_utc']) ?></td>
+      <td><form method="post"><?= csrf_campo() ?><input type="hidden" name="id" value="<?= e($d['id']) ?>"><button name="que" value="cerrar_dispositivo" class="secundario">Cerrar sesión</button></form></td></tr>
+    <?php endforeach ?>
+  </table>
+  <p class="nota">Si pierdes el móvil, cierra aquí su sesión (o cambia la contraseña).</p>
+</div>
+<?php endif ?>
 
 <div class="tarjeta">
   <h2>Avisos en este dispositivo</h2>

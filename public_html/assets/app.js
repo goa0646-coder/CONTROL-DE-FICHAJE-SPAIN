@@ -1,3 +1,8 @@
+document.documentElement.classList.add('js');
+for (const b of document.querySelectorAll('.menu-boton')) b.addEventListener('click', () => {
+  const abierto = b.closest('nav').classList.toggle('abierto');
+  b.setAttribute('aria-expanded', abierto);
+});
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 
 // Reloj en hora de Madrid
@@ -75,4 +80,20 @@ if (window.qrcode) {
     const pide = () => fetch('?p=quiosco&codigo=1').then(r => r.json()).then(d => pintaQr(el, d.url)).catch(() => { el.textContent = 'Sin conexión'; });
     pide(); setInterval(pide, 20000);
   }
+}
+
+// Instalar INDA como app (Android/Chrome: botón; iPhone: instrucciones). No se muestra si ya está instalada.
+const instalada = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+const cajaInstalar = document.querySelector('[data-instalar]');
+if (cajaInstalar && !instalada) {
+  if (/iPhone|iPad/.test(navigator.userAgent)) {
+    cajaInstalar.hidden = false;
+    cajaInstalar.querySelector('[data-instalar-boton]').hidden = true;
+    cajaInstalar.querySelector('[data-ios]').hidden = false;
+  }
+  addEventListener('beforeinstallprompt', ev => {
+    ev.preventDefault();
+    cajaInstalar.hidden = false;
+    cajaInstalar.querySelector('[data-instalar-boton]').onclick = async () => { ev.prompt(); await ev.userChoice; cajaInstalar.hidden = true; };
+  });
 }

@@ -7,6 +7,7 @@ if (es_post()) {
     }
     session_regenerate_id(true);
     $_SESSION['uid'] = $r['id'];
+    if (isset($_POST['recordar']) && ($t = crear_dispositivo(db(), $r, $_SERVER['HTTP_USER_AGENT'] ?? ''))) poner_cookie_dispositivo($t);
     auditar(db(), (int)$r['id'], 'login');
     $volver = $_SESSION['volver'] ?? [];
     unset($_SESSION['volver']);
@@ -19,6 +20,8 @@ cabecera('Entrar');
   <?= csrf_campo() ?>
   <label>Email <input type="email" name="email" required autocomplete="username"></label>
   <label>Contraseña <input type="password" name="clave" required autocomplete="current-password"></label>
+  <label><input type="checkbox" name="recordar" checked> Mantener la sesión abierta en este dispositivo</label>
+  <p class="nota">Desmárcalo en ordenadores compartidos.</p>
   <button>Entrar</button>
   <p><a href="?p=recuperar">¿Has olvidado la contraseña?</a></p>
 </form>

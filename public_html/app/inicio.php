@@ -142,8 +142,26 @@ function usuario_actual(): ?array
     static $u = false;
     if ($u !== false) return $u;
     $u = isset($_SESSION['uid']) ? usuario(db(), (int)$_SESSION['uid']) : null;
+    // Sin sesión pero con el teléfono recordado: entra solo (como una app).
+    if (!$u && ($t = $_COOKIE[DISPOSITIVO_COOKIE] ?? '') !== '') {
+        $u = usuario_por_dispositivo(db(), $t);
+        if ($u) {
+            session_regenerate_id(true);
+            $_SESSION['uid'] = $u['id'];
+            poner_cookie_dispositivo($t);
+        } else {
+            poner_cookie_dispositivo('');
+        }
+    }
     if ($u && !acceso_vigente($u)) $u = null;
     return $u;
+}
+
+function poner_cookie_dispositivo(string $t): void
+{
+    if (headers_sent()) return;
+    setcookie(DISPOSITIVO_COOKIE, $t, ['expires' => $t === '' ? 1 : time() + DISPOSITIVO_DIAS * 86400, 'path' => '/',
+        'httponly' => true, 'secure' => !empty($_SERVER['HTTPS']), 'samesite' => 'Lax']);
 }
 
 function requiere(string ...$roles): array

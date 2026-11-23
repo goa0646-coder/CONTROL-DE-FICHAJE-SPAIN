@@ -26,12 +26,16 @@ function cabecera(string $titulo, ?array $u = null): void
 <meta name="theme-color" content="#1d4ed8">
 <link rel="manifest" href="assets/manifest.json">
 <link rel="icon" href="assets/icono.svg">
+<link rel="apple-touch-icon" href="assets/icono-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="INDA">
 <link rel="stylesheet" href="assets/estilo.css">
+<script>document.documentElement.classList.add('js')</script>
 <title><?= e($titulo) ?> · INDA</title>
 </head>
 <body>
 <?php if ($menu): ?>
-<nav><span class="marca">INDA</span><?php foreach ($menu as $p => $txt): ?><a href="?p=<?= $p ?>"<?= ($_GET['p'] ?? '') === $p ? ' class="activo"' : '' ?>><?= e($txt) ?></a><?php endforeach ?></nav>
+<nav><span class="marca">INDA</span><button type="button" class="menu-boton" aria-expanded="false" aria-controls="menu">☰ Menú</button><span id="menu"><?php foreach ($menu as $p => $txt): ?><a href="?p=<?= $p ?>"<?= ($_GET['p'] ?? '') === $p ? ' class="activo"' : '' ?>><?= e($txt) ?></a><?php endforeach ?></span></nav>
 <?php endif ?>
 <main>
 <?php if (!$menu): ?><p class="marca-grande">INDA</p><?php endif ?>
@@ -48,7 +52,11 @@ function botones_fichaje(string $estado): string
     foreach (PERMITIDOS[$estado] as $t) {
         $motivos = $t === 'pausa_inicio' ? db()->query('SELECT id, nombre FROM motivos_pausa WHERE activo = 1 ORDER BY nombre')->fetchAll(PDO::FETCH_KEY_PAIR) : [];
         if (!$motivos) $html .= '<button class="grande ' . $t . '" name="tipo" value="' . $t . '">' . $txt[$t] . '</button>';
-        foreach ($motivos as $id => $m) $html .= '<button class="grande ' . $t . '" name="tipo" value="' . $t . '|' . e($id) . '">Pausa: ' . e($m) . '</button>';
+        if ($motivos) {
+            $html .= '<p class="nota">Empezar pausa:</p><div class="pausas">';
+            foreach ($motivos as $id => $m) $html .= '<button class="' . $t . '" name="tipo" value="' . $t . '|' . e($id) . '">' . e($m) . '</button>';
+            $html .= '</div>';
+        }
     }
     return $html;
 }

@@ -45,7 +45,8 @@ Justificantes y documentos se guardan en la carpeta `inda-archivos`, **junto a**
 2. **Horarios**: crea los horarios (y los turnos, que son horarios con otro nombre), los festivos del año, los motivos de pausa y los tipos de ausencia.
 3. **Usuarios**: da de alta a las personas con su centro, departamento, horario y responsable. Para el quiosco, ponles nº de empleado y PIN.
 4. **Quioscos**: entra como admin **desde la tablet de la entrada** y pulsa «Activar quiosco aquí». La tablet muestra también un QR que cambia cada 30 s para fichar con el móvil.
-5. En el móvil: abre la web → menú del navegador → «Añadir a pantalla de inicio». En **Perfil → Activar avisos** cada persona recibe los avisos en el móvil.
+5. **Cada persona en su móvil** (sin QR ni tablet): abre `https://inda.miempresa.com`, entra una vez con «Mantener la sesión abierta» marcado y pulsa **Instalar INDA** (Android) o Compartir → «Añadir a pantalla de inicio» (iPhone). Desde entonces abre INDA como una app y ficha con un toque, sin contraseña, durante un año. Si pierde el móvil: Perfil → Dispositivos → Cerrar sesión (o cambiar la contraseña). Dar de baja a la persona cierra todas sus sesiones.
+6. En **Perfil → Activar avisos** cada persona recibe los avisos en el móvil.
 
 ## 7. Opcional
 - **Cartel QR fijo** por centro: Empresa → Centros → «Cartel QR» → Imprimir.

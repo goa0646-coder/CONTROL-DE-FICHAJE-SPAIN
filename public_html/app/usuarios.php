@@ -60,6 +60,51 @@ function puede(array $u, string $permiso): bool
     return in_array("{$u['rol']}:$permiso", $tabla, true);
 }
 
+// --- Sesión mantenida en el dispositivo (móvil) ---
+
+const DISPOSITIVO_COOKIE = 'inda_dispositivo';
+const DISPOSITIVO_DIAS = 365;
+
+function nombre_dispositivo(string $ua): string
+{
+    $so = match (true) {
+        str_contains($ua, 'iPhone') => 'iPhone', str_contains($ua, 'iPad') => 'iPad', str_contains($ua, 'Android') => 'Android',
+        str_contains($ua, 'Windows') => 'Windows', str_contains($ua, 'Mac OS') => 'Mac', str_contains($ua, 'Linux') => 'Linux', default => 'Dispositivo',
+    };
+    $nav = match (true) {
+        str_contains($ua, 'Edg/') => 'Edge', str_contains($ua, 'Firefox') => 'Firefox', str_contains($ua, 'Chrome') => 'Chrome', str_contains($ua, 'Safari') => 'Safari', default => '',
+    };
+    return trim("$so $nav");
+}
+
+// Crea el token del dispositivo y lo devuelve (va en la cookie). La Inspección no lo puede usar.
+function crear_dispositivo(PDO $db, array $u, string $ua = ''): ?string
+{
+    if ($u['rol'] === 'inspeccion') return null;
+    $t = bin2hex(random_bytes(32));
+    consulta($db, 'INSERT INTO dispositivos (usuario_id, token_hash, nombre, creado_utc, usado_utc) VALUES (?, ?, ?, ?, ?)',
+        [$u['id'], hash('sha256', $t), nombre_dispositivo($ua), ahora(), ahora()]);
+    return $t;
+}
+
+// Usuario del token si sigue activo, no ha caducado y la persona sigue de alta.
+function usuario_por_dispositivo(PDO $db, string $t): ?array
+{
+    if ($t === '') return null;
+    $d = consulta($db, 'SELECT * FROM dispositivos WHERE token_hash = ? AND activo = 1 AND usado_utc > ?',
+        [hash('sha256', $t), gmdate('Y-m-d H:i:s', time() - DISPOSITIVO_DIAS * 86400)])->fetch();
+    $u = $d ? usuario($db, (int)$d['usuario_id']) : null;
+    if (!$u || !acceso_vigente($u) || $u['rol'] === 'inspeccion') return null;
+    consulta($db, 'UPDATE dispositivos SET usado_utc = ? WHERE id = ?', [ahora(), $d['id']]);
+    return $u;
+}
+
+// Cierra las sesiones guardadas de una persona (todas o menos la del token indicado).
+function cerrar_dispositivos(PDO $db, int $uid, string $salvo = ''): void
+{
+    consulta($db, 'UPDATE dispositivos SET activo = 0 WHERE usuario_id = ? AND token_hash <> ?', [$uid, $salvo === '' ? '' : hash('sha256', $salvo)]);
+}
+
 function login(PDO $db, string $email, string $clave): array|string
 {
     $email = mb_strtolower(trim($email));

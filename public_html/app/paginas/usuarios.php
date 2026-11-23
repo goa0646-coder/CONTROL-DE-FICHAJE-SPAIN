@@ -70,6 +70,8 @@ if (es_post()) {
         aviso($e->getCode() == 23000 ? 'Ese email o nº de empleado ya existe.' : 'No se pudo guardar.', 'error');
         redirigir('usuarios', $id ? ['u' => $id] : []);
     }
+    // Contraseña nueva puesta por el admin o baja: fuera las sesiones guardadas de esa persona.
+    if (isset($campos['password_hash']) || !$activo) cerrar_dispositivos(db(), $id);
     auditar(db(), (int)$yo['id'], 'usuario_guardado', "usuario=$id rol={$campos['rol']} activo=$activo");
     aviso('Guardado.');
     redirigir('usuarios');

@@ -100,6 +100,8 @@ Reglas de cálculo:
 - **Fase 6 – Portal** (`006`): `documentos` + `documentos_firmas` (hash del archivo + contraseña), `comunicados` + `comunicados_leidos`, `suscripciones_push` y `ajustes` (claves VAPID). Push sin contenido: el service worker pide a INDA el último aviso.
 - **Fase 7 – Extras** (`007`): origen `qr`/`api`/`chat`; `tokens_api` (personal para extensión y chat; lectura para gestoría); `permisos_rol` (informes, planificar, documentos, comunicados). QR del quiosco cambia cada 30 s (HMAC del token del quiosco); cartel fijo por centro. Slack (firma v0) y Teams (HMAC). Entrar con Google o Microsoft (OIDC; Microsoft exige el ID del directorio).
 
+**Fichar desde el móvil como una app** (`008`): PWA instalable; al entrar con «mantener la sesión» se guarda en `dispositivos` el hash de un token y el móvil recibe una cookie `inda_dispositivo` (HttpOnly, 1 año, se renueva con el uso). Se cierra al salir, desde Perfil, al cambiar la contraseña o al dar de baja. Inspección no puede mantener sesión. Activar un quiosco borra la sesión guardada del admin en esa tablet.
+
 Archivos (justificantes, documentos): fuera de `public_html` (`inda-archivos`), nombre aleatorio, se sirven por `?p=archivo` comprobando permiso.
 
 ## 7. Técnica
