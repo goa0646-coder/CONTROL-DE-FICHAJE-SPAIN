@@ -76,9 +76,9 @@ if (es_post()) {
             $dias = ($_POST['dias_anuales'] ?? '') === '' ? null : max(0, (float)str_replace(',', '.', $_POST['dias_anuales']));
             $color = preg_match('/^#[0-9a-f]{6}$/i', $_POST['color'] ?? '') ? $_POST['color'] : '#2563eb';
             $d = [$nombre, isset($_POST['por_horas']) ? 1 : 0, isset($_POST['retribuida']) ? 1 : 0, $dias, isset($_POST['justificante']) ? 1 : 0, $color,
-                isset($_POST['activo']) || empty($_POST['id']) ? 1 : 0];
-            if ($id = (int)($_POST['id'] ?? 0)) consulta(db(), 'UPDATE tipos_ausencia SET nombre=?, por_horas=?, retribuida=?, dias_anuales=?, justificante=?, color=?, activo=? WHERE id=?', [...$d, $id]);
-            else consulta(db(), 'INSERT INTO tipos_ausencia (nombre, por_horas, retribuida, dias_anuales, justificante, color, activo) VALUES (?, ?, ?, ?, ?, ?, ?)', $d);
+                isset($_POST['activo']) || empty($_POST['id']) ? 1 : 0, ($_POST['computo'] ?? '') === 'naturales' ? 'naturales' : 'laborables'];
+            if ($id = (int)($_POST['id'] ?? 0)) consulta(db(), 'UPDATE tipos_ausencia SET nombre=?, por_horas=?, retribuida=?, dias_anuales=?, justificante=?, color=?, activo=?, computo=? WHERE id=?', [...$d, $id]);
+            else consulta(db(), 'INSERT INTO tipos_ausencia (nombre, por_horas, retribuida, dias_anuales, justificante, color, activo, computo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', $d);
             auditar(db(), (int)$yo['id'], 'tipo_ausencia_guardado', $nombre);
         }
         aviso('Guardado.');
@@ -182,6 +182,7 @@ cabecera('Horarios, festivos y ausencias', $yo);
   <label><input type="checkbox" name="por_horas" <?= $t['por_horas'] ? 'checked' : '' ?>> Por horas</label>
   <label><input type="checkbox" name="retribuida" <?= $t['retribuida'] ? 'checked' : '' ?>> Retribuida</label>
   <label><input type="checkbox" name="justificante" <?= $t['justificante'] ? 'checked' : '' ?>> Pide justificante</label>
+  <label>Días <select name="computo"><?= opciones(['laborables' => 'laborables', 'naturales' => 'naturales'], $t['computo'] ?? 'laborables') ?></select></label>
   <?php if ($t['id']): ?><label><input type="checkbox" name="activo" <?= $t['activo'] ? 'checked' : '' ?>> Activo</label><?php endif ?>
   <button name="que" value="tipo" class="<?= $t['id'] ? 'secundario' : '' ?>"><?= $t['id'] ? 'Guardar' : 'Añadir' ?></button>
 </form>

@@ -16,6 +16,9 @@ require __DIR__ . '/informes.php';
 require __DIR__ . '/portal.php';
 require __DIR__ . '/api.php';
 require __DIR__ . '/ia.php';
+require __DIR__ . '/convenio.php';
+require __DIR__ . '/cuadrante.php';
+require __DIR__ . '/sustituciones.php';
 
 // config-inda.php vive fuera de public_html (ver INSTALAR.md).
 // config-fichaje.php se sigue aceptando para instalaciones antiguas.

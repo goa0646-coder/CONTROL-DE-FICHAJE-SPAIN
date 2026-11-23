@@ -39,9 +39,45 @@ function informe(PDO $db, array $personas, string $desde, string $hasta): array
         $abiertas = 0;
         foreach ($r['dias'] as $d) foreach ($d['jornadas'] as $j) $abiertas += $j['salida'] === null;
         $filas[] = ['persona' => $p, 'ausencias' => $aus, 'abiertas' => $abiertas,
-            'dias_trabajados' => count(array_filter($r['dias'], fn($d) => $d['trabajado'] > 0))] + $r['total'];
+            'dias_trabajados' => count(array_filter($r['dias'], fn($d) => $d['trabajado'] > 0))] + $r['total'] + extras_convenio($r['dias']);
     }
     return $filas;
+}
+
+// Retrasos sin justificar por mes, festivos y domingos trabajados, y turnos en Nochebuena/Navidad y Nochevieja/Año Nuevo.
+function extras_convenio(array $dias): array
+{
+    $retrasos = [];
+    $festivos = $domingos = $especiales = 0;
+    foreach ($dias as $f => $d) {
+        if (!$d['jornadas']) continue;
+        $primera = strtotime($d['jornadas'][0]['entrada'] . ' UTC');
+        $hora_ok = $d['entrada'] && !$d['flexible'] ? ts_local($f, $d['entrada']) + 60 * $d['margen'] : null;
+        // Sin justificar: no hay ausencia (p. ej. visita médica por horas) ese día.
+        if ($hora_ok && $primera > $hora_ok && !$d['ausencia']) $retrasos[substr($f, 0, 7)] = ($retrasos[substr($f, 0, 7)] ?? 0) + 1;
+        if ($d['festivo']) $festivos++;
+        if (date('N', strtotime($f)) == 7) $domingos++; // un turno de noche que empieza en domingo cuenta como domingo
+        foreach ([[substr($f, 0, 4) . '-12-24 22:00', substr($f, 0, 4) . '-12-25 22:00'], [substr($f, 0, 4) . '-12-31 22:00', (substr($f, 0, 4) + 1) . '-01-01 22:00'], [(substr($f, 0, 4) - 1) . '-12-31 22:00', substr($f, 0, 4) . '-01-01 22:00']] as [$a, $b]) {
+            [$a, $b] = [ts_local(substr($a, 0, 10), substr($a, 11)), ts_local(substr($b, 0, 10), substr($b, 11))];
+            foreach ($d['jornadas'] as $j) foreach ($j['tramos'] as [$x, $y]) if ($x < $b && $y > $a) {
+                $especiales++;
+                continue 3;
+            }
+        }
+    }
+    return ['retrasos' => $retrasos, 'festivos_trabajados' => $festivos, 'domingos' => $domingos, 'turnos_especiales' => $especiales];
+}
+
+// Clasificación del convenio para el peor mes: '' si no llega a leve.
+function nivel_retrasos(array $por_mes, array $r): string
+{
+    $max = $por_mes ? max($por_mes) : 0;
+    return match (true) {
+        $r['retrasos_muy_grave'] > 0 && $max >= $r['retrasos_muy_grave'] => 'muy grave',
+        $r['retrasos_grave'] > 0 && $max >= $r['retrasos_grave'] => 'grave',
+        $r['retrasos_leve'] > 0 && $max >= $r['retrasos_leve'] => 'leve',
+        default => '',
+    };
 }
 
 // Personas sobre las que $yo puede sacar informes.

@@ -105,6 +105,13 @@ Reglas de cálculo:
 
 **Lectura con IA** (`app/ia.php`, Google Gemini por REST, sin librerías): DNI (rellena el formulario, comprueba la letra), convenio (horas anuales, vacaciones, pausa, horas extra, descansos; se guarda en `ajustes.convenio`) y calendario laboral (festivos con ámbito). Respuesta en JSON con esquema y validada en PHP. Solo el admin, bajo petición, sin guardar el archivo. Clave en `config-inda.php`.
 
+**Convenio, cuadrante y sustituciones** (`009`; `convenio.php`, `cuadrante.php`, `sustituciones.php`):
+- Reglas en `ajustes.reglas` (por defecto, Estatuto). `comprobar_plan()` da *bloqueos* (descanso entre jornadas, jornada diaria, tope de horas extra) y *avisos* (descanso semanal de 36 h, domingo cada N semanas, media semanal, horas anuales). La planificación no se guarda si hay bloqueos. `comprobar_real()` revisa lo fichado (descanso entre días, pausa en jornadas de más de 6 h, pausa mínima en jornada partida, horas extra). Nada se puede saltar «con firma del trabajador»: el art. 3.5 ET lo hace nulo.
+- Plantilla `PLANTILLA_GALICIA_RESIDENCIAS` (VI Convenio de residencias privadas de Galicia, datos facilitados por la empresa).
+- Puestos y polivalencia (`puestos`, `usuarios_puestos`); necesidades por turno y puesto (`necesidades`). `generar_cuadrante()` es determinista: reglas duras + reparto justo (horas, fines de semana, noches). Se prueba en una transacción que se deshace y se publica con otra.
+- Huecos = necesidades no cubiertas (bajas, vacaciones). `candidatos()` simula cada opción con las reglas: horas extra voluntarias en el día libre (oferta → la persona acepta con código de un solo uso por email o, sin correo, con su contraseña; se guarda IP, método y hash del texto aceptado) o cambio de turno (aviso si hay menos de 5 días, art. 34.2). Fuerza mayor (art. 35.3) no cuenta en el tope anual. A igualdad, más antigüedad primero.
+- La IA no decide nada de esto: solo lee documentos.
+
 Archivos (justificantes, documentos): fuera de `public_html` (`inda-archivos`), nombre aleatorio, se sirven por `?p=archivo` comprobando permiso.
 
 ## 7. Técnica

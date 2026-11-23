@@ -22,20 +22,26 @@ function rango_fechas(string $desde, string $hasta): array
 function calendario_teorico(PDO $db, array $u, string $desde, string $hasta): array
 {
     $h = horarios($db);
-    $plan = consulta($db, 'SELECT fecha, horario_id FROM planificacion WHERE usuario_id = ? AND fecha BETWEEN ? AND ?', [$u['id'], $desde, $hasta])->fetchAll(PDO::FETCH_KEY_PAIR);
+    $plan = consulta($db, 'SELECT fecha, horario_id, extra, fuerza_mayor, puesto_id FROM planificacion WHERE usuario_id = ? AND fecha BETWEEN ? AND ?', [$u['id'], $desde, $hasta])->fetchAll(PDO::FETCH_UNIQUE);
     $fest = consulta($db, 'SELECT fecha, nombre FROM festivos WHERE (centro_id IS NULL OR centro_id = ?) AND fecha BETWEEN ? AND ?', [$u['centro_id'], $desde, $hasta])->fetchAll(PDO::FETCH_KEY_PAIR);
     $aus = ausencias_por_dia($db, (int)$u['id'], $desde, $hasta);
     $alta = local($u['alta_utc'], 'Y-m-d');
     $baja = $u['baja_utc'] ? local($u['baja_utc'], 'Y-m-d') : '9999-12-31';
     $out = [];
     foreach (rango_fechas($desde, $hasta) as $f) {
-        $hid = array_key_exists($f, $plan) ? $plan[$f] : (isset($fest[$f]) ? null : $u['horario_id']);
-        $dia = $hid ? ($h[$hid]['dias'][(int)date('N', strtotime($f))] ?? null) : null;
-        $min = ($dia && $f >= $alta && $f <= $baja) ? (int)$dia['minutos'] : 0;
+        $p = $plan[$f] ?? null;
+        $hid = $p ? $p['horario_id'] : (isset($fest[$f]) ? null : $u['horario_id']);
+        // Un turno planificado vale cualquier día: si su horario no define ese día, se usa su primer día definido.
+        $dia = $hid ? ($h[$hid]['dias'][(int)date('N', strtotime($f))] ?? ($p && $h[$hid]['dias'] ? reset($h[$hid]['dias']) : null)) : null;
+        $turno = ($dia && $f >= $alta && $f <= $baja) ? (int)$dia['minutos'] : 0;
         $a = $aus[$f] ?? null;
-        $min = $a ? ($a['minutos'] === null ? 0 : max(0, $min - $a['minutos'])) : $min;
+        $min = $a ? ($a['minutos'] === null ? 0 : max(0, $turno - $a['minutos'])) : $turno;
+        $extra = $p && $p['extra'] && !$a;
         $out[$f] = [
-            'horario' => $hid ? $h[$hid]['nombre'] : null, 'minutos' => $min,
+            'horario' => $hid ? $h[$hid]['nombre'] : null, 'horario_id' => $hid, 'puesto_id' => $p['puesto_id'] ?? null,
+            // minutos = teóricos (no incluyen turnos aceptados como horas extra); turno = duración del turno que toca.
+            'minutos' => $extra ? 0 : $min, 'turno' => $a && $a['minutos'] === null ? 0 : $turno,
+            'extra' => $extra, 'fuerza_mayor' => $extra && $p['fuerza_mayor'],
             'entrada' => $dia['entrada'] ?? null, 'salida' => $dia['salida'] ?? null,
             'flexible' => $hid ? (bool)$h[$hid]['flexible'] : true, 'margen' => $hid ? (int)$h[$hid]['margen_min'] : 0,
             'festivo' => $fest[$f] ?? null, 'ausencia' => $a,
@@ -45,16 +51,16 @@ function calendario_teorico(PDO $db, array $u, string $desde, string $hasta): ar
     return $out;
 }
 
-// Segundos de los tramos que caen entre las 22:00 y las 6:00 (hora de Madrid), art. 36 ET.
-function segundos_nocturnos(array $tramos): int
+// Segundos de los tramos que caen en horario nocturno (hora de Madrid). ET art. 36: 22:00–6:00; el convenio puede ampliarlo.
+function segundos_nocturnos(array $tramos, int $desde_h = 22, int $hasta_h = 6): int
 {
     $n = 0;
     $z = new DateTimeZone(ZONA);
     foreach ($tramos as [$a, $b]) {
-        $d = (new DateTime('@' . $a))->setTimezone($z)->modify('-1 day')->setTime(22, 0);
+        $d = (new DateTime('@' . $a))->setTimezone($z)->modify('-1 day')->setTime($desde_h, 0);
         while ($d->getTimestamp() < $b) {
             $ini = $d->getTimestamp();
-            $fin = (clone $d)->modify('+1 day')->setTime(6, 0)->getTimestamp();
+            $fin = (clone $d)->modify('+1 day')->setTime($hasta_h, 0)->getTimestamp();
             $n += max(0, min($b, $fin) - max($a, $ini));
             $d->modify('+1 day');
         }
@@ -70,11 +76,12 @@ function resumen(PDO $db, array $u, string $desde, string $hasta): array
     $dias = [];
     foreach ($cal as $f => $c) $dias[$f] = $c + ['trabajado' => 0, 'nocturno' => 0, 'jornadas' => []];
     $todos = fichajes_de($db, (int)$u['id'], a_utc("$desde -1 day"), a_utc("$hasta +2 day"));
+    $r = reglas($db);
     foreach (jornadas($todos) as $j) {
         $f = local($j['entrada'], 'Y-m-d');
         if (!isset($dias[$f])) continue;
         $dias[$f]['trabajado'] += $j['trabajado'];
-        $dias[$f]['nocturno'] += segundos_nocturnos($j['tramos']);
+        $dias[$f]['nocturno'] += segundos_nocturnos($j['tramos'], (int)$r['noche_desde_h'], (int)$r['noche_hasta_h']);
         $dias[$f]['jornadas'][] = $j;
     }
     $t = ['teorico' => 0, 'trabajado' => 0, 'extra' => 0, 'nocturno' => 0, 'festivo' => 0, 'diferencia' => 0];

@@ -131,6 +131,7 @@ function jornadas(array $fichajes): array
     $desde = $pausa = null;
     $pagada = false;
     $cerrar_pausa = function (int $t) use (&$j, &$pausa, &$pagada) {
+        $j['pausas'] += $t - $pausa; // todas las pausas, pagadas o no (para la pausa obligatoria)
         if ($pagada) {
             $j['trabajado'] += $t - $pausa;
             $j['tramos'][] = [$pausa, $t];
@@ -145,7 +146,7 @@ function jornadas(array $fichajes): array
         switch ($f['tipo']) {
             case 'entrada':
                 if ($j) $out[] = $j;
-                $j = ['entrada' => $f['momento_utc'], 'salida' => null, 'trabajado' => 0, 'pausa' => 0, 'tramos' => []];
+                $j = ['entrada' => $f['momento_utc'], 'salida' => null, 'trabajado' => 0, 'pausa' => 0, 'pausas' => 0, 'tramos' => []];
                 $desde = $t;
                 $pausa = null;
                 break;

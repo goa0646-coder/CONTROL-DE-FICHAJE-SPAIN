@@ -15,11 +15,18 @@ if (es_post()) {
         redirigir('admin');
     } elseif ($que === 'aplicar_convenio' && ($cv = $_SESSION['convenio_leido'] ?? null)) {
         if ($cv['horas_anuales']) consulta(db(), 'UPDATE empresa SET horas_anuales = ? WHERE id = 1', [(int)round($cv['horas_anuales'])]);
-        if ($cv['vacaciones_dias'] && $cv['vacaciones_tipo'] === 'laborables') consulta(db(), "UPDATE tipos_ausencia SET dias_anuales = ? WHERE nombre = 'Vacaciones'", [$cv['vacaciones_dias']]);
+        if ($cv['vacaciones_dias'] && $cv['vacaciones_tipo'] !== 'no_consta') consulta(db(), "UPDATE tipos_ausencia SET dias_anuales = ?, computo = ? WHERE nombre = 'Vacaciones'", [$cv['vacaciones_dias'], $cv['vacaciones_tipo']]);
+        guardar_reglas(db(), reglas_de_convenio($cv) + reglas(db()));
         // Se guarda entero para las reglas de convenio (descansos, horas extra…).
         consulta(db(), 'REPLACE INTO ajustes VALUES (?, ?)', ['convenio', json_encode($cv, JSON_UNESCAPED_UNICODE)]);
         unset($_SESSION['convenio_leido']);
         auditar(db(), (int)$yo['id'], 'convenio_aplicado', $cv['nombre']);
+    } elseif ($que === 'plantilla_galicia') {
+        aplicar_plantilla(db(), PLANTILLA_GALICIA_RESIDENCIAS);
+        auditar(db(), (int)$yo['id'], 'plantilla_convenio', 'VI Convenio residencias Galicia');
+    } elseif ($que === 'reglas') {
+        guardar_reglas(db(), $_POST);
+        auditar(db(), (int)$yo['id'], 'reglas_editadas');
     } elseif ($que === 'empresa') {
         $horas = ($_POST['horas_anuales'] ?? '') === '' ? null : max(0, (int)$_POST['horas_anuales']);
         db()->prepare('INSERT INTO empresa (id, nombre, cif, horas_anuales) VALUES (1, ?, ?, ?) ON DUPLICATE KEY UPDATE nombre = VALUES(nombre), cif = VALUES(cif), horas_anuales = VALUES(horas_anuales)')
@@ -93,8 +100,8 @@ cabecera('Empresa y centros', $yo);
     <tr><td>Descanso entre jornadas</td><td><?= $cv['descanso_entre_jornadas_h'] !== null ? e($cv['descanso_entre_jornadas_h']) . ' h' : 'No lo regula' ?></td></tr>
     <?php foreach ($cv['otras_reglas'] as $r): ?><tr><td colspan="2"><?= e($r) ?></td></tr><?php endforeach ?>
   </table>
-  <form method="post"><?= csrf_campo() ?><button name="que" value="aplicar_convenio">Aplicar horas anuales y vacaciones</button></form>
-  <?php if ($cv['vacaciones_tipo'] === 'naturales'): ?><p class="nota">Vacaciones en días naturales: de momento ajusta los días a mano en Horarios → Tipos de ausencia.</p><?php endif ?>
+  <form method="post"><?= csrf_campo() ?><button name="que" value="aplicar_convenio">Aplicar al sistema</button></form>
+  <p class="nota">Se aplican las horas anuales, las vacaciones (días y si son laborables o naturales), el descanso entre jornadas, la pausa y el máximo de horas extra. Lo demás queda como consulta.</p>
   <?php endif ?>
   <?php if (ia_activa()): ?>
   <form method="post" enctype="multipart/form-data" class="filtros">
@@ -106,6 +113,21 @@ cabecera('Empresa y centros', $yo);
   <?php endif ?>
 </div>
 <?php endif ?>
+
+<?php $r = reglas(db()); ?>
+<form method="post" class="tarjeta">
+  <?= csrf_campo() ?>
+  <h2>Reglas de jornada</h2>
+  <p class="nota">Por defecto, las del Estatuto de los Trabajadores. Pon las de tu convenio solo si son distintas. INDA las comprueba al planificar y en los informes.</p>
+  <div class="cifras">
+    <?php foreach (REGLAS_TEXTO as $k => $txt): ?>
+    <label><span><?= e($txt) ?></span><input type="number" step="0.5" min="0" name="<?= $k ?>" value="<?= e($r[$k]) ?>"></label>
+    <?php endforeach ?>
+  </div>
+  <button name="que" value="reglas">Guardar reglas</button>
+  <button name="que" value="plantilla_galicia" class="secundario">Cargar el VI Convenio de residencias de Galicia</button>
+  <p class="nota">Carga: 1.762 h/año, 40 h/semana, 9 h/día (ampliable con acuerdo), 12 h entre jornadas, 36 h semanales con domingo cada 4 semanas, 60 h extra, pausa de 20 min retribuida, jornada partida con 1 h mínima, noche de 22:00 a 7:00, 26 días laborables de vacaciones, 6 de libre disposición, lactancia, asambleas y crédito sindical (por horas) y el baremo de puntualidad. Revísalo con el texto oficial.</p>
+</form>
 
 <h2>Centros</h2>
 <table>
