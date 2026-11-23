@@ -3,6 +3,20 @@ $yo = requiere('admin');
 $roles = ['empleado' => 'Empleado', 'responsable' => 'Responsable', 'admin' => 'Administrador', 'inspeccion' => 'Inspección (solo lectura)'];
 $gps = ['' => 'Lo que diga su centro', 'no' => 'Sin GPS', 'opcional' => 'Opcional', 'obligatorio' => 'Obligatorio'];
 
+// Dar de baja / reactivar con un botón. La baja no borra nada: el registro se conserva 4 años.
+if (es_post() && isset($_POST['cambiar_estado'])) {
+    $id = (int)$_POST['cambiar_estado'];
+    $p = usuario(db(), $id);
+    if ($p && $id != $yo['id']) {
+        $activar = !$p['activo'];
+        consulta(db(), 'UPDATE usuarios SET activo = ?, baja_utc = ? WHERE id = ?', [(int)$activar, $activar ? null : ahora(), $id]);
+        if (!$activar) cerrar_dispositivos(db(), $id);
+        auditar(db(), (int)$yo['id'], $activar ? 'usuario_reactivado' : 'usuario_baja', "usuario=$id");
+        aviso(nombre($p) . ($activar ? ' vuelve a estar activo.' : ' queda de baja. Ya no puede entrar ni fichar; su registro se conserva.'));
+    }
+    redirigir('usuarios', array_intersect_key($_GET, ['ver' => 1, 'q' => 1]));
+}
+
 if (es_post() && isset($_POST['saldos'])) {
     $id = (int)$_POST['id'];
     $anio = (int)$_POST['anio'];
@@ -80,6 +94,11 @@ if (es_post()) {
 }
 
 $todos = db()->query('SELECT u.*, c.nombre AS centro FROM usuarios u LEFT JOIN centros c ON c.id = u.centro_id ORDER BY u.activo DESC, u.nombre, u.apellidos')->fetchAll();
+$ver = in_array($_GET['ver'] ?? '', ['activos', 'bajas', 'todos'], true) ? $_GET['ver'] : 'activos';
+$q = normalizar($_GET['q'] ?? '');
+$lista = array_values(array_filter($todos, fn($x) => ($ver === 'todos' || ($ver === 'activos') === (bool)$x['activo'])
+    && ($q === '' || str_contains(normalizar(nombre($x) . ' ' . $x['email'] . ' ' . $x['dni']), $q))));
+$cuantos = ['activos' => count(array_filter($todos, fn($x) => $x['activo'])), 'bajas' => count(array_filter($todos, fn($x) => !$x['activo']))];
 $centros = db()->query('SELECT id, nombre FROM centros WHERE activo = 1 ORDER BY nombre')->fetchAll(PDO::FETCH_KEY_PAIR);
 $deps = db()->query('SELECT id, nombre FROM departamentos WHERE activo = 1 ORDER BY nombre')->fetchAll(PDO::FETCH_KEY_PAIR);
 $hors = db()->query('SELECT id, nombre FROM horarios WHERE activo = 1 ORDER BY nombre')->fetchAll(PDO::FETCH_KEY_PAIR);
@@ -145,13 +164,27 @@ cabecera('Usuarios', $yo);
 </form>
 <?php endif ?>
 
+<h2>Plantilla</h2>
+<form class="filtros">
+  <input type="hidden" name="p" value="usuarios">
+  <label>Buscar <input name="q" value="<?= e($_GET['q'] ?? '') ?>" placeholder="Nombre, email o DNI"></label>
+  <label>Mostrar <select name="ver"><?= opciones(['activos' => "Activos ({$cuantos['activos']})", 'bajas' => "De baja ({$cuantos['bajas']})", 'todos' => 'Todos'], $ver) ?></select></label>
+  <button>Ver</button>
+  <a class="boton secundario" href="?p=importar">Importar desde Excel</a>
+</form>
 <table>
-  <tr><th>Nombre</th><th>Rol</th><th>Centro</th><th>Email</th><th></th></tr>
-  <?php foreach ($todos as $x): ?>
+  <tr><th>Nombre</th><th>Rol</th><th>Centro</th><th>Email</th><th>Estado</th><th></th></tr>
+  <?php foreach ($lista as $x): ?>
   <tr class="<?= $x['activo'] ? '' : 'anulado' ?>">
     <td><?= e(nombre($x)) ?></td><td><?= $roles[$x['rol']] ?></td><td><?= e($x['centro'] ?? '') ?></td><td><?= e($x['email']) ?></td>
-    <td><a href="?p=usuarios&u=<?= e($x['id']) ?>">Editar</a></td>
+    <td><span class="estado <?= $x['activo'] ? 'dentro' : 'fuera' ?>"><?= $x['activo'] ? 'Activo' : 'De baja' ?></span></td>
+    <td class="acciones"><a href="?p=usuarios&u=<?= e($x['id']) ?>">Editar</a>
+      <?php if ($x['id'] != $yo['id']): ?>
+      <form method="post" style="display:inline"><?= csrf_campo() ?><button name="cambiar_estado" value="<?= e($x['id']) ?>" class="secundario"
+        data-confirmar="<?= $x['activo'] ? e('¿Dar de baja a ' . nombre($x) . '? No podrá entrar ni fichar. Su registro se conserva.') : '' ?>"><?= $x['activo'] ? 'Dar de baja' : 'Reactivar' ?></button></form>
+      <?php endif ?></td>
   </tr>
   <?php endforeach ?>
 </table>
+<?php if (!$lista): ?><p class="nota">Nadie con ese filtro.</p><?php endif ?>
 <?php pie();

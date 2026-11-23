@@ -47,6 +47,19 @@ if (es_post()) {
             }
             redirigir('admin');
         }
+    } elseif ($que === 'logo' || $que === 'quitar_logo') {
+        if ($que === 'quitar_logo') consulta(db(), "DELETE FROM ajustes WHERE clave = 'logo'");
+        else {
+            $f = $_FILES['logo'] ?? null;
+            $ext = strtolower(pathinfo($f['name'] ?? '', PATHINFO_EXTENSION));
+            // Sin SVG: podría llevar código. Solo imágenes normales y pequeñas.
+            if (!$f || !in_array($ext, ['png', 'jpg', 'jpeg', 'webp'], true) || $f['size'] > 2 * 1024 * 1024 || !@getimagesize($f['tmp_name'])) {
+                aviso('Sube el logo en PNG, JPG o WEBP (máximo 2 MB).', 'error');
+                redirigir('admin');
+            }
+            consulta(db(), 'REPLACE INTO ajustes VALUES (?, ?)', ['logo', guardar_archivo($f)]);
+        }
+        auditar(db(), (int)$yo['id'], 'logo_empresa', $que);
     } elseif ($que === 'plantilla_galicia') {
         aplicar_plantilla(db(), PLANTILLA_GALICIA_RESIDENCIAS);
         auditar(db(), (int)$yo['id'], 'plantilla_convenio', 'VI Convenio residencias Galicia');
@@ -109,6 +122,16 @@ cabecera('Empresa y centros', $yo);
   <label>CIF <input name="cif" value="<?= e($empresa['cif']) ?>"></label>
   <label>Horas anuales del convenio <input type="number" name="horas_anuales" min="0" value="<?= e($empresa['horas_anuales']) ?>" placeholder="p. ej. 1780"></label>
   <button name="que" value="empresa">Guardar</button>
+</form>
+
+<form method="post" enctype="multipart/form-data" class="tarjeta">
+  <?= csrf_campo() ?>
+  <h2>Logo</h2>
+  <?php if ($l = logo_empresa()): ?><p><img src="<?= e($l) ?>" alt="Logo actual" style="max-height:90px;max-width:260px"></p><?php endif ?>
+  <p class="nota">Sale en el menú, en la pantalla de entrada, en la tablet del quiosco y en los informes impresos. PNG con fondo transparente queda mejor.</p>
+  <label>Imagen <input type="file" name="logo" accept="image/png,image/jpeg,image/webp" required></label>
+  <button name="que" value="logo">Subir logo</button>
+  <?php if ($l): ?><button name="que" value="quitar_logo" class="secundario" formnovalidate>Quitar</button><?php endif ?>
 </form>
 
 <?php $cv = $_SESSION['convenio_leido'] ?? null; $guardado = json_decode(ajuste(db(), 'convenio') ?? 'null', true); ?>

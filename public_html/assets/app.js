@@ -118,3 +118,6 @@ for (const caja of document.querySelectorAll('[data-ia-dni]')) {
     } catch (e) { estado.textContent = e.message; }
   });
 }
+
+// Botones con confirmación (p. ej. dar de baja).
+for (const b of document.querySelectorAll('[data-confirmar]')) b.addEventListener('click', ev => { if (b.dataset.confirmar && !confirm(b.dataset.confirmar)) ev.preventDefault(); });
