@@ -60,6 +60,34 @@ const PLANTILLA_GALICIA_RESIDENCIAS = [
     ],
 ];
 
+// Permisos del Estatuto de los Trabajadores (art. 37.3, 37.9, 48 y 48 bis). [nombre, por_horas, retribuida, días/año, justificante, color, cómputo].
+// Los días de cada permiso van en el nombre: se conceden por cada hecho causante, no son un saldo anual.
+const PERMISOS_ET = [
+    ['Matrimonio o pareja de hecho (15 días)', 0, 1, null, 1, '#ec4899', 'naturales'],
+    ['Accidente, enfermedad grave u hospitalización de familiar (5 días)', 0, 1, null, 1, '#f97316', 'laborables'],
+    ['Fallecimiento de familiar (2 días, 4 con desplazamiento)', 0, 1, null, 1, '#475569', 'laborables'],
+    ['Traslado de domicilio (1 día)', 0, 1, null, 1, '#0ea5e9', 'laborables'],
+    ['Deber inexcusable público o personal', 1, 1, null, 1, '#64748b', 'laborables'],
+    ['Fuerza mayor familiar urgente (por horas, 4 días al año)', 1, 1, null, 1, '#eab308', 'laborables'],
+    ['Exámenes prenatales y preparación al parto', 1, 1, null, 1, '#d946ef', 'laborables'],
+    ['Exámenes oficiales', 0, 1, null, 1, '#06b6d4', 'laborables'],
+    ['Nacimiento y cuidado de menor (suspensión)', 0, 0, null, 1, '#14b8a6', 'naturales'],
+    ['Permiso parental (no retribuido, hasta 8 semanas)', 0, 0, null, 0, '#a855f7', 'naturales'],
+    ['Accidente de trabajo (baja)', 0, 0, null, 1, '#b91c1c', 'naturales'],
+];
+
+// Crea los tipos que no existan (por nombre). Devuelve cuántos ha creado.
+function cargar_tipos_ausencia(PDO $db, array $tipos): int
+{
+    $n = 0;
+    foreach ($tipos as [$nom, $h, $r, $d, $j, $c, $cmp]) {
+        if (consulta($db, 'SELECT 1 FROM tipos_ausencia WHERE nombre = ?', [$nom])->fetchColumn()) continue;
+        consulta($db, 'INSERT INTO tipos_ausencia (nombre, por_horas, retribuida, dias_anuales, justificante, color, computo) VALUES (?, ?, ?, ?, ?, ?, ?)', [$nom, $h, $r, $d, $j, $c, $cmp]);
+        $n++;
+    }
+    return $n;
+}
+
 function aplicar_plantilla(PDO $db, array $pl): void
 {
     guardar_reglas($db, $pl['reglas']);
