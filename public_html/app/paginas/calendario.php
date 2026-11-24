@@ -23,14 +23,12 @@ if (es_post() && ($_POST['que'] ?? '') === 'celda') {
     }
 }
 
-// Responsable/admin: su equipo con el tipo de ausencia. Empleado: sus compañeros, solo "ausente" (RGPD: el tipo puede ser dato de salud).
+// Responsable/admin: su equipo. Empleado: solo su propio calendario (los turnos y ausencias de los compañeros no son cosa suya).
 if ($jefe) {
     $personas = array_values(array_filter(equipo_de(db(), $yo), fn($p) => $p['activo'] && (!$dep || $p['departamento_id'] == $dep)));
     if (!in_array($yo['id'], array_column($personas, 'id'))) array_unshift($personas, $yo);
 } else {
-    $personas = consulta(db(), "SELECT * FROM usuarios WHERE activo = 1 AND rol <> 'inspeccion' AND id <> ? AND
-        ((responsable_id IS NOT NULL AND responsable_id = ?) OR (departamento_id IS NOT NULL AND departamento_id = ?)) ORDER BY nombre", [$yo['id'], $yo['responsable_id'], $yo['departamento_id']])->fetchAll();
-    array_unshift($personas, $yo);
+    $personas = [$yo];
 }
 $pendientes = [];
 foreach (consulta(db(), "SELECT usuario_id, desde, hasta FROM ausencias WHERE estado = 'pendiente' AND desde <= ? AND hasta >= ?", [$hasta, $desde]) as $a) {
@@ -54,14 +52,39 @@ $hors = horarios(db());
 $pp = puestos_por_persona(db());
 cabecera('Calendario', $yo);
 ?>
-<form class="filtros">
+<form class="filtros navegar-mes">
   <input type="hidden" name="p" value="calendario">
-  <a class="boton secundario" href="?p=calendario&mes=<?= $ant ?>&dep=<?= $dep ?>">‹</a>
-  <label><input type="month" name="mes" value="<?= e($mes) ?>"></label>
-  <a class="boton secundario" href="?p=calendario&mes=<?= $sig ?>&dep=<?= $dep ?>">›</a>
+  <span class="mes-flechas"><a class="boton secundario" href="?p=calendario&mes=<?= $ant ?>&dep=<?= $dep ?>" aria-label="Mes anterior">‹</a>
+  <strong class="mes-nombre"><?= e(ucfirst(MESES[(int)substr($mes, 5)]) . ' ' . substr($mes, 0, 4)) ?></strong>
+  <a class="boton secundario" href="?p=calendario&mes=<?= $sig ?>&dep=<?= $dep ?>" aria-label="Mes siguiente">›</a></span>
+  <label class="elegir-mes"><input type="month" name="mes" value="<?= e($mes) ?>" onchange="this.form.submit()" aria-label="Elegir mes"></label>
   <?php if ($jefe && $deps): ?><label><select name="dep"><?= opciones(['' => 'Todos los departamentos'] + $deps, $dep) ?></select></label><?php endif ?>
-  <button>Ver</button>
+  <?php if ($jefe && $deps): ?><button>Ver</button><?php endif ?>
 </form>
+<?php if (!$jefe):
+    $mio = $cals[$yo['id']];
+    $trabajo = array_filter($mio, fn($c) => $c['turno'] > 0 && !$c['ausencia']);
+    $aus = array_filter($mio, fn($c) => $c['ausencia'] && $c['ausencia']['minutos'] === null); ?>
+<div class="cifras">
+  <div><span>Horas previstas</span><strong><?= horas(array_sum(array_column($trabajo, 'minutos')) * 60) ?> h</strong></div>
+  <div><span>Días de trabajo</span><strong><?= count($trabajo) ?></strong></div>
+  <div><span>Descansos</span><strong><?= count(array_filter($mio, fn($c) => !$c['laborable'] && !$c['ausencia'])) ?></strong></div>
+  <div><span>Vacaciones y permisos</span><strong><?= count($aus) ?></strong></div>
+</div>
+<?php endif ?>
+<?php if (!$jefe): $c0 = $cals[$yo['id']]; $hueco = (int)date('N', strtotime($desde)) - 1; ?>
+<div class="mes-personal">
+  <?php foreach (['L', 'M', 'X', 'J', 'V', 'S', 'D'] as $d): ?><span class="cab"><?= $d ?></span><?php endforeach ?>
+  <?php for ($i = 0; $i < $hueco; $i++): ?><span class="vacio"></span><?php endfor ?>
+  <?php foreach ($c0 as $f => $c): [$txt, $fondo, $titulo] = celda_turno($c, $hors, true); $pend = !$c['ausencia'] && isset($pendientes[$yo['id']][$f]); ?>
+  <div class="dia<?= $f === $hoy ? ' hoy' : '' ?><?= $fondo ? ' con-turno' : '' ?><?= $txt === 'D' ? ' libre' : '' ?>" style="<?= $fondo ? '--c:' . e($fondo) : '' ?>" title="<?= e($pend ? 'Ausencia pendiente de aprobar' : $titulo) ?>">
+    <span class="num"><?= (int)substr($f, 8) ?></span>
+    <b><?= e($pend ? '?' : ($txt === '' ? '' : $txt)) ?></b>
+    <small><?= $c['turno'] && !$c['ausencia'] && $c['entrada'] && !$c['flexible'] ? substr($c['entrada'], 0, 5) . '–' . substr((string)$c['salida'], 0, 5) : ($c['ausencia'] ? e($c['ausencia']['tipo']) : ($c['festivo'] ? e($c['festivo']) : '')) ?></small>
+  </div>
+  <?php endforeach ?>
+</div>
+<?php else: ?>
 <table class="calendario cuadrante">
   <tr><th class="persona"></th><?php foreach ($fechas as $f): ?><th class="<?= isset($cortos[$f]) ? 'corto' : '' ?>"><?= mb_substr(DIAS[(int)date('N', strtotime($f))], 0, 1) ?><br><?= (int)substr($f, 8) ?></th><?php endforeach ?></tr>
   <?php if ($jefe): ?>
@@ -88,6 +111,7 @@ cabecera('Calendario', $yo);
     endforeach ?></tr>
   <?php endforeach ?>
 </table>
+<?php endif ?>
 <?php if ($editar):
     $turnos = array_values(array_map(fn($h) => ['id' => (int)$h['id'], 'letra' => $h['abreviatura'], 'color' => $h['color'], 'nombre' => $h['nombre'], 'dep' => $h['departamento_id'] ? (int)$h['departamento_id'] : null,
         'horas' => ($d1 = $h['dias'] ? reset($h['dias']) : null) && $d1['entrada'] && !$h['flexible'] ? substr($d1['entrada'], 0, 5) . '–' . substr($d1['salida'], 0, 5) : ''], array_filter($hors, fn($h) => $h['activo']))); ?>
