@@ -46,7 +46,7 @@ function filas_seccion(array $hoja, array $mapa, string $obligatorio): array
         }
         return $out;
     }
-    throw new DomainException("No encuentro la fila de cabeceras (hace falta la columna «$obligatorio»).");
+    throw new DomainException("No encuentro la fila de cabeceras (hace falta la columna «{$obligatorio}»).");
 }
 
 // "7:00", "07:00:00" o la fracción de día de Excel (0,2916) → "07:00".
@@ -70,10 +70,13 @@ function si_no(string $v, bool $defecto): bool
 function preparar_libro(PDO $db, array $libro): array
 {
     $plan = ['secciones' => [], 'hojas' => [], 'ignoradas' => []];
+    $cuadrantes = [];
     foreach ($libro as $nombre => $hoja) {
         $sec = HOJAS[normalizar($nombre)] ?? null;
+        if (!$sec && es_hoja_cuadrante((string)$nombre)) { $cuadrantes[$nombre] = $hoja; continue; }
         // Una hoja suelta con columna Email (p. ej. la exportación de Woffu o un CSV): personas.
-        if (!$sec && count($libro) === 1) $sec = 'personas';
+        if (!$sec && count($libro) === 1) $sec = leer_cuadrantes([$nombre => $hoja]) ? null : 'personas';
+        if (!$sec && count($libro) === 1) { $cuadrantes[$nombre] = $hoja; continue; }
         if (!$sec || isset($plan['secciones'][$sec])) {
             if (trim($nombre) !== '' && normalizar($nombre) !== 'instrucciones') $plan['ignoradas'][] = $nombre;
             continue;
@@ -86,6 +89,7 @@ function preparar_libro(PDO $db, array $libro): array
             $plan['secciones'][$sec] = ['filas' => [], 'error' => "Hoja «{$nombre}»: " . $e->getMessage()];
         }
     }
+    if ($cuadrantes) $plan['secciones']['cuadrante'] = ['filas' => [], 'celdas' => leer_cuadrantes($cuadrantes)];
     if (!$plan['secciones']) throw new DomainException('No reconozco ninguna hoja. Llámalas Personas, Turnos, Ratios, Festivos, Ausencias, Departamentos o Puestos (descarga la plantilla).');
     // Nombres que existirán tras importar (en la BD o en el propio libro), para avisar antes de lo que no cuadra.
     $existen = fn(string $sql, array $extra) => array_merge(array_map('normalizar', $db->query($sql)->fetchAll(PDO::FETCH_COLUMN)), array_map('normalizar', $extra));
@@ -118,6 +122,8 @@ function preparar_libro(PDO $db, array $libro): array
         if ($sec === 'personas' && $s['filas']) $s['previa'] = preparar_importacion($db, $s['filas']);
     }
     unset($s);
+    // El cuadrante, al final: puede usar personas y turnos que vienen en el mismo libro.
+    if (isset($plan['secciones']['cuadrante'])) $plan['secciones']['cuadrante']['resumen'] = interpretar_cuadrante($plan['secciones']['cuadrante']['celdas'], ...listas_cuadrante($db, $plan));
     return $plan;
 }
 
@@ -203,6 +209,10 @@ function aplicar_libro(PDO $db, array $yo, array $plan, bool $actualizar): array
         }
         $res['ausencias'] = "$n nuevas" . ($mal ? ", $mal no encontradas" : '');
     }
+    if (!empty($s['cuadrante']['celdas'])) {
+        [$d, $a, $mal] = aplicar_cuadrante($db, $yo, interpretar_cuadrante($s['cuadrante']['celdas'], ...listas_cuadrante($db)));
+        $res['cuadrante'] = "$d días de turno o descanso, $a ausencias" . ($mal ? " ($mal incumplimientos del convenio: revísalos en Planificación)" : '');
+    }
     auditar($db, (int)$yo['id'], 'importacion_libro', json_encode(array_diff_key($res, ['_nuevos' => 1]), JSON_UNESCAPED_UNICODE));
     return $res;
 }
@@ -241,6 +251,7 @@ function hojas_actuales(PDO $db): array
         ['Ratios: mínimo de personas por turno. Día: Todos o Lunes…Domingo. Festivos: Sí/No.'],
         ['Festivos: fecha (dd/mm/aaaa) y nombre. Centro solo para festivos locales.'],
         ['Ausencias: vacaciones, bajas o permisos ya concedidos. Email (o DNI) de la persona, tipo tal como se llama en INDA, desde y hasta. Estado: Aprobada (por defecto) o Pendiente.'],
+        ['Cuadrante (opcional): una hoja por mes llamada «Enero 2027», «Febrero 2027»… Fila = persona (email o nombre); columna = día. En cada casilla: la letra o el nombre del turno (M, T, N, P…), D = descanso, o la ausencia: V vacaciones, IT baja, LD libre disposición, AP asuntos propios (o el nombre del tipo). Vacía = su horario habitual.'],
         ['Tipos de ausencia que existen ahora: ' . implode(', ', array_column(tipos_ausencia($db), 'nombre'))],
     ]];
     $h['Personas'] = [['Nombre', 'Apellidos', 'Email', 'DNI', 'Teléfono', 'Nº Seguridad Social', 'Fecha de nacimiento', 'Nº de empleado', 'Centro', 'Departamento', 'Puesto', 'Horario', 'Responsable', 'Rol', 'Usuario suspendido']];

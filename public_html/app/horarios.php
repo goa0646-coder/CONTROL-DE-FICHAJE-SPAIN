@@ -46,7 +46,8 @@ function calendario_teorico(PDO $db, array $u, string $desde, string $hasta): ar
             'entrada' => $dia['entrada'] ?? null, 'salida' => $dia['salida'] ?? null,
             'flexible' => $hid ? (bool)$h[$hid]['flexible'] : true, 'margen' => $hid ? (int)$h[$hid]['margen_min'] : 0,
             'festivo' => $fest[$f] ?? null, 'ausencia' => $a,
-            'laborable' => $dia !== null || (!$hid && !$u['horario_id'] && !isset($fest[$f]) && date('N', strtotime($f)) < 6),
+            // Un descanso planificado nunca es laborable; sin horario ni planificación, de lunes a viernes sí.
+            'laborable' => $dia !== null || (!$p && !$hid && !$u['horario_id'] && !isset($fest[$f]) && date('N', strtotime($f)) < 6),
         ];
     }
     return $out;

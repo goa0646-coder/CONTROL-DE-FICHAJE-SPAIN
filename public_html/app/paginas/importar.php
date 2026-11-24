@@ -6,7 +6,8 @@ if (isset($_GET['plantilla'])) {
     auditar(db(), (int)$yo['id'], 'plantilla_excel_descargada');
     header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     header('Content-Disposition: attachment; filename="INDA-datos-' . local(ahora(), 'Y-m-d') . '.xlsx"');
-    exit(escribir_xlsx(hojas_actuales(db())));
+    $anio = (int)($_GET['cuadrante'] ?? 0);
+    exit(escribir_xlsx(hojas_actuales(db()) + ($anio >= 2020 && $anio <= 2100 ? hojas_cuadrante(db(), $anio) : [])));
 }
 if (es_post()) {
     try {
@@ -21,7 +22,7 @@ if (es_post()) {
             $enviados = 0;
             if (isset($_POST['bienvenida'])) foreach ($res['_nuevos'] ?? [] as $uid) $enviados += enviar_bienvenida(db(), usuario(db(), $uid));
             unset($res['_nuevos']);
-            $nombres = ['departamentos' => 'Departamentos', 'puestos' => 'Puestos', 'turnos' => 'Turnos', 'personas' => 'Personas', 'ratios' => 'Ratios', 'festivos' => 'Festivos', 'ausencias' => 'Ausencias'];
+            $nombres = ['cuadrante' => 'Cuadrante', 'departamentos' => 'Departamentos', 'puestos' => 'Puestos', 'turnos' => 'Turnos', 'personas' => 'Personas', 'ratios' => 'Ratios', 'festivos' => 'Festivos', 'ausencias' => 'Ausencias'];
             aviso('Importado. ' . implode(' · ', array_map(fn($k, $v) => ($nombres[$k] ?? $k) . ": $v", array_keys($res), $res)) . '.'
                 . (isset($_POST['bienvenida']) && $enviados ? " Emails de bienvenida: $enviados." : ''));
             redirigir('importar');
@@ -34,14 +35,19 @@ if (es_post()) {
     redirigir('importar');
 }
 $plan = $_SESSION['importacion'] ?? null;
-$titulos = ['personas' => 'Personas', 'turnos' => 'Turnos', 'ratios' => 'Ratios (mínimos por turno)', 'festivos' => 'Festivos', 'ausencias' => 'Ausencias (vacaciones, bajas, permisos)', 'departamentos' => 'Departamentos', 'puestos' => 'Puestos'];
+$titulos = ['personas' => 'Personas', 'turnos' => 'Turnos', 'ratios' => 'Ratios (mínimos por turno)', 'festivos' => 'Festivos', 'ausencias' => 'Ausencias (vacaciones, bajas, permisos)', 'departamentos' => 'Departamentos', 'puestos' => 'Puestos', 'cuadrante' => 'Cuadrante (turnos día a día)'];
 cabecera('Importar desde Excel', $yo);
 ?>
 <?php if (!$plan): ?>
 <div class="tarjeta">
   <h2>1. Descarga la plantilla</h2>
   <p>Un Excel con una hoja para cada cosa: <strong>Personas, Turnos, Ratios, Festivos, Ausencias, Departamentos y Puestos</strong>, ya rellena con lo que tienes ahora en INDA (o con ejemplos si está vacío). Cámbiala en Excel y súbela.</p>
-  <a class="boton secundario" href="?p=importar&plantilla=1">Descargar plantilla con mis datos (.xlsx)</a>
+  <form class="filtros">
+    <input type="hidden" name="p" value="importar"><input type="hidden" name="plantilla" value="1">
+    <label>Con el cuadrante mes a mes de <select name="cuadrante"><option value="">(sin cuadrante)</option><?php for ($a = (int)local(ahora(), 'Y') - 1; $a <= (int)local(ahora(), 'Y') + 1; $a++): ?><option value="<?= $a ?>" <?= $a === (int)local(ahora(), 'Y') + 1 ? 'selected' : '' ?>><?= $a ?></option><?php endfor ?></select></label>
+    <button class="secundario">Descargar plantilla con mis datos (.xlsx)</button>
+  </form>
+  <p class="nota">El cuadrante va en una hoja por mes («Enero 2027»…): una fila por persona y una columna por día, con la letra del turno (M, T, N, P…), D = descanso o la ausencia (V vacaciones, IT baja, LD libre disposición, AP asuntos propios).</p>
 </div>
 <form method="post" enctype="multipart/form-data" class="tarjeta">
   <?= csrf_campo() ?>
@@ -53,17 +59,23 @@ cabecera('Importar desde Excel', $yo);
 <?php else: ?>
 <h2><?= e($plan['archivo']) ?></h2>
 <div class="cifras">
-  <?php foreach ($plan['secciones'] as $sec => $s): $mal = count(array_filter($s['filas'], fn($f) => !empty($f['errores']) || ($f['estado'] ?? '') === 'error')); ?>
-  <div><span><?= e($titulos[$sec]) ?></span><strong><?= count($s['filas']) - $mal ?></strong><?= $mal ? '<span class="error">' . $mal . ' con errores</span>' : '' ?></div>
+  <?php foreach ($plan['secciones'] as $sec => $s): $mal = $sec === 'cuadrante' ? array_sum($s['resumen']['dudas']) + array_sum($s['resumen']['sin_persona']) : count(array_filter($s['filas'], fn($f) => !empty($f['errores']) || ($f['estado'] ?? '') === 'error')); ?>
+  <div><span><?= e($titulos[$sec]) ?></span><strong><?= $sec === 'cuadrante' ? array_sum($s['resumen']['cuenta']) . ' días' : count($s['filas']) - $mal ?></strong><?= $mal ? '<span class="error">' . $mal . ' con errores</span>' : '' ?></div>
   <?php endforeach ?>
 </div>
 <?php if ($plan['ignoradas']): ?><p class="nota">Hojas que no se usan: <?= e(implode(', ', $plan['ignoradas'])) ?>.</p><?php endif ?>
 
 <?php foreach ($plan['secciones'] as $sec => $s): ?>
-<details class="tarjeta" <?= array_filter($s['filas'], fn($f) => !empty($f['errores'])) || !empty($s['error']) ? 'open' : '' ?>>
-  <summary><?= e($titulos[$sec]) ?> · <?= count($s['filas']) ?> filas<?= isset($plan['hojas'][$sec]) ? ' (hoja «' . e($plan['hojas'][$sec]) . '»)' : '' ?></summary>
+<details class="tarjeta" <?= array_filter($s['filas'], fn($f) => !empty($f['errores'])) || !empty($s['error']) || $sec === 'cuadrante' ? 'open' : '' ?>>
+  <summary><?= e($titulos[$sec]) ?><?= $sec === 'cuadrante' ? '' : ' · ' . count($s['filas']) . ' filas' ?><?= isset($plan['hojas'][$sec]) ? ' (hoja «' . e($plan['hojas'][$sec]) . '»)' : '' ?></summary>
   <?php if (!empty($s['error'])): ?><p class="error"><?= e($s['error']) ?></p><?php endif ?>
-  <?php if ($sec === 'personas' && !empty($s['previa'])): $p = $s['previa']; $n = array_count_values(array_column($p['filas'], 'estado')); ?>
+  <?php if ($sec === 'cuadrante'): $r = $s['resumen']; ?>
+    <p><?= count($r['asig']) ?> personas · meses: <?= e(implode(', ', array_map(fn($m) => MESES[(int)substr($m, 5)] . ' ' . substr($m, 0, 4), $r['meses']))) ?></p>
+    <p><?= $r['cuenta']['turno'] ?> turnos · <?= $r['cuenta']['libre'] ?> descansos · <?= $r['cuenta']['ausencia'] ?> días de ausencia</p>
+    <?php if ($r['sin_persona']): ?><p class="error">Personas que no encuentro (sus filas no se importan): <?= e(implode(' · ', array_slice(array_keys($r['sin_persona']), 0, 30))) ?></p><?php endif ?>
+    <?php if ($r['dudas']): ?><p class="error">Casillas que no entiendo (no se importan): <?= e(implode(' · ', array_map(fn($k, $n) => "$k ($n)", array_keys($r['dudas']), $r['dudas']))) ?></p><?php endif ?>
+    <p class="nota">Sustituye lo planificado en esos días. Las casillas vacías no cambian nada. Las ausencias se crean como aprobadas, agrupando los días seguidos.</p>
+  <?php elseif ($sec === 'personas' && !empty($s['previa'])): $p = $s['previa']; $n = array_count_values(array_column($p['filas'], 'estado')); ?>
     <p><?= $n['nuevo'] ?? 0 ?> nuevas · <?= $n['actualizar'] ?? 0 ?> ya existen<?= !empty($n['error']) ? ' · <span class="error">' . $n['error'] . ' con errores</span>' : '' ?></p>
     <?php foreach (['centros' => 'Centros', 'departamentos' => 'Departamentos', 'puestos' => 'Puestos'] as $k => $t): if ($p['crear'][$k]): ?><p class="nota">Se crearán <?= mb_strtolower($t) ?>: <?= e(implode(' · ', $p['crear'][$k])) ?></p><?php endif; endforeach ?>
     <?php if ($p['horarios_desconocidos']): $nuevos_turnos = array_map('normalizar', array_column($plan['secciones']['turnos']['filas'] ?? [], 'nombre'));
@@ -96,7 +108,7 @@ cabecera('Importar desde Excel', $yo);
   <label><input type="checkbox" name="actualizar" checked> Actualizar las personas que ya existen (no cambia contraseñas ni quita el rol de administrador)</label>
   <label><input type="checkbox" name="bienvenida"> Enviar a las nuevas un email de bienvenida para que elijan su contraseña</label>
   <?php endif ?>
-  <p class="nota">Se aplica en este orden: departamentos y puestos, turnos, personas, ratios, festivos y ausencias. Las filas con ⛔ no se importan. Las ausencias entran como aprobadas salvo que pongas «Pendiente» en Estado.</p>
+  <p class="nota">Se aplica en este orden: departamentos y puestos, turnos, personas, ratios, festivos, ausencias y cuadrante. Las filas con ⛔ no se importan. Las ausencias entran como aprobadas salvo que pongas «Pendiente» en Estado.</p>
   <button name="que" value="aplicar">Importar</button>
   <button name="que" value="cancelar" class="secundario">Cancelar</button>
 </form>
