@@ -84,7 +84,7 @@ function minimo_personas(PDO $db, array $grupo, string $desde, string $hasta, ar
         [$personas, $o['bloqueados'], $o['puestos']] = plantilla_ficticia($grupo, $n, $fechas, $vacaciones, $puestos);
         $ultimo = planificar($db, $personas, $desde, $hasta, $o);
         // Fallos que no se arreglan con más gente: no hace falta seguir subiendo.
-        $fijos = array_filter($ultimo['faltan'], fn($x) => $x[4] !== 'no hay más personas disponibles que cumplan las reglas');
+        $fijos = array_filter($ultimo['faltan'], fn($x) => $x[4] !== MOTIVO_REGLAS);
         if (!$ultimo['faltan'] || count($fijos) === count($ultimo['faltan'])) break;
     }
     $res['faltan'] = $ultimo['faltan'];
