@@ -4,3 +4,4 @@ config-fichaje.php
 config-inda.php
 .phpunit.result.cache
 .phpunit.cache/
+/inda-archivos/
