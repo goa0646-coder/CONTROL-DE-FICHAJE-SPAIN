@@ -26,6 +26,7 @@ require __DIR__ . '/presencia.php';
 require __DIR__ . '/turnos.php';
 require __DIR__ . '/estudio.php';
 require __DIR__ . '/libro.php';
+require __DIR__ . '/cuadrante_excel.php';
 
 // config-inda.php vive fuera de public_html (ver INSTALAR.md).
 // config-fichaje.php se sigue aceptando para instalaciones antiguas.
