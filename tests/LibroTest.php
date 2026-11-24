@@ -128,4 +128,32 @@ class LibroTest extends Base
         $r = interpretar_cuadrante(leer_cuadrantes($this->subir(['Marzo 2032' => $hojas['Marzo 2032']])), ...listas_cuadrante($this->db));
         $this->assertSame([['turno', "T $s"], ['libre']], [$r['asig'][$u['email']]['2032-03-02'], $r['asig'][$u['email']]['2032-03-03']]);
     }
+
+    public function testMigracionDeUnMesPasadoConNumerosComo8punto0(): void
+    {
+        $admin = $this->usuario(['rol' => 'admin']);
+        $s = uniqid();
+        $email = "mig$s@x.es";
+        // Así llegan del Excel de la residencia: días «1.0», turnos «8.0», F = festivo y LD.
+        $libro = $this->subir([
+            'Turnos' => [['Nombre', 'Letra', 'Entrada', 'Salida', 'Horas', 'Departamento'], ["J8 $s", '8.0', '0.2916666666666667', '0.625', '0.3333333333333333', "AUX $s"]],
+            'Personas' => [['Email', 'Nombre', 'Apellidos', 'Departamento', 'Rol'], [$email, 'Ana', "Mig $s", "AUX $s", 'empleado']],
+            'Enero 2026' => [['Email', 'Persona', '1.0', '2.0', '3.0', '4.0', '5.0', '6.0', '7.0'], [$email, "Ana Mig $s", 'F', '8.0', '8.0', 'D', 'LD', 'V', 'X']],
+        ]);
+        $plan = preparar_libro($this->db, $libro);
+        $r = $plan['secciones']['cuadrante']['resumen'];
+        $this->assertSame(['turno' => 2, 'libre' => 2, 'ausencia' => 2], $r['cuenta']);
+        $this->assertSame('«X» no es un turno, un descanso ni una ausencia conocidos', $r['problemas'][0][5]);
+        $fila = array_values($r['vista']['2026-01'])[0];
+        $this->assertSame(['8', true], [$fila['2026-01-02'][0], $fila['2026-01-07'][3]]);
+        $this->assertNotEmpty(informe_libro($plan));
+        aplicar_libro($this->db, $admin, $plan, true);
+        $u = consulta($this->db, 'SELECT * FROM usuarios WHERE email = ?', [$email])->fetch();
+        $this->assertSame('2026-01-01', local($u['alta_utc'], 'Y-m-d'), 'el alta se adelanta al cuadrante');
+        $cal = calendario_teorico($this->db, $u, '2026-01-01', '2026-01-06');
+        $this->assertSame([0, 480, 480, 0], array_map(fn($c) => $c['turno'], array_slice(array_values($cal), 0, 4)), 'los turnos de enero cuentan');
+        $this->assertSame('Libre disposición', $cal['2026-01-05']['ausencia']['tipo'] ?? null);
+        $inf = json_decode(ajuste($this->db, 'informe_importacion'), true);
+        $this->assertContains('X', array_column($inf['filas'], 5));
+    }
 }

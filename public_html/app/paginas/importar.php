@@ -9,6 +9,17 @@ if (isset($_GET['plantilla'])) {
     $anio = (int)($_GET['cuadrante'] ?? 0);
     exit(escribir_xlsx(hojas_actuales(db()) + ($anio >= 2020 && $anio <= 2100 ? hojas_cuadrante(db(), $anio) : [])));
 }
+// Informe de lo que no está bien, en CSV (para Excel): el de la revisión en curso o el de la última importación.
+if (isset($_GET['informe'])) {
+    $filas = ($_GET['informe'] === 'revision' && isset($_SESSION['importacion'])) ? informe_libro($_SESSION['importacion']) : (json_decode(ajuste(db(), 'informe_importacion') ?? '', true)['filas'] ?? []);
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="INDA-informe-importacion-' . local(ahora(), 'Y-m-d') . '.csv"');
+    $out = fopen('php://output', 'w');
+    fwrite($out, "\xEF\xBB\xBF");
+    fputcsv($out, ['Sección', 'Hoja', 'Fila', 'Persona', 'Día', 'Valor', 'Qué pasa'], ';');
+    foreach ($filas as $f) fputcsv($out, $f, ';');
+    exit;
+}
 if (es_post()) {
     try {
         $que = $_POST['que'] ?? '';
@@ -36,9 +47,27 @@ if (es_post()) {
 }
 $plan = $_SESSION['importacion'] ?? null;
 $titulos = ['personas' => 'Personas', 'turnos' => 'Turnos', 'ratios' => 'Ratios (mínimos por turno)', 'festivos' => 'Festivos', 'ausencias' => 'Ausencias (vacaciones, bajas, permisos)', 'departamentos' => 'Departamentos', 'puestos' => 'Puestos', 'cuadrante' => 'Cuadrante (turnos día a día)'];
+$ultimo = json_decode(ajuste(db(), 'informe_importacion') ?? '', true);
+// Tabla del informe: [sección, hoja, fila, persona, día, valor, motivo].
+$tabla_informe = function (array $filas, string $csv) { ?>
+  <table class="informe-import">
+    <tr><th>Sección</th><th>Hoja</th><th>Fila</th><th>Persona</th><th>Día</th><th>Valor</th><th>Qué pasa</th></tr>
+    <?php foreach (array_slice($filas, 0, 400) as $f): ?>
+    <tr><td><?= e($f[0]) ?></td><td><?= e($f[1]) ?></td><td><?= e($f[2]) ?></td><td><?= e($f[3]) ?></td><td><?= $f[4] ? e(date('d/m/Y', strtotime($f[4]))) : '' ?></td><td><code><?= e($f[5]) ?></code></td><td class="<?= str_starts_with($f[6], 'Importado') ? '' : 'error' ?>"><?= e($f[6]) ?></td></tr>
+    <?php endforeach ?>
+  </table>
+  <p class="nota"><?= count($filas) > 400 ? 'Se muestran 400 de ' . count($filas) . '. ' : '' ?><a href="?p=importar&informe=<?= $csv ?>">Descargar el informe completo (Excel / CSV)</a></p>
+<?php };
 cabecera('Importar desde Excel', $yo);
 ?>
 <?php if (!$plan): ?>
+<?php if ($ultimo): ?>
+<details class="tarjeta" <?= $ultimo['filas'] && $ultimo['fecha'] > gmdate('Y-m-d H:i:s', time() - 3600) ? 'open' : '' ?>>
+  <summary>Informe de la última importación · <?= local($ultimo['fecha']) ?> · <?= e($ultimo['archivo']) ?> · <?= $ultimo['filas'] ? count($ultimo['filas']) . ' cosas a revisar' : 'todo correcto' ?></summary>
+  <p class="nota"><?= e(implode(' · ', array_map(fn($k, $v) => ucfirst($k) . ": $v", array_keys($ultimo['resumen']), $ultimo['resumen']))) ?></p>
+  <?php if ($ultimo['filas']) $tabla_informe($ultimo['filas'], 'ultimo'); ?>
+</details>
+<?php endif ?>
 <div class="tarjeta">
   <h2>1. Descarga la plantilla</h2>
   <p>Un Excel con una hoja para cada cosa: <strong>Personas, Turnos, Ratios, Festivos, Ausencias, Departamentos y Puestos</strong>, ya rellena con lo que tienes ahora en INDA (o con ejemplos si está vacío). Cámbiala en Excel y súbela.</p>
@@ -64,6 +93,29 @@ cabecera('Importar desde Excel', $yo);
   <?php endforeach ?>
 </div>
 <?php if ($plan['ignoradas']): ?><p class="nota">Hojas que no se usan: <?= e(implode(', ', $plan['ignoradas'])) ?>.</p><?php endif ?>
+<?php $problemas = informe_libro($plan); ?>
+<div class="tarjeta">
+  <h2><?= $problemas ? 'Qué no está bien (' . count($problemas) . ')' : 'Todo correcto' ?></h2>
+  <?php if ($problemas): ?>
+  <p class="nota">Esto no se importará. El resto sí. Corrígelo en el Excel y vuelve a subirlo (no se duplica nada), o arréglalo después en INDA.</p>
+  <?php $tabla_informe($problemas, 'revision'); ?>
+  <?php else: ?><p class="nota">No he encontrado nada que impida importar.</p><?php endif ?>
+</div>
+<?php foreach ($plan['secciones']['cuadrante']['resumen']['vista'] ?? [] as $mes => $filas): $dias = rango_fechas("$mes-01", date('Y-m-t', strtotime("$mes-01"))); ?>
+<div class="tarjeta vista-previa">
+  <h2>Vista previa · <?= ucfirst(MESES[(int)substr($mes, 5)]) . ' ' . substr($mes, 0, 4) ?></h2>
+  <p class="nota">Así quedará el calendario. En rojo, las casillas que no se importan (pasa el ratón por encima para ver el motivo).</p>
+  <table class="calendario cuadrante">
+    <tr><th class="persona"></th><?php foreach ($dias as $f): $n = (int)date('N', strtotime($f)); ?><th class="<?= $n >= 6 ? 'finde' : '' ?>"><?= mb_substr(DIAS[$n], 0, 1) ?><br><?= (int)substr($f, 8) ?></th><?php endforeach ?></tr>
+    <?php foreach ($filas as $quien => $celdas): ?>
+    <tr><td class="persona"><?= e($quien) ?></td>
+      <?php foreach ($dias as $f): [$t, $col, $tit, $mal] = $celdas[$f] ?? ['', '', '', false]; ?>
+      <td class="<?= $mal ? 'celda-mal' : ($col ? 'turno' : ($t === 'D' || $t === 'F' ? 'descanso' : '')) ?>" title="<?= e($tit) ?>"<?= $col && !$mal ? ' style="background:' . e($col) . '"' : '' ?>><?= e($t) ?></td>
+      <?php endforeach ?></tr>
+    <?php endforeach ?>
+  </table>
+</div>
+<?php endforeach ?>
 
 <?php foreach ($plan['secciones'] as $sec => $s): ?>
 <details class="tarjeta" <?= array_filter($s['filas'], fn($f) => !empty($f['errores'])) || !empty($s['error']) || $sec === 'cuadrante' ? 'open' : '' ?>>
