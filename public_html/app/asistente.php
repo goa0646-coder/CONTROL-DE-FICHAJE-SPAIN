@@ -56,7 +56,7 @@ function asistente(string $destino): never
 <table>
   <tr><th>Requisito</th><th></th></tr>
   <?php foreach ($req as $n => [$ok, $det, $oblig]): ?>
-  <tr><td><?= e($n) ?></td><td class="<?= $ok ? '' : 'error' ?>"><?= $ok ? '✔' : ($oblig ? '✘ obligatorio' : '⚠ ' . e($det)) ?> <?= $ok && $oblig && $det ? e($det) : "" ?></td></tr>
+  <tr><td><?= e($n) ?></td><td class="<?= $ok ? '' : 'error' ?>"><?= $ok ? '<span class="pildora ok">Correcto</span>' : ($oblig ? '<span class="pildora mal">Obligatorio</span>' : '<span class="pildora pendiente">Aviso</span> ' . e($det)) ?> <?= $ok && $oblig && $det ? e($det) : "" ?></td></tr>
   <?php endforeach ?>
 </table>
 <?php if ($error): ?><p class="aviso error"><?= e($error) ?></p><?php endif ?>

@@ -153,10 +153,10 @@ cabecera('Planificación', $yo);
   <h2>Reglas del convenio</h2>
   <table>
     <?php foreach ($mal as [$quien, $f, , $txt, $tipo]): ?>
-    <tr><td class="<?= $tipo === 'bloqueo' ? 'error' : '' ?>"><?= $tipo === 'bloqueo' ? '⛔ No permitido' : '⚠ Aviso' ?></td><td><?= e($quien) ?></td><td><?= date('d/m', strtotime($f)) ?></td><td><?= e($txt) ?></td></tr>
+    <tr><td class="<?= $tipo === 'bloqueo' ? 'error' : '' ?>"><?= $tipo === 'bloqueo' ? '<span class="pildora mal">No permitido</span>' : '<span class="pildora pendiente">Aviso</span>' ?></td><td><?= e($quien) ?></td><td><?= date('d/m', strtotime($f)) ?></td><td><?= e($txt) ?></td></tr>
     <?php endforeach ?>
   </table>
-  <p class="nota">Lo marcado ⛔ no se puede saltar ni con la firma del trabajador (art. 3.5 ET). Si es una emergencia, cúbrelo como horas extra por fuerza mayor desde «Huecos».</p>
+  <p class="nota">Lo marcado «No permitido» no se puede saltar ni con la firma del trabajador (art. 3.5 ET). Si es una emergencia, cúbrelo como horas extra por fuerza mayor desde «Huecos».</p>
 </div>
 <?php endif ?>
 <?php $hl ??= horarios(db()); $pn ??= puestos(db());

@@ -65,9 +65,18 @@ if (es_post()) {
                 aviso('Sube el logo en PNG, JPG o WEBP (máximo 2 MB).', 'error');
                 redirigir('admin');
             }
-            consulta(db(), 'REPLACE INTO ajustes VALUES (?, ?)', ['logo', guardar_archivo($f)]);
+            $nombre = guardar_archivo($f);
+            consulta(db(), 'REPLACE INTO ajustes VALUES (?, ?)', ['logo', $nombre]);
+            // Los colores de la aplicación salen del logo (se pueden cambiar a mano abajo).
+            if ($c = colores_logo(carpeta_archivos() . "/$nombre")) consulta(db(), 'REPLACE INTO ajustes VALUES (?, ?)', ['marca', json_encode($c)]);
         }
         auditar(db(), (int)$yo['id'], 'logo_empresa', $que);
+    } elseif ($que === 'marca') {
+        $c = fn($k) => preg_match('/^#[0-9a-f]{6}$/i', $_POST[$k] ?? '') ? strtolower($_POST[$k]) : MARCA_POR_DEFECTO[$k];
+        if (isset($_POST['del_logo']) && ($l = ajuste(db(), 'logo')) && ($d = colores_logo(carpeta_archivos() . '/' . basename($l)))) $m = $d;
+        else $m = ['primario' => $c('primario'), 'secundario' => $c('secundario')];
+        consulta(db(), 'REPLACE INTO ajustes VALUES (?, ?)', ['marca', json_encode($m)]);
+        auditar(db(), (int)$yo['id'], 'colores_marca', json_encode($m));
     } elseif ($que === 'plantilla_galicia') {
         aplicar_plantilla(db(), PLANTILLA_GALICIA_RESIDENCIAS);
         auditar(db(), (int)$yo['id'], 'plantilla_convenio', 'VI Convenio residencias Galicia');
@@ -140,6 +149,17 @@ cabecera('Empresa y centros', $yo);
   <label>Imagen <input type="file" name="logo" accept="image/png,image/jpeg,image/webp" required></label>
   <button name="que" value="logo">Subir logo</button>
   <?php if ($l): ?><button name="que" value="quitar_logo" class="secundario" formnovalidate>Quitar</button><?php endif ?>
+</form>
+<form method="post" class="tarjeta">
+  <?= csrf_campo() ?>
+  <h2>Colores de la empresa</h2>
+  <p class="nota">Tiñen botones, menú y calendario. Al subir el logo se sacan solos de él; aquí puedes ajustarlos.</p>
+  <div class="filtros">
+    <label>Principal <input type="color" name="primario" value="<?= e(marca()['primario']) ?>"></label>
+    <label>Acento <input type="color" name="secundario" value="<?= e(marca()['secundario']) ?>"></label>
+  </div>
+  <button name="que" value="marca">Guardar colores</button>
+  <?php if (logo_empresa()): ?><button name="que" value="marca" class="secundario" onclick="this.form.insertAdjacentHTML('beforeend','<input type=hidden name=del_logo value=1>')">Sacarlos otra vez del logo</button><?php endif ?>
 </form>
 
 <?php $cv = $_SESSION['convenio_leido'] ?? null; $guardado = json_decode(ajuste(db(), 'convenio') ?? 'null', true); ?>

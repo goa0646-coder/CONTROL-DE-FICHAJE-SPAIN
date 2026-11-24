@@ -30,6 +30,8 @@ if (es_post()) {
 }
 
 $ver = $puede && ($_GET['ver'] ?? '') === 'enviados' ? 'enviados' : 'recibidos';
+// Quien publica y no ha recibido nada: abre directamente lo enviado.
+if ($puede && !isset($_GET['ver']) && !isset($_GET['id']) && !isset($_GET['nuevo']) && !array_filter(anuncios_para(db(), $yo, 1), fn($c) => $c['autor_id'] != $yo['id'])) $ver = 'enviados';
 $nuevo = $puede && isset($_GET['nuevo']);
 $lista = $ver === 'enviados' ? anuncios_enviados(db(), $yo) : array_values(array_filter(anuncios_para(db(), $yo), fn($c) => $c['autor_id'] != $yo['id']));
 $abierto = isset($_GET['id']) ? anuncio(db(), (int)$_GET['id']) : null;
@@ -96,7 +98,7 @@ cabecera('Anuncios', $yo);
       <?php if ($ver === 'enviados'): [$l, $t] = $cuentas[$c['id']]; ?>
       <span class="pildora<?= $l >= $t ? ' ok' : '' ?>">Leído <?= $l ?>/<?= $t ?></span>
       <?php else: ?><span class="pildora<?= $c['leido_utc'] ? ' ok' : ' pendiente' ?>"><?= $c['leido_utc'] ? 'Leído' : 'Pendiente de leer' ?></span><?php endif ?>
-      <?php if ($c['con_adjunto']): ?><span class="clip" title="Con adjunto">📎</span><?php endif ?>
+      <?php if ($c['con_adjunto']): ?><span class="clip" title="Con adjunto"><?= icono('clip') ?></span><?php endif ?>
     </a>
     <?php endforeach ?>
   </div>
