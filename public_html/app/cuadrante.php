@@ -238,11 +238,13 @@ function planificar(PDO $db, array $personas, string $desde, string $hasta, arra
         $mins = fn($uid, $f) => ($x = $plan[$uid][$f] ?? null) && is_array($t = $datos($x['horario_id'], $f)) ? $t : null;
         $ayer = fn($f, $n) => date('Y-m-d', strtotime("$f $n day"));
         uasort($estado, fn($x, $y) => $x['min'] <=> $y['min']);
+        $acum = [];
         foreach ($fechas as $f) {
             $semana = date('o-W', strtotime($f));
             if (date('N', strtotime($f)) == 7 && $r['domingo_cada_semanas']) continue; // los domingos los decide la regla del domingo libre
             foreach ($estado as $uid => $e) {
                 $c = $e['cal'][$f];
+                if (!empty($plan[$uid][$f]) && ($t = $mins($uid, $f))) $acum[$uid] = ($acum[$uid] ?? 0) + $t[0];
                 if (!array_key_exists($f, $plan[$uid] ?? []) || $plan[$uid][$f] || isset($bloq[$uid][$f]) || ($c['ausencia'] && $c['ausencia']['minutos'] === null)) continue;
                 // Días seguidos que quedarían (antes y después).
                 $racha = 1;
@@ -259,12 +261,14 @@ function planificar(PDO $db, array $personas, string $desde, string $hasta, arra
                     $e['ultimo'], $e['u']['horario_id'] ? (int)$e['u']['horario_id'] : null, ...$turnos_nec], fn($x) => $x && isset($h[$x]) && $vale($e['u'], $x)));
                 foreach ($opciones as $hid) {
                     $t = $datos($hid, $f);
-                    if (is_string($t) || $estado[$uid]['min'] + $t[0] / 2 > $objetivo) continue;
+                    // Total del periodo y ritmo (lo hecho hasta hoy frente a la parte de sus días disponibles): no se gastan las horas en los primeros meses.
+                    if (is_string($t) || $estado[$uid]['min'] + $t[0] / 2 > $objetivo || ($acum[$uid] ?? 0) + $t[0] / 2 > $objetivo * $e['disp'][$f] / $e['disp_total']) continue;
                     if ($fin_previo && $t[1] - $fin_previo < $r['descanso_entre_jornadas_h'] * 3600) continue;
                     if ($sig && $sig[1] - $t[2] < $r['descanso_entre_jornadas_h'] * 3600) continue;
                     if ($semana_min + $t[0] > $r['horas_semana_media'] * 60) continue;
                     $plan[$uid][$f] = ['horario_id' => $hid, 'puesto_id' => null];
                     $estado[$uid]['min'] += $t[0];
+                    $acum[$uid] = ($acum[$uid] ?? 0) + $t[0];
                     $estado[$uid]['finde'] += date('N', strtotime($f)) >= 6 ? 1 : 0;
                     $estado[$uid]['noches'] += $t[3] ? 1 : 0;
                     break;
