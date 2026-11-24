@@ -156,4 +156,13 @@ class LibroTest extends Base
         $inf = json_decode(ajuste($this->db, 'informe_importacion'), true);
         $this->assertContains('X', array_column($inf['filas'], 5));
     }
+
+    public function testLaFilaDeLetrasDeLosDiasNoEsUnaPersona(): void
+    {
+        $e = 'x' . uniqid() . '@x.es';
+        // Enero 2026 empieza en jueves: J V S D L M X
+        $celdas = leer_cuadrantes(['Enero 2026' => [['Email', 'Persona', '1', '2', '3', '4', '5', '6', '7'], ['', '', 'J', 'V', 'S', 'D', 'L', 'M', 'X'], [$e, 'Ana', 'M', 'M', 'D', 'D', 'V', 'V', 'T']]]);
+        $this->assertCount(7, $celdas);
+        $this->assertSame([$e], array_unique(array_map(fn($c) => $c[0]['email'], $celdas)));
+    }
 }
