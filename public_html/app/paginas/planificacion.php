@@ -42,9 +42,13 @@ if (es_post() && in_array($_POST['que'] ?? '', ['generar', 'publicar', 'descarta
             aviso('Elige personas y un periodo de hasta dos meses.', 'error');
             redirigir('planificacion', ['semana' => $lunes]);
         }
-        $plan = generar_cuadrante(db(), $gente, $d, $h);
+        $res = planificar(db(), $gente, $d, $h, ['completar' => true]);
+        $plan = $res['plan'];
         [$mal, $huecos] = $probar($plan, false);
-        $_SESSION['borrador'] = ['plan' => $plan, 'desde' => $d, 'hasta' => $h, 'mal' => $mal, 'huecos' => $huecos];
+        // Motivo de cada turno sin cubrir (el primero que dio el generador).
+        $motivos = [];
+        foreach ($res['faltan'] as $x) $motivos[$x[1]] ??= $x[4];
+        $_SESSION['borrador'] = ['plan' => $plan, 'desde' => $d, 'hasta' => $h, 'mal' => $mal, 'huecos' => $huecos, 'motivos' => $motivos];
         redirigir('planificacion', ['semana' => date('Y-m-d', strtotime('monday this week', strtotime($d)))]);
     }
     $b = $_SESSION['borrador'] ?? null;
@@ -144,16 +148,18 @@ cabecera('Planificación', $yo);
     <?php foreach ($personas as $u): if (!isset($b['plan'][$u['id']])) continue; $min = 0; ?>
     <tr><td class="persona"><?= e(nombre($u)) ?></td>
       <?php foreach ($fs as $f): $x = $b['plan'][$u['id']][$f] ?? null; ?>
-      <?php if ($x): $min += $hl[$x['horario_id']]['dias'] ? reset($hl[$x['horario_id']]['dias'])['minutos'] : 0; ?>
-      <td title="<?= e($hl[$x['horario_id']]['nombre'] . ($x['puesto_id'] ? ' · ' . ($pn[$x['puesto_id']] ?? '') : '')) ?>"><?= e(mb_substr($hl[$x['horario_id']]['nombre'], 0, 1)) ?></td>
+      <?php if ($x): $t = $hl[$x['horario_id']]; $min += $t['dias'] ? reset($t['dias'])['minutos'] : 0; ?>
+      <td class="<?= $t['color'] ? 'turno' : '' ?>"<?= $t['color'] ? ' style="background:' . e($t['color']) . '"' : '' ?> title="<?= e($t['nombre'] . ($x['puesto_id'] ? ' · ' . ($pn[$x['puesto_id']] ?? '') : '')) ?>"><?= e($t['abreviatura'] !== '' ? $t['abreviatura'] : mb_substr($t['nombre'], 0, 1)) ?></td>
       <?php else: ?><td class="libre">·</td><?php endif ?>
       <?php endforeach ?><td><?= horas($min * 60) ?></td></tr>
     <?php endforeach ?>
   </table>
-  <p class="nota">Letra = primera letra del turno (pasa el ratón para ver turno y puesto). · = libre. Se respetan bajas, vacaciones, descansos, horas semanales y un máximo de 5 días seguidos.</p>
-  <?php if ($b['huecos']): ?>
-  <p class="error">Sin cubrir (<?= array_sum(array_column($b['huecos'], 3)) ?>): <?= e(implode(' · ', array_map(fn($x) => date('d/m', strtotime($x[0])) . ' ' . $hl[$x[1]]['nombre'] . ($x[2] ? ' ' . ($pn[$x[2]] ?? '') : '') . ' ×' . $x[3], array_slice($b['huecos'], 0, 30)))) ?></p>
-  <p class="nota">Faltan personas con esos puestos o se superarían las horas o los descansos legales. Opciones: más personas polivalentes, contratar, o cubrirlos con horas extra voluntarias desde «Huecos».</p>
+  <p class="nota">Letra del turno (pasa el ratón para ver turno y puesto). · = libre. Primero se cubren los mínimos de cada turno y después se completa la jornada de cada persona (hasta sus horas), respetando bajas, vacaciones, descansos, horas semanales y un máximo de 5 días seguidos.</p>
+  <?php if ($b['huecos']):
+      $por = [];
+      foreach ($b['huecos'] as $x) { $por[$x[1]]['n'] = ($por[$x[1]]['n'] ?? 0) + $x[3]; $por[$x[1]]['dias'][$x[0]] = true; } ?>
+  <div class="aviso error"><?= icono('alerta') ?><div><b>Sin cubrir:</b>
+    <ul><?php foreach ($por as $hid => $x): ?><li><b><?= e($hl[$hid]['nombre']) ?></b>: faltan <?= $x['n'] ?> en <?= count($x['dias']) ?> días<?= isset($b['motivos'][$hid]) ? ' — ' . e($b['motivos'][$hid]) : '' ?>.</li><?php endforeach ?></ul></div></div>
   <?php else: ?><p class="aviso ok">Todas las necesidades cubiertas.</p><?php endif ?>
   <form method="post" class="filtros"><?= csrf_campo() ?>
     <button name="que" value="publicar">Publicar y avisar</button>

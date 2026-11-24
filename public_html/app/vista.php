@@ -26,6 +26,7 @@ const ICONOS = [
     'avisos' => '<path d="M6 16V11a6 6 0 0112 0v5l2 2H4l2-2z"/><path d="M10 20a2 2 0 004 0"/>',
     'perfil' => '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.2 4.2-6 8-6s7 1.8 8 6"/>',
     'salir' => '<path d="M14 4h4a2 2 0 012 2v12a2 2 0 01-2 2h-4M10 16l4-4-4-4M14 12H3"/>',
+    'diagnostico' => '<path d="M3 12h4l2.5-6 5 12 2.5-6h4"/>',
     'flecha' => '<path d="M9 6l6 6-6 6"/>',
     'ok' => '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.8"/>',
     'alerta' => '<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5h.01"/>',
@@ -61,6 +62,7 @@ function menu_de(array $u): array
     if ($e) $g['Equipo'] = $e;
     if ($r === 'admin') $a = ['admin' => 'Empresa', 'usuarios' => 'Usuarios', 'horarios' => 'Horarios', 'quioscos' => 'Quioscos'];
     if (in_array($r, ['admin', 'inspeccion'], true)) $a['auditoria'] = 'Auditoría';
+    if ($r === 'admin') $a['diagnostico'] = 'Diagnóstico';
     if ($a) $g['Administración'] = $a;
     return $g;
 }

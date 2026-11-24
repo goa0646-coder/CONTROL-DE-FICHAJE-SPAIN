@@ -1,4 +1,6 @@
 <?php
+require __DIR__ . '/app/errores.php';
+activar_registro_errores();
 require __DIR__ . '/app/inicio.php';
 require __DIR__ . '/app/vista.php';
 

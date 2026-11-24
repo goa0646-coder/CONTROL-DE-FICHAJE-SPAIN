@@ -62,10 +62,34 @@ class CuadranteTest extends Base
         $plan = generar_cuadrante($this->db, [$jefa, $baja, $op], '2099-03-02', '2099-03-04');
         $this->assertSame(3, count(array_filter($plan[$jefa['id']])));
         $this->assertSame([], array_filter($plan[$baja['id']]), 'de baja');
-        $this->assertSame([], array_filter($plan[$op['id']]), 'no es encargado');
+        $this->assertArrayNotHasKey($op['id'], $plan, 'no es encargado: no se toca su horario');
         $this->assertSame($this->encargado, $plan[$jefa['id']]['2099-03-02']['puesto_id']);
         $sin = $this->usuario(['alta_utc' => '2099-01-01 00:00:00']);
         $this->assertArrayNotHasKey($sin['id'], generar_cuadrante($this->db, [$jefa, $sin], '2099-03-02', '2099-03-02'), 'sin puestos no se toca su horario');
+    }
+
+    public function testCompletaLaJornadaYTurnoDeOtroDepartamento(): void
+    {
+        // Mínimo 1 de mañana pero 3 personas: además de cubrirlo, cada una llega a sus 40 h (5 turnos).
+        $this->necesidad($this->manana, null, 1);
+        $gente = array_map(fn() => $this->persona([]), range(1, 3));
+        $r = planificar($this->db, $gente, '2099-03-02', '2099-03-08', ['completar' => true]);
+        foreach ($gente as $u) $this->assertSame(5, count(array_filter($r['plan'][$u['id']])), 'completa 40 h');
+        $this->assertSame([], $r['faltan']);
+        guardar_cuadrante($this->db, $r['plan']);
+        foreach ($gente as $u) $this->assertSame([], bloqueos(comprobar_plan($this->db, $u, '2099-03-02', '2099-03-08')));
+        // Sin completar solo se reparte el mínimo.
+        $solo = planificar($this->db, $gente, '2099-03-09', '2099-03-15');
+        $this->assertSame(7, array_sum(array_map(fn($d) => count(array_filter($d)), $solo['plan'])));
+        // Turno de un departamento sin nadie: no lo hace cualquiera, y dice por qué.
+        $this->db->exec("INSERT INTO departamentos (nombre) VALUES ('Coordinación')");
+        $dep = (int)$this->db->lastInsertId();
+        $this->db->prepare('UPDATE horarios SET departamento_id = ? WHERE id = ?')->execute([$dep, $this->tarde]);
+        $this->db->exec('DELETE FROM necesidades');
+        $this->necesidad($this->tarde, null, 1);
+        $r = planificar($this->db, $gente, '2099-04-06', '2099-04-06', ['completar' => true]);
+        $this->assertSame([], $r['plan']);
+        $this->assertStringContainsString('Coordinación', $r['faltan'][0][4]);
     }
 
     public function testNoPoneMananaTrasTarde(): void
