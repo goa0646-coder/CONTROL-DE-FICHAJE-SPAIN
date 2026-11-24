@@ -1,12 +1,12 @@
 // Solo cachea la interfaz. Fichar siempre necesita conexión (la hora la pone el servidor).
-const CACHE = 'inda-v2';
+const CACHE = 'inda-v3';
 const ARCHIVOS = ['assets/estilo.css', 'assets/app.js', 'assets/icono.svg'];
 self.addEventListener('install', e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(ARCHIVOS))));
 self.addEventListener('activate', e => e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k))))));
 // Red primero: así una versión nueva se ve sin cambiar el nombre de la caché.
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET' || !e.request.url.includes('/assets/')) return;
-  e.respondWith(fetch(e.request).then(r => {
+  e.respondWith(fetch(e.request, { cache: 'no-cache' }).then(r => {
     const copia = r.clone();
     caches.open(CACHE).then(c => c.put(e.request, copia));
     return r;

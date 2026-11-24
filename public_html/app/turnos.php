@@ -162,12 +162,17 @@ function cambiar_dia(PDO $db, array $yo, array $u, string $fecha, string $v): ar
 {
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) throw new DomainException('Fecha no válida.');
     if ($v !== '' && $v !== 'L' && !isset(horarios($db)[(int)$v])) throw new DomainException('Turno no válido.');
+    $hasta = date('Y-m-d', strtotime("$fecha +1 day")); // también el descanso hasta el día siguiente
+    $clave = fn($m) => "$m[0]|$m[1]";
+    // Solo bloquea lo que provoca este cambio: un incumplimiento que ya estaba (p. ej. de un cuadrante importado) no impide corregir el día.
+    $antes = array_map($clave, array_filter(comprobar_plan($db, $u, $fecha, $hasta), fn($m) => $m[3] === 'bloqueo'));
     $db->beginTransaction();
     try {
         if ($v === '') consulta($db, 'DELETE FROM planificacion WHERE usuario_id = ? AND fecha = ?', [$u['id'], $fecha]);
         else consulta($db, 'REPLACE INTO planificacion (usuario_id, fecha, horario_id) VALUES (?, ?, ?)', [$u['id'], $fecha, $v === 'L' ? null : (int)$v]);
-        $mal = comprobar_plan($db, $u, $fecha, date('Y-m-d', strtotime("$fecha +1 day"))); // también el descanso hasta el día siguiente
-        if ($b = array_values(array_filter($mal, fn($m) => $m[3] === 'bloqueo'))) throw new DomainException('No se puede: ' . $b[0][2]);
+        $mal = comprobar_plan($db, $u, $fecha, $hasta);
+        $nuevos = array_values(array_filter($mal, fn($m) => $m[3] === 'bloqueo' && !in_array($clave($m), $antes, true)));
+        if ($nuevos) throw new DomainException('No se puede: ' . $nuevos[0][2]);
         $db->commit();
     } catch (Throwable $e) {
         $db->rollBack();

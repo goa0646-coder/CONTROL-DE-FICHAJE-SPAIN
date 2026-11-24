@@ -65,6 +65,15 @@ if (es_post() && in_array($_POST['que'] ?? '', ['generar', 'publicar', 'descarta
 
 if (es_post()) {
     try {
+        // Incumplimientos que ya había antes del cambio (p. ej. de un cuadrante importado): no impiden guardar; solo bloquea lo nuevo.
+        $rangos = [];
+        if (($_POST['que'] ?? '') === 'cuadrante') {
+            foreach ($_POST['c'] ?? [] as $uid => $dias) if (in_array((int)$uid, $ids) && ($fs = array_filter(array_keys((array)$dias), fn($f) => preg_match('/^\d{4}-\d{2}-\d{2}$/', $f)))) $rangos[(int)$uid] = [min($fs), max($fs)];
+        } elseif (preg_match('/^\d{4}-\d{2}-\d{2}$/', $_POST['desde'] ?? '') && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_POST['hasta'] ?? '') && $_POST['hasta'] >= $_POST['desde']) {
+            foreach (array_intersect(array_map('intval', $_POST['personas'] ?? []), $ids) as $uid) $rangos[$uid] = [$_POST['desde'], $_POST['hasta']];
+        }
+        $previos = [];
+        foreach ($rangos as $uid => [$a, $b]) foreach (comprobar_plan(db(), usuario(db(), $uid), $a, date('Y-m-d', strtotime("$b +1 day"))) as $m) if ($m[3] === 'bloqueo') $previos[$uid][] = "$m[0]|$m[1]";
         db()->beginTransaction();
         $afectados = [];
         if (($_POST['que'] ?? '') === 'cuadrante') {
@@ -95,7 +104,10 @@ if (es_post()) {
         // Reglas del convenio sobre lo que queda planificado: lo que bloquea no se guarda.
         $mal = [];
         foreach ($afectados as $uid => $fs) {
-            foreach (comprobar_plan(db(), usuario(db(), (int)$uid), min($fs), max($fs)) as $m) $mal[] = [nombre(usuario(db(), (int)$uid))] + array_combine([1, 2, 3, 4], $m);
+            foreach (comprobar_plan(db(), usuario(db(), (int)$uid), min($fs), date('Y-m-d', strtotime(max($fs) . ' +1 day'))) as $m) {
+                if ($m[3] === 'bloqueo' && in_array("$m[0]|$m[1]", $previos[$uid] ?? [], true)) $m[3] = 'aviso'; // ya estaba: se avisa, no se bloquea
+                $mal[] = [nombre(usuario(db(), (int)$uid))] + array_combine([1, 2, 3, 4], $m);
+            }
         }
         $_SESSION['incumplimientos'] = $mal;
         if (array_filter($mal, fn($m) => $m[4] === 'bloqueo')) {

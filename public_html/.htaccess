@@ -6,4 +6,8 @@ RewriteCond %{HTTPS} off
 RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 <IfModule mod_headers.c>
   Header always set Strict-Transport-Security "max-age=31536000"
+  # Estilos, código y la propia app: el navegador comprueba siempre si hay versión nueva.
+  <FilesMatch "\.(css|js|php|html)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
 </IfModule>

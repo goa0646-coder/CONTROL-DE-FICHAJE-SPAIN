@@ -122,7 +122,7 @@ function cabecera(string $titulo, ?array $u = null): void
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="INDA">
 <link rel="preload" href="assets/fuentes/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="assets/estilo.css">
+<link rel="stylesheet" href="<?= e(asset('assets/estilo.css')) ?>">
 <style><?= css_marca() ?></style>
 <script>document.documentElement.classList.add('js')</script>
 <title><?= e($titulo) ?> · <?= e($empresa) ?></title>
@@ -144,7 +144,7 @@ function cabecera(string $titulo, ?array $u = null): void
     <a href="?p=perfil" class="yo <?= $actual === 'perfil' ? 'activo' : '' ?>"><?= avatar($u) ?><span><?= e(nombre($u)) ?><small><?= e(['empleado' => 'Empleado', 'responsable' => 'Responsable', 'admin' => 'Administración', 'inspeccion' => 'Inspección'][$u['rol']]) ?></small></span></a>
     <a href="?p=salir" class="salir" title="Salir"><?= icono('salir') ?><span>Salir</span></a>
   </div>
-  <p class="hecho-con"><img src="assets/icono.svg" alt=""> INDA · registro de jornada</p>
+  <p class="hecho-con"><img src="assets/icono.svg" alt=""> INDA · versión <?= VERSION ?></p>
 </aside>
 <div class="velo" data-cerrar-menu></div>
 <header class="barra-superior">
@@ -203,7 +203,7 @@ function botones_fichaje(string $estado): string
 
 function pie(): void
 {
-    echo "</main>\n<script src=\"assets/app.js\"></script>\n</body>\n</html>\n";
+    echo "</main>\n<script src=\"" . e(asset('assets/app.js')) . "\"></script>\n</body>\n</html>\n";
 }
 
 function opciones(array $lista, mixed $actual): string
