@@ -5,12 +5,20 @@
 // Filas de la primera hoja como listas de texto. .xlsx sin librerías (ZIP + XML) o .csv con ; o ,.
 function leer_hoja(string $ruta, string $ext): array
 {
+    $libro = leer_libro($ruta, $ext);
+    return reset($libro) ?: [];
+}
+
+// Todas las hojas: [nombre de la hoja => filas]. Un CSV es una sola hoja llamada «CSV».
+function leer_libro(string $ruta, string $ext): array
+{
     if ($ext === 'csv' || $ext === 'txt') {
         $txt = str_replace("\xEF\xBB\xBF", '', (string)file_get_contents($ruta));
         if (!mb_check_encoding($txt, 'UTF-8')) $txt = mb_convert_encoding($txt, 'UTF-8', 'Windows-1252');
         $sep = substr_count(strtok($txt, "\n") ?: '', ';') >= substr_count(strtok($txt, "\n") ?: '', ',') ? ';' : ',';
-        return array_map(fn($l) => str_getcsv($l, $sep), array_values(array_filter(preg_split('/\r?\n/', $txt), fn($l) => trim($l) !== '')));
+        return ['CSV' => array_map(fn($l) => str_getcsv($l, $sep), array_values(array_filter(preg_split('/\r?\n/', $txt), fn($l) => trim($l) !== '')))];
     }
+    if ($ext === 'xls') throw new DomainException('Ese es el formato antiguo de Excel (.xls). En Excel: Archivo → Guardar como → «Libro de Excel (.xlsx)» y súbelo.');
     if ($ext !== 'xlsx') throw new DomainException('Sube un Excel (.xlsx) o un CSV.');
     if (!class_exists('ZipArchive')) throw new DomainException('Este servidor no puede abrir .xlsx: guárdalo como CSV en Excel y súbelo.');
     $z = new ZipArchive();
@@ -21,32 +29,42 @@ function leer_hoja(string $ruta, string $ext): array
     $ss = [];
     // Ojo: un SimpleXMLElement cuyas etiquetas llevan prefijo cuenta como «falso»; por eso se compara con null.
     if (($s = $x('xl/sharedStrings.xml')) !== null) foreach ($s->children($m)->si as $si) $ss[] = trim(implode('', array_map('strval', $si->xpath('.//*[local-name()="t"]'))));
-    // Primera hoja según el libro (no siempre es sheet1.xml).
-    $hoja = 'xl/worksheets/sheet1.xml';
+    // Hojas en el orden del libro (el archivo no siempre es sheetN.xml).
+    $hojas = [];
     if (($wb = $x('xl/workbook.xml')) !== null && ($rels = $x('xl/_rels/workbook.xml.rels')) !== null) {
-        $rid = (string)$wb->children($m)->sheets->children($m)->sheet[0]->attributes('http://schemas.openxmlformats.org/officeDocument/2006/relationships')['id'];
-        foreach ($rels->Relationship as $r) if ((string)$r['Id'] === $rid) $hoja = 'xl/' . ltrim(preg_replace('#^/?xl/#', '', (string)$r['Target']), '/');
+        $destinos = [];
+        foreach ($rels->Relationship as $r) $destinos[(string)$r['Id']] = 'xl/' . ltrim(preg_replace('#^/?xl/#', '', (string)$r['Target']), '/');
+        foreach ($wb->children($m)->sheets->children($m)->sheet as $sh) {
+            $rid = (string)$sh->attributes('http://schemas.openxmlformats.org/officeDocument/2006/relationships')['id'];
+            if (isset($destinos[$rid])) $hojas[(string)$sh->attributes()['name'] ?: 'Hoja'] = $destinos[$rid];
+        }
     }
-    $sh = $x($hoja) ?? throw new DomainException('No encuentro la hoja de datos en el Excel.');
-    $filas = [];
-    foreach ($sh->children($m)->sheetData->children($m)->row as $row) {
-        $f = [];
-        foreach ($row->children($m)->c as $c) {
-            $at = $c->attributes(); // con prefijo, $c['r'] no ve el atributo
-            preg_match('/^([A-Z]+)/', (string)$at['r'], $mm);
-            $col = 0;
-            foreach (str_split($mm[1]) as $l) $col = $col * 26 + ord($l) - 64;
-            $t = (string)$at['t'];
-            $v = $t === 's' ? ($ss[(int)$c->children($m)->v] ?? '') : ($t === 'inlineStr' ? implode('', array_map('strval', $c->xpath('.//*[local-name()="t"]'))) : (string)$c->children($m)->v);
-            $f[$col - 1] = trim($v);
+    if (!$hojas) $hojas = ['Hoja1' => 'xl/worksheets/sheet1.xml'];
+    $libro = [];
+    foreach ($hojas as $nombre => $archivo) {
+        if (($sh = $x($archivo)) === null) continue;
+        $filas = [];
+        foreach ($sh->children($m)->sheetData->children($m)->row as $row) {
+            $f = [];
+            foreach ($row->children($m)->c as $c) {
+                $at = $c->attributes(); // con prefijo, $c['r'] no ve el atributo
+                preg_match('/^([A-Z]+)/', (string)$at['r'], $mm);
+                $col = 0;
+                foreach (str_split($mm[1] ?? 'A') as $l) $col = $col * 26 + ord($l) - 64;
+                $t = (string)$at['t'];
+                $v = $t === 's' ? ($ss[(int)$c->children($m)->v] ?? '') : ($t === 'inlineStr' ? implode('', array_map('strval', $c->xpath('.//*[local-name()="t"]'))) : (string)$c->children($m)->v);
+                $f[$col - 1] = trim($v);
+            }
+            if ($f) {
+                $max = max(array_keys($f));
+                $filas[] = array_replace(array_fill(0, $max + 1, ''), $f);
+            }
         }
-        if ($f) {
-            $max = max(array_keys($f));
-            $filas[] = array_replace(array_fill(0, $max + 1, ''), $f);
-        }
+        $libro[$nombre] = $filas;
     }
     $z->close();
-    return $filas;
+    if (!$libro) throw new DomainException('No encuentro la hoja de datos en el Excel.');
+    return $libro;
 }
 
 // Cabeceras reconocidas (en minúsculas y sin acentos) → campo de INDA.
