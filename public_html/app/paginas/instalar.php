@@ -27,7 +27,7 @@ cabecera('Instalación');
 <pre><?= e(implode("\n", $log)) ?></pre>
 <table>
   <?php foreach (requisitos() as $n => [$ok, $det, $oblig]): ?>
-  <tr><td><?= e($n) ?></td><td class="<?= $ok ? '' : 'error' ?>"><?= $ok ? '✔' : ($oblig ? '✘ obligatorio' : '⚠ ' . e($det)) ?></td></tr>
+  <tr><td><?= e($n) ?></td><td class="<?= $ok ? '' : 'error' ?>"><?= $ok ? '<span class="pildora ok">Correcto</span>' : ($oblig ? '<span class="pildora mal">Obligatorio</span>' : '<span class="pildora pendiente">Aviso</span> ' . e($det)) ?></td></tr>
   <?php endforeach ?>
 </table>
 <?php if (!$hayAdmin): ?>

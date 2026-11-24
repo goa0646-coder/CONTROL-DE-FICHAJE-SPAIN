@@ -26,6 +26,11 @@ const ICONOS = [
     'avisos' => '<path d="M6 16V11a6 6 0 0112 0v5l2 2H4l2-2z"/><path d="M10 20a2 2 0 004 0"/>',
     'perfil' => '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.2 4.2-6 8-6s7 1.8 8 6"/>',
     'salir' => '<path d="M14 4h4a2 2 0 012 2v12a2 2 0 01-2 2h-4M10 16l4-4-4-4M14 12H3"/>',
+    'flecha' => '<path d="M9 6l6 6-6 6"/>',
+    'ok' => '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.8"/>',
+    'alerta' => '<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5h.01"/>',
+    'clip' => '<path d="M20 11.5l-8.2 8.2a5 5 0 01-7-7L13 4.5a3.4 3.4 0 014.8 4.8l-8.3 8.2a1.7 1.7 0 01-2.4-2.4l7.6-7.6"/>',
+    'panel' => '<rect x="3.5" y="3.5" width="7" height="8" rx="2"/><rect x="13.5" y="3.5" width="7" height="5" rx="2"/><rect x="13.5" y="11.5" width="7" height="9" rx="2"/><rect x="3.5" y="14.5" width="7" height="6" rx="2"/>',
     'mas' => '<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>',
 ];
 
@@ -39,6 +44,7 @@ function menu_de(array $u): array
 {
     $r = $u['rol'];
     $g = [];
+    if (in_array($r, ['responsable', 'admin'], true)) $g['General'] = ['panel' => 'Inicio'];
     if ($r !== 'inspeccion') $g['Personal'] = ['fichar' => 'Fichar', 'historial' => 'Mi registro', 'ausencias' => 'Ausencias', 'calendario' => 'Calendario',
         'correcciones' => 'Correcciones', 'documentos' => 'Documentos', 'comunicados' => 'Anuncios', 'enviar' => 'Enviar a la empresa'];
     if ($r !== 'inspeccion' && ($na = count(anuncios_pendientes(db(), $u)))) $g['Personal']['comunicados'] = "Anuncios ($na)";
@@ -70,53 +76,85 @@ function logo_empresa(): ?string
     return $n ? '?p=logo&v=' . substr($n, 0, 8) : null;
 }
 
+// Nombre de la empresa (o «INDA» antes de instalar).
+function nombre_empresa(): string
+{
+    try {
+        return db()->query('SELECT nombre FROM empresa WHERE id = 1')->fetchColumn() ?: 'INDA';
+    } catch (Throwable) {
+        return 'INDA';
+    }
+}
+
+// «martes, 24 de noviembre»
+function fecha_larga(?string $fecha = null): string
+{
+    $t = strtotime($fecha ?? local(ahora(), 'Y-m-d'));
+    return mb_strtolower(DIAS[(int)date('N', $t)]) . ', ' . (int)date('j', $t) . ' de ' . MESES[(int)date('n', $t)];
+}
+
 function cabecera(string $titulo, ?array $u = null): void
 {
     $logo = logo_empresa();
+    $empresa = nombre_empresa();
     $grupos = $u ? menu_de($u) : [];
     $actual = $_GET['p'] ?? '';
     $n = $u ? avisos_sin_leer(db(), (int)$u['id']) : 0;
     // Pestañas del móvil: las 4 primeras páginas del menú + «Más».
     $pestanas = array_slice(array_merge(...array_values($grupos ?: [[]])), 0, 4, true);
+    $grupo_actual = '';
+    foreach ($grupos as $g => $items) if (isset($items[$actual])) $grupo_actual = $g;
     $aviso = $_SESSION['aviso'] ?? null;
     unset($_SESSION['aviso']);
+    $acceso = !$u && $actual !== 'quiosco';
     ?>
 <!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0d12" media="(prefers-color-scheme: dark)">
 <link rel="manifest" href="assets/manifest.json">
 <link rel="icon" href="assets/icono.svg">
 <link rel="apple-touch-icon" href="assets/icono-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="INDA">
+<link rel="preload" href="assets/fuentes/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="assets/estilo.css">
+<style><?= css_marca() ?></style>
 <script>document.documentElement.classList.add('js')</script>
-<title><?= e($titulo) ?> · INDA</title>
+<title><?= e($titulo) ?> · <?= e($empresa) ?></title>
 </head>
-<body class="<?= $u ? 'con-menu' : 'sin-menu' ?>">
+<body class="<?= $u ? 'con-menu' : ($acceso ? 'sin-menu acceso' : 'sin-menu') ?> p-<?= e(preg_replace('/[^a-z]/', '', $actual) ?: 'inicio') ?>">
 <?php if ($u): ?>
 <aside class="lateral" id="menu" aria-label="Menú">
-  <?php if ($logo): ?><a class="logo-empresa" href="?"><img src="<?= e($logo) ?>" alt="Logo de la empresa"></a><?php endif ?>
-  <a class="logo" href="?"><img src="assets/icono.svg" alt=""> INDA</a>
+  <a class="marca-empresa" href="?">
+    <?php if ($logo): ?><img src="<?= e($logo) ?>" alt="<?= e($empresa) ?>"><?php else: ?><img class="icono-inda" src="assets/icono.svg" alt=""><span><?= e($empresa) ?></span><?php endif ?>
+  </a>
+  <nav>
   <?php foreach ($grupos as $g => $items): ?>
   <p class="grupo"><?= e($g) ?></p>
   <?php foreach ($items as $p => $txt): ?>
-  <a href="?p=<?= $p ?>" class="<?= $actual === $p ? 'activo' : '' ?>"><?= icono($p) ?><span><?= e($txt) ?></span></a>
+  <a href="?p=<?= $p ?>" class="<?= $actual === $p ? 'activo' : '' ?>"><?= icono($p) ?><span><?= e(preg_replace('/ \(\d+\)$/', '', $txt)) ?></span><?= preg_match('/\((\d+)\)$/', $txt, $m) ? '<b class="contador">' . $m[1] . '</b>' : '' ?></a>
   <?php endforeach; endforeach ?>
+  </nav>
   <div class="cuenta">
-    <a href="?p=avisos" class="<?= $actual === 'avisos' ? 'activo' : '' ?>"><?= icono('avisos') ?><span>Avisos</span><?= $n ? '<b class="insignia">' . $n . '</b>' : '' ?></a>
     <a href="?p=perfil" class="yo <?= $actual === 'perfil' ? 'activo' : '' ?>"><?= avatar($u) ?><span><?= e(nombre($u)) ?><small><?= e(['empleado' => 'Empleado', 'responsable' => 'Responsable', 'admin' => 'Administración', 'inspeccion' => 'Inspección'][$u['rol']]) ?></small></span></a>
-    <a href="?p=salir"><?= icono('salir') ?><span>Salir</span></a>
+    <a href="?p=salir" class="salir" title="Salir"><?= icono('salir') ?><span>Salir</span></a>
   </div>
+  <p class="hecho-con"><img src="assets/icono.svg" alt=""> INDA · registro de jornada</p>
 </aside>
 <div class="velo" data-cerrar-menu></div>
+<header class="barra-superior">
+  <p class="migas"><?= $grupo_actual ? '<span>' . e($grupo_actual) . '</span>' . icono('flecha') : '' ?><strong><?= e($titulo) ?></strong></p>
+  <p class="hoy"><?= e(ucfirst(fecha_larga())) ?></p>
+  <a href="?p=avisos" class="campana <?= $actual === 'avisos' ? 'activo' : '' ?>" aria-label="Avisos"><?= icono('avisos') ?><?= $n ? '<b class="insignia">' . $n . '</b>' : '' ?></a>
+  <a href="?p=perfil" class="yo-mini" aria-label="Mi perfil"><?= avatar($u) ?></a>
+</header>
 <header class="barra-movil">
-  <span class="logo"><img src="assets/icono.svg" alt=""> INDA</span>
+  <a class="logo" href="?"><?php if ($logo): ?><img class="logo-empresa-movil" src="<?= e($logo) ?>" alt="<?= e($empresa) ?>"><?php else: ?><img src="assets/icono.svg" alt=""> <?= e($empresa) ?><?php endif ?></a>
   <a href="?p=avisos" class="campana" aria-label="Avisos"><?= icono('avisos') ?><?= $n ? '<b class="insignia">' . $n . '</b>' : '' ?></a>
 </header>
 <nav class="pestanas" aria-label="Accesos rápidos">
@@ -125,15 +163,24 @@ function cabecera(string $titulo, ?array $u = null): void
   <?php endforeach ?>
   <button type="button" class="menu-boton" aria-expanded="false" aria-controls="menu"><?= icono('mas') ?><span>Más</span></button>
 </nav>
+<?php elseif ($acceso): ?>
+<aside class="acceso-marca">
+  <div class="acceso-logo"><?php if ($logo): ?><img src="<?= e($logo) ?>" alt="<?= e($empresa) ?>"><?php else: ?><img src="assets/icono.svg" alt="" class="icono-inda"><?php endif ?></div>
+  <p class="acceso-empresa"><?= e($empresa) ?></p>
+  <p class="acceso-lema">Portal del empleado</p>
+  <ul class="acceso-puntos">
+    <li><?= icono('fichar') ?> Ficha tu entrada y salida desde el móvil</li>
+    <li><?= icono('calendario') ?> Consulta tus turnos y tu calendario</li>
+    <li><?= icono('ausencias') ?> Pide vacaciones y permisos</li>
+  </ul>
+  <p class="hecho-con"><img src="assets/icono.svg" alt=""> INDA · registro de jornada</p>
+</aside>
 <?php endif ?>
 <main>
-<?php if (!$u): ?>
-<?php if ($logo): ?><p class="logo-entrada"><img src="<?= e($logo) ?>" alt="Logo de la empresa"></p><?php endif ?>
-<p class="marca-grande<?= $logo ? ' pequena' : '' ?>"><img src="assets/icono.svg" alt=""> INDA</p>
-<?php endif ?>
-<?php if ($logo): ?><p class="solo-imprimir logo-impreso"><img src="<?= e($logo) ?>" alt=""></p><?php endif ?>
+<?php if ($logo && $u): ?><p class="solo-imprimir logo-impreso"><img src="<?= e($logo) ?>" alt=""></p><?php endif ?>
+<?php if (!$u && !$acceso && $logo): ?><p class="logo-entrada"><img src="<?= e($logo) ?>" alt="<?= e($empresa) ?>"></p><?php endif ?>
 <h1><?= e($titulo) ?></h1>
-<?php if ($aviso): ?><p class="aviso <?= e($aviso[1]) ?>" role="status"><?= e($aviso[0]) ?></p><?php endif ?>
+<?php if ($aviso): ?><p class="aviso <?= e($aviso[1]) ?>" role="status"><?= icono($aviso[1] === 'error' ? 'alerta' : 'ok') ?><span><?= e($aviso[0]) ?></span></p><?php endif ?>
 <?php
 }
 

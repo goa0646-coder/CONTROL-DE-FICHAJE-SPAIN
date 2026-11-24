@@ -54,26 +54,68 @@ foreach (jornadas(fichajes_de(db(), (int)$u['id'], a_utc("$hoy -1 day"))) as $j)
     if (local($j['entrada'], 'Y-m-d') === $hoy || $j['salida'] === null) $trabajado += $j['trabajado'] + (!empty($j['en_curso']) ? time() - $j['en_curso'] : 0);
 }
 $sin_leer = array_slice(anuncios_pendientes(db(), $u), 0, 3);
+$hora = (int)local(ahora(), 'G');
+$saludo = $hora < 7 ? 'Buenas noches' : ($hora < 14 ? 'Buenos días' : ($hora < 21 ? 'Buenas tardes' : 'Buenas noches'));
+$teorico = $dia['ausencia'] || $dia['festivo'] ? 0 : $dia['minutos'] * 60;
+$pct = $teorico ? min(1, $trabajado / $teorico) : 0;
+$proximos = calendario_teorico(db(), $u, date('Y-m-d', strtotime("$hoy +1 day")), date('Y-m-d', strtotime("$hoy +6 days")));
+$hors = horarios(db());
+$vac = array_values(array_filter(saldos_ausencia(db(), $u, (int)local(ahora(), 'Y')), fn($x) => str_contains(normalizar($x['tipo']), 'vacacion')))[0] ?? null;
+$hoy_txt = $dia['ausencia'] ? $dia['ausencia']['tipo'] : ($dia['festivo'] ? 'Festivo: ' . $dia['festivo'] : ($dia['minutos'] ? ($dia['horario'] ?: 'Laborable') : (!$dia['horario_id'] && $dia['laborable'] ? 'Sin turno asignado' : 'Descanso')));
+[$letra, $color] = celda_turno($dia, $hors, true);
 ?>
-<div class="tarjeta centro">
-  <p class="reloj" data-reloj><?= local(ahora(), 'H:i') ?></p>
-  <?php if ($qr): ?><p class="aviso ok">Fichando con QR en <?= e(centro(db(), (int)$qr['centro_id'])['nombre']) ?></p><?php endif ?>
-  <p class="estado <?= $estado ?>"><?= ['fuera' => 'Fuera', 'dentro' => 'Trabajando', 'pausa' => 'En pausa'][$estado] ?></p>
+<p class="saludo"><?= e($saludo) ?>, <?= e($u['nombre']) ?> <span><?= e(ucfirst(fecha_larga())) ?></span></p>
+<div class="fichar-rejilla">
+<section class="tarjeta fichar-principal">
+  <div class="anillo" style="--pct:<?= round($pct * 100) ?>">
+    <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="54" class="pista"/><?php if ($pct > 0): ?><circle cx="60" cy="60" r="54" class="progreso" pathLength="100" stroke-dasharray="<?= round($pct * 100, 1) ?> 100"/><?php endif ?></svg>
+    <div class="anillo-centro">
+      <p class="reloj" data-reloj><?= local(ahora(), 'H:i') ?></p>
+      <p class="estado <?= $estado ?>"><?= ['fuera' => 'Fuera', 'dentro' => 'Trabajando', 'pausa' => 'En pausa'][$estado] ?></p>
+    </div>
+  </div>
+  <p class="llevas"><strong><?= horas($trabajado) ?> h</strong> trabajadas hoy<?= $teorico ? ' de ' . horas($teorico) . ' h' : '' ?></p>
+  <?php if ($qr): ?><p class="aviso ok"><?= icono('ok') ?><span>Fichando con QR en <?= e(centro(db(), (int)$qr['centro_id'])['nombre']) ?></span></p><?php endif ?>
   <form method="post" data-gps="<?= e($modo) ?>">
     <?= csrf_campo() ?>
     <input type="hidden" name="lat"><input type="hidden" name="lng"><input type="hidden" name="precision">
     <?= botones_fichaje($estado) ?>
   </form>
-  <p class="nota">Hoy: <?= $dia['ausencia'] ? e($dia['ausencia']['tipo']) : ($dia['festivo'] ? 'Festivo (' . e($dia['festivo']) . ')' : ($dia['minutos'] ? e($dia['horario']) . (!$dia['flexible'] && $dia['entrada'] ? ' · ' . substr($dia['entrada'], 0, 5) . '–' . substr((string)$dia['salida'], 0, 5) : '') . ' · ' . horas($dia['minutos'] * 60) . ' h' : 'Sin horario')) ?>
-    · Llevas <?= horas($trabajado) ?> h</p>
   <?php if ($modo !== 'no'): ?><p class="nota">Se guardará tu ubicación solo al fichar<?= $modo === 'opcional' ? ' (si la permites)' : '' ?>.</p><?php endif ?>
+</section>
+<aside class="fichar-lado">
+  <div class="tarjeta dato">
+    <span class="rotulo">Hoy</span>
+    <p class="turno-hoy"><?php if ($letra !== ''): ?><span class="letra-turno" style="background:<?= e($color ?: '#98a2b3') ?>"><?= e($letra) ?></span><?php endif ?>
+      <span><strong><?= e($hoy_txt) ?></strong><?php if (!$dia['ausencia'] && !$dia['flexible'] && $dia['entrada'] && $dia['minutos']): ?><small><?= substr($dia['entrada'], 0, 5) ?> – <?= substr((string)$dia['salida'], 0, 5) ?> · <?= horas($dia['minutos'] * 60) ?> h</small><?php endif ?></span></p>
+  </div>
+  <div class="tarjeta dato">
+    <span class="rotulo">Próximos días</span>
+    <ol class="semana-mini">
+      <?php foreach ($proximos as $f => $c): [$l, $col, $t] = celda_turno($c, $hors, true); ?>
+      <li title="<?= e($t) ?>"><small><?= mb_substr(DIAS[(int)date('N', strtotime($f))], 0, 1) ?> <?= (int)substr($f, 8) ?></small><span class="letra-turno<?= $col ? '' : ' vacia' ?>" style="<?= $col ? 'background:' . e($col) : '' ?>"><?= e($l ?: '·') ?></span></li>
+      <?php endforeach ?>
+    </ol>
+    <a href="?p=calendario">Ver calendario</a>
+  </div>
+  <?php if ($vac): ?>
+  <div class="tarjeta dato">
+    <span class="rotulo">Vacaciones <?= local(ahora(), 'Y') ?></span>
+    <p class="cifra-grande"><?= e(+$vac['disponible']) ?> <small>días disponibles de <?= e(+$vac['asignado']) ?></small></p>
+    <a href="?p=ausencias">Pedir vacaciones o permisos</a>
+  </div>
+  <?php endif ?>
+  <?php if ($sin_leer): ?>
+  <div class="tarjeta dato">
+    <span class="rotulo">Anuncios pendientes de leer</span>
+    <?php foreach ($sin_leer as $c): ?><a class="anuncio-mini" href="?p=comunicados&id=<?= e($c['id']) ?>"><?= icono('comunicados') ?><span><?= e($c['titulo']) ?></span></a><?php endforeach ?>
+  </div>
+  <?php endif ?>
+</aside>
 </div>
 <div class="tarjeta centro" data-instalar hidden>
-  <p>Instala INDA en tu teléfono y ficha con un toque, como una app.</p>
-  <button type="button" data-instalar-boton>Instalar INDA</button>
+  <p>Instala la app en tu teléfono y ficha con un toque.</p>
+  <button type="button" data-instalar-boton>Instalar en el teléfono</button>
   <p class="nota" data-ios hidden>En iPhone: pulsa <strong>Compartir</strong> y después <strong>«Añadir a pantalla de inicio»</strong>.</p>
 </div>
-<?php foreach ($sin_leer as $c): ?>
-<p class="aviso ok"><a href="?p=comunicados&id=<?= e($c['id']) ?>">Anuncio pendiente de leer: <?= e($c['titulo']) ?></a></p>
-<?php endforeach;
-pie();
+<?php pie();

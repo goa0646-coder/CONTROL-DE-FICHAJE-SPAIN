@@ -28,7 +28,7 @@ cabecera('Recibidos', $yo);
     <a href="?p=recibidos<?= $todos ? '&ver=todos' : '' ?>&id=<?= e($e['id']) ?>" class="item con-avatar<?= $abierto && $abierto['id'] == $e['id'] ? ' activo' : '' ?><?= $e['visto_utc'] ? '' : ' nuevo' ?>">
       <?= avatar(['id' => $e['usuario_id']] + $e) ?>
       <span><strong><?= e(trim($e['nombre'] . ' ' . $e['apellidos'])) ?></strong>
-      <small><?= local($e['creado_utc']) ?><?= $e['archivo'] ? ' · 📎' : '' ?></small>
+      <small><?= local($e['creado_utc']) ?><?= $e['archivo'] ? ' · ' . icono('clip') : '' ?></small>
       <span class="resumen"><?= e($e['asunto']) ?></span></span>
     </a>
     <?php endforeach ?>

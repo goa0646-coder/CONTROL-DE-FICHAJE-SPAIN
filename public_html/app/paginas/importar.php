@@ -87,7 +87,7 @@ cabecera('Importar desde Excel', $yo);
       <tr><th>Fila</th><th>Persona</th><th>Email</th><th>Departamento</th><th>Horario</th><th>Estado</th></tr>
       <?php foreach ($p['filas'] as $f): ?>
       <tr class="<?= $f['activo'] ? '' : 'anulado' ?>"><td><?= $f['fila'] ?></td><td><?= e(trim($f['nombre'] . ' ' . $f['apellidos'])) ?></td><td><?= e($f['email']) ?></td><td><?= e($f['departamento'] ?? '') ?></td><td><?= e($f['horario'] ?? '') ?></td>
-        <td class="<?= $f['estado'] === 'error' ? 'error' : '' ?>"><?= ['nuevo' => 'Nueva', 'actualizar' => 'Ya existe', 'error' => '⛔ ' . implode(', ', $f['errores'])][$f['estado']] ?></td></tr>
+        <td class="<?= $f['estado'] === 'error' ? 'error' : '' ?>"><?= ['nuevo' => 'Nueva', 'actualizar' => 'Ya existe', 'error' => '<span class="pildora mal">No se importa</span> ' . e(implode(', ', $f['errores']))][$f['estado']] ?></td></tr>
       <?php endforeach ?>
     </table>
   <?php elseif ($s['filas']): $cols = array_values(array_diff(array_keys(array_merge(...array_map(fn($f) => $f, $s['filas']))), ['fila', 'errores'])); ?>
@@ -95,7 +95,7 @@ cabecera('Importar desde Excel', $yo);
       <tr><th>Fila</th><?php foreach ($cols as $c): ?><th><?= e($c) ?></th><?php endforeach ?><th></th></tr>
       <?php foreach (array_slice($s['filas'], 0, 300) as $f): ?>
       <tr><td><?= $f['fila'] ?></td><?php foreach ($cols as $c): ?><td><?= e($f[$c] ?? '') ?></td><?php endforeach ?>
-        <td class="<?= $f['errores'] ? 'error' : '' ?>"><?= $f['errores'] ? '⛔ ' . e(implode(', ', $f['errores'])) : '✔' ?></td></tr>
+        <td class="<?= $f['errores'] ? 'error' : '' ?>"><?= $f['errores'] ? '<span class="pildora mal">No se importa</span> ' . e(implode(', ', $f['errores'])) : '<span class="pildora ok">Correcta</span>' ?></td></tr>
       <?php endforeach ?>
     </table>
   <?php endif ?>
@@ -108,7 +108,7 @@ cabecera('Importar desde Excel', $yo);
   <label><input type="checkbox" name="actualizar" checked> Actualizar las personas que ya existen (no cambia contraseñas ni quita el rol de administrador)</label>
   <label><input type="checkbox" name="bienvenida"> Enviar a las nuevas un email de bienvenida para que elijan su contraseña</label>
   <?php endif ?>
-  <p class="nota">Se aplica en este orden: departamentos y puestos, turnos, personas, ratios, festivos, ausencias y cuadrante. Las filas con ⛔ no se importan. Las ausencias entran como aprobadas salvo que pongas «Pendiente» en Estado.</p>
+  <p class="nota">Se aplica en este orden: departamentos y puestos, turnos, personas, ratios, festivos, ausencias y cuadrante. Las filas marcadas «No se importa» se saltan. Las ausencias entran como aprobadas salvo que pongas «Pendiente» en Estado.</p>
   <button name="que" value="aplicar">Importar</button>
   <button name="que" value="cancelar" class="secundario">Cancelar</button>
 </form>

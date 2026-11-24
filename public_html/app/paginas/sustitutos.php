@@ -49,7 +49,7 @@ cabecera('Cubrir un turno', $yo);
     <td><?= e(nombre($u)) ?><br><small class="nota">alta <?= local($u['alta_utc'], 'm/Y') ?></small></td>
     <td><?= $c['tipo'] === 'extra' ? 'Su día libre → horas extra voluntarias' : 'Cambiar de ' . e($hs[$c['actual']]['nombre'] ?? '') . ' (le sobra ese día)' ?></td>
     <td><?= horas($c['extra']) ?> de <?= e($r['horas_extra_max']) ?></td>
-    <td class="<?= $c['mal'] ? 'error' : '' ?>"><?= $c['mal'] ? '⛔ ' . e($c['mal'][0][2]) : '✔ Cumple' ?></td>
+    <td class="<?= $c['mal'] ? 'error' : '' ?>"><?= $c['mal'] ? '<span class="pildora mal">No permitido</span> ' . e($c['mal'][0][2]) : '<span class="pildora ok">Cumple</span>' ?></td>
     <td>
       <form method="post" class="filtros"><?= csrf_campo() ?><input type="hidden" name="uid" value="<?= e($u['id']) ?>">
         <?php if ($c['tipo'] === 'extra'): ?>
@@ -63,7 +63,7 @@ cabecera('Cubrir un turno', $yo);
   <?php endforeach ?>
 </table>
 <?php if (!$cand): ?><p class="aviso error">Nadie con ese puesto puede cubrirlo sin incumplir el convenio. Opciones: contratar a alguien, formar a más personas en ese puesto o reducir el servicio ese día.</p><?php endif ?>
-<p class="nota">Las horas extra son voluntarias: la persona las acepta desde su móvil con un código que le llega al email. Con «Fuerza mayor» (art. 35.3 ET) no cuentan en el tope anual, pero se compensan igual. Los ⛔ no se pueden saltar ni con la firma del trabajador.</p>
+<p class="nota">Las horas extra son voluntarias: la persona las acepta desde su móvil con un código que le llega al email. Con «Fuerza mayor» (art. 35.3 ET) no cuentan en el tope anual, pero se compensan igual. Lo marcado «No permitido» no se puede saltar ni con la firma del trabajador.</p>
 
 <?php if ($ofertas): ?>
 <h2>Ofertas de este turno</h2>

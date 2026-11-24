@@ -64,7 +64,7 @@ if (es_post()) {
     };
     if ($error) {
         aviso($error, 'error');
-        redirigir('usuarios', $id ? ['u' => $id] : []);
+        redirigir('usuarios', $id ? ['u' => $id] : ['nuevo' => 1]);
     }
     $antes = $id ? usuario(db(), $id) : null;
     $activo = isset($p['activo']) ? 1 : 0;
@@ -93,7 +93,7 @@ if (es_post()) {
         }
     } catch (PDOException $e) {
         aviso($e->getCode() == 23000 ? 'Ese email o nº de empleado ya existe.' : 'No se pudo guardar.', 'error');
-        redirigir('usuarios', $id ? ['u' => $id] : []);
+        redirigir('usuarios', $id ? ['u' => $id] : ['nuevo' => 1]);
     }
     // Contraseña nueva puesta por el admin o baja: fuera las sesiones guardadas de esa persona.
     if (isset($campos['password_hash']) || !$activo) cerrar_dispositivos(db(), $id);
@@ -118,14 +118,17 @@ foreach ($todos as $x) if (in_array($x['rol'], ['responsable', 'admin'], true) &
 $u = isset($_GET['u']) ? usuario(db(), (int)$_GET['u']) : null;
 $u ??= ['id' => '', 'num_empleado' => '', 'nombre' => '', 'apellidos' => '', 'dni' => '', 'email' => '', 'rol' => 'empleado',
     'centro_id' => '', 'responsable_id' => '', 'departamento_id' => '', 'horario_id' => '', 'gps_modo' => '', 'acceso_hasta' => '', 'activo' => 1, 'pin_hash' => null];
-cabecera('Usuarios', $yo);
+$editando = isset($_GET['u']) || isset($_GET['nuevo']);
+cabecera($editando ? ($u['id'] ? nombre($u) : 'Nueva persona') : 'Usuarios', $yo);
 ?>
+<?php if ($editando): ?>
+<p class="volver-arriba"><a href="?p=usuarios"><?= icono('flecha') ?> Volver a la plantilla</a></p>
 <?php if (!empty($u['foto'])): ?>
 <form method="post" class="tarjeta con-avatar"><?= csrf_campo() ?><?= avatar($u, 'grande') ?> <button name="quitar_foto" value="<?= e($u['id']) ?>" class="secundario" data-confirmar="¿Retirar la foto de perfil de <?= e(nombre($u)) ?>?">Retirar foto</button></form>
 <?php endif ?>
-<form method="post" class="tarjeta">
+<form method="post" class="tarjeta ficha-persona">
   <?= csrf_campo() ?><input type="hidden" name="id" value="<?= e($u['id']) ?>">
-  <h2><?= $u['id'] ? 'Editar ' . e(nombre($u)) : 'Nueva persona' ?></h2>
+  <h2><?= $u['id'] ? 'Datos de ' . e(nombre($u)) : 'Datos de la nueva persona' ?></h2>
   <?php if (ia_activa()): ?>
   <div class="tarjeta" data-ia-dni>
     <label>Rellenar con la foto del DNI/NIE <input type="file" accept="image/*,application/pdf" capture="environment"></label>
@@ -158,8 +161,7 @@ cabecera('Usuarios', $yo);
   <label>Contraseña <input type="password" name="clave" autocomplete="new-password" placeholder="<?= $u['id'] ? 'Dejar vacío para no cambiarla' : 'Mínimo 8 caracteres' ?>"></label>
   <label>Acceso hasta (solo Inspección) <input type="date" name="acceso_hasta" value="<?= e($u['acceso_hasta']) ?>"></label>
   <label><input type="checkbox" name="activo" <?= $u['activo'] ? 'checked' : '' ?>> Activo (desmarcar = baja; su registro se conserva)</label>
-  <button>Guardar</button>
-  <?php if ($u['id']): ?><a href="?p=usuarios">Nueva persona</a><?php endif ?>
+  <div class="pie-form"><button>Guardar</button> <a class="boton secundario" href="?p=usuarios">Cancelar</a></div>
 </form>
 
 <?php if ($u['id'] && $u['rol'] !== 'inspeccion'):
@@ -182,15 +184,15 @@ cabecera('Usuarios', $yo);
   <p class="nota">Vacío = lo que diga el tipo de ausencia. Pon aquí la parte proporcional si entra a mitad de año.</p>
 </form>
 <?php endif ?>
-
-<h2>Plantilla</h2>
-<form class="filtros">
-  <input type="hidden" name="p" value="usuarios">
-  <label>Buscar <input name="q" value="<?= e($_GET['q'] ?? '') ?>" placeholder="Nombre, email o DNI"></label>
-  <label>Mostrar <select name="ver"><?= opciones(['activos' => "Activos ({$cuantos['activos']})", 'bajas' => "De baja ({$cuantos['bajas']})", 'todos' => 'Todos'], $ver) ?></select></label>
-  <button>Ver</button>
-  <a class="boton secundario" href="?p=importar">Importar desde Excel</a>
-</form>
+<?php else: ?>
+<div class="barra-acciones">
+  <form class="filtros buscador">
+    <input type="hidden" name="p" value="usuarios">
+    <label><input type="search" name="q" value="<?= e($_GET['q'] ?? '') ?>" placeholder="Buscar por nombre, email o DNI" aria-label="Buscar"></label>
+    <label><select name="ver" onchange="this.form.submit()" aria-label="Mostrar"><?= opciones(['activos' => "Activos ({$cuantos['activos']})", 'bajas' => "De baja ({$cuantos['bajas']})", 'todos' => 'Todos'], $ver) ?></select></label>
+  </form>
+  <span class="botones-derecha"><a class="boton secundario" href="?p=importar">Importar desde Excel</a> <a class="boton" href="?p=usuarios&nuevo=1">+ Nueva persona</a></span>
+</div>
 <table>
   <tr><th>Nombre</th><th>Rol</th><th>Centro</th><th>Email</th><th>Estado</th><th></th></tr>
   <?php foreach ($lista as $x): ?>
@@ -199,11 +201,12 @@ cabecera('Usuarios', $yo);
     <td><span class="estado <?= $x['activo'] ? 'dentro' : 'fuera' ?>"><?= $x['activo'] ? 'Activo' : 'De baja' ?></span></td>
     <td class="acciones"><a href="?p=usuarios&u=<?= e($x['id']) ?>">Editar</a>
       <?php if ($x['id'] != $yo['id']): ?>
-      <form method="post" style="display:inline"><?= csrf_campo() ?><button name="cambiar_estado" value="<?= e($x['id']) ?>" class="secundario"
+      <form method="post" style="display:inline"><?= csrf_campo() ?><button name="cambiar_estado" value="<?= e($x['id']) ?>" class="secundario pequeno"
         data-confirmar="<?= $x['activo'] ? e('¿Dar de baja a ' . nombre($x) . '? No podrá entrar ni fichar. Su registro se conserva.') : '' ?>"><?= $x['activo'] ? 'Dar de baja' : 'Reactivar' ?></button></form>
       <?php endif ?></td>
   </tr>
   <?php endforeach ?>
 </table>
 <?php if (!$lista): ?><p class="nota">Nadie con ese filtro.</p><?php endif ?>
-<?php pie();
+<?php endif;
+pie();

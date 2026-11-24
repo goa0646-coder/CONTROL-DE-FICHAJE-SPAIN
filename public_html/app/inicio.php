@@ -27,6 +27,7 @@ require __DIR__ . '/turnos.php';
 require __DIR__ . '/estudio.php';
 require __DIR__ . '/libro.php';
 require __DIR__ . '/cuadrante_excel.php';
+require __DIR__ . '/marca.php';
 
 // config-inda.php vive fuera de public_html (ver INSTALAR.md).
 // config-fichaje.php se sigue aceptando para instalaciones antiguas.
@@ -198,5 +199,5 @@ function requiere(string ...$roles): array
 
 function inicio_de(array $u): string
 {
-    return $u['rol'] === 'inspeccion' ? 'equipo' : 'fichar';
+    return match ($u['rol']) { 'inspeccion' => 'equipo', 'responsable', 'admin' => 'panel', default => 'fichar' };
 }

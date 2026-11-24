@@ -122,7 +122,7 @@
       const i = grupos.indexOf(g), estado = document.querySelector(`[data-estado="${i}"]`);
       try {
         await enviar({ que: 'enviar', uid: g.uid, titulo: g.titulo, firma: $('[data-firma]').checked ? '1' : '', pdf: new File([pdfBlob(g.bytes)], 'nomina.pdf', { type: 'application/pdf' }) });
-        g.enviada = true; ok++; estado.textContent = '✔ enviada';
+        g.enviada = true; ok++; estado.innerHTML = '<span class="pildora ok">Enviada</span>';
       } catch (e) { estado.innerHTML = '<span class="error">' + e.message + '</span>'; }
     }
     progreso.textContent = `${ok} de ${lista.length} nóminas enviadas.`;
