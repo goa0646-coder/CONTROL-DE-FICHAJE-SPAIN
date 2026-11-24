@@ -88,7 +88,7 @@ class CuadranteTest extends Base
         $this->db->exec('DELETE FROM necesidades');
         $this->necesidad($this->tarde, null, 1);
         $r = planificar($this->db, $gente, '2099-04-06', '2099-04-06', ['completar' => true]);
-        $this->assertSame([], $r['plan']);
+        foreach ($r['plan'] as $d) $this->assertNotSame($this->tarde, $d['2099-04-06']['horario_id'] ?? null, 'nadie hace el turno de coordinación');
         $this->assertStringContainsString('Coordinación', $r['faltan'][0][4]);
     }
 
@@ -118,6 +118,31 @@ class CuadranteTest extends Base
         consulta($this->db, 'INSERT INTO planificacion (usuario_id, fecha, horario_id) VALUES (?, ?, ?)', [$a['id'], '2099-04-07', $m]);
         $r = planificar($this->db, [$a], '2099-04-06', '2099-04-06');
         $this->assertNull($r['plan'][$a['id']]['2099-04-06']);
+    }
+
+    public function testAusenciaEntreFechasRecalculaSoloLoQueFalta(): void
+    {
+        // Mínimo 2 de mañana; cuadrante publicado con A y B. Si B se va de excedencia, entra C (libre) y A no cambia.
+        $this->db->exec('DELETE FROM necesidades');
+        $this->db->exec('DELETE FROM planificacion');
+        $this->necesidad($this->manana, null, 2);
+        [$a, $b, $c] = array_map(fn() => $this->usuario(['alta_utc' => '2020-01-01 00:00:00']), range(1, 3));
+        foreach ([$a, $b] as $u) foreach (rango_fechas('2099-05-04', '2099-05-08') as $f) consulta($this->db, 'INSERT INTO planificacion (usuario_id, fecha, horario_id) VALUES (?, ?, ?)', [$u['id'], $f, $this->manana]);
+        foreach (rango_fechas('2099-05-04', '2099-05-08') as $f) consulta($this->db, 'INSERT INTO planificacion (usuario_id, fecha, horario_id) VALUES (?, ?, NULL)', [$c['id'], $f]);
+        $admin = $this->usuario(['rol' => 'admin']);
+        $tipo = (int)$this->db->query("SELECT id FROM tipos_ausencia WHERE nombre = 'Excedencia'")->fetchColumn();
+        $this->assertGreaterThan(0, $tipo, 'existe el tipo Excedencia');
+        marcar_ausencia($this->db, $admin, $b, $tipo, '2099-05-06', '2099-05-08');
+        $this->db->exec("UPDATE usuarios SET activo = 0 WHERE id NOT IN ({$a['id']}, {$b['id']}, {$c['id']})");
+        $r = recubrir($this->db, '2099-05-04', '2099-05-08');
+        $this->db->exec('UPDATE usuarios SET activo = 1');
+        $this->assertSame([[$c['id'], '2099-05-06'], [$c['id'], '2099-05-07'], [$c['id'], '2099-05-08']], array_map(fn($x) => [$x[0], $x[1]], $r['nuevos']));
+        $this->assertSame([], $r['faltan']);
+        $this->assertSame([], huecos($this->db, [$a, $b, $c], '2099-05-04', '2099-05-08'));
+        $this->assertSame(5, count(array_filter(calendario_teorico($this->db, $a, '2099-05-04', '2099-05-08'), fn($x) => $x['turno'] > 0)), 'A no cambia');
+        $this->assertSame([], bloqueos(comprobar_plan($this->db, $c, '2099-05-04', '2099-05-08')));
+        $this->expectException(DomainException::class);
+        marcar_ausencia($this->db, $admin, $b, $tipo, '2099-05-07', '2099-05-09');
     }
 
     public function testNoPoneMananaTrasTarde(): void

@@ -10,8 +10,9 @@ const TIPOS_POR_CODIGO = [
     'vacaciones' => ['Vacaciones', 0, 1, 26, 0, '#16a34a', 'laborables'], 'baja' => ['Baja por IT', 0, 1, null, 1, '#dc2626', 'naturales'],
     'libre disposicion' => ['Libre disposición', 0, 1, 6, 0, '#9333ea', 'laborables'], 'asuntos propios' => ['Asuntos propios', 0, 1, 2, 0, '#7c3aed', 'laborables'],
     'visita medica' => ['Visita médica', 1, 1, null, 1, '#0891b2', 'laborables'], 'accidente de trabajo' => ['Accidente de trabajo (baja)', 0, 0, null, 1, '#b91c1c', 'naturales'],
+    'excedencia' => ['Excedencia', 0, 0, null, 0, '#64748b', 'naturales'],
 ];
-const CODIGOS_AUSENCIA = ['v' => 'vacaciones', 'vac' => 'vacaciones', 'it' => 'baja', 'b' => 'baja', 'baja' => 'baja', 'ld' => 'libre disposicion', 'ap' => 'asuntos propios', 'vm' => 'visita medica', 'at' => 'accidente de trabajo'];
+const CODIGOS_AUSENCIA = ['v' => 'vacaciones', 'vac' => 'vacaciones', 'it' => 'baja', 'b' => 'baja', 'baja' => 'baja', 'ld' => 'libre disposicion', 'ap' => 'asuntos propios', 'vm' => 'visita medica', 'at' => 'accidente de trabajo', 'ex' => 'excedencia', 'exc' => 'excedencia'];
 
 // "Enero 2027", "ene-27", "2027-01", "01/2027" → [2027, 1]. null si no hay mes.
 function mes_de_texto(string $s): ?array
