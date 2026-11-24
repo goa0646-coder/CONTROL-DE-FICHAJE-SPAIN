@@ -39,7 +39,7 @@ function guardar_turnos(PDO $db, array $filas): array
                     $did = $deps[normalizar($dep)] = (int)$db->lastInsertId();
                 }
             }
-            $datos = [mb_substr(mb_strtoupper(trim($letra)), 0, 3), preg_match('/^#[0-9a-f]{6}$/i', $color) ? $color : '', $did];
+            $datos = [mb_substr(mb_strtoupper(trim($letra)), 0, 3), preg_match('/^#[0-9a-f]{6}$/i', $color) ? $color : color_turno($nombre, $e), $did];
             if ($id = $hors[normalizar($nombre)] ?? null) {
                 consulta($db, 'UPDATE horarios SET abreviatura = ?, color = ?, departamento_id = ?, flexible = 0, activo = 1 WHERE id = ?', [...$datos, $id]);
                 $res[1]++;

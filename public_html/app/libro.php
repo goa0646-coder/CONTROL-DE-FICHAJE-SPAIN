@@ -209,12 +209,41 @@ function aplicar_libro(PDO $db, array $yo, array $plan, bool $actualizar): array
         }
         $res['ausencias'] = "$n nuevas" . ($mal ? ", $mal no encontradas" : '');
     }
+    $convenio = [];
     if (!empty($s['cuadrante']['celdas'])) {
-        [$d, $a, $mal] = aplicar_cuadrante($db, $yo, interpretar_cuadrante($s['cuadrante']['celdas'], ...listas_cuadrante($db)));
-        $res['cuadrante'] = "$d días de turno o descanso, $a ausencias" . ($mal ? " ($mal incumplimientos del convenio: revísalos en Planificación)" : '');
+        $r = interpretar_cuadrante($s['cuadrante']['celdas'], ...listas_cuadrante($db));
+        [$d, $a, $convenio] = aplicar_cuadrante($db, $yo, $r);
+        $res['cuadrante'] = "$d días de turno o descanso, $a ausencias" . ($r['crear_tipos'] ? ' (creados los tipos ' . implode(', ', $r['crear_tipos']) . ')' : '')
+            . ($convenio ? ' · ' . count($convenio) . ' incumplimientos del convenio (en el informe)' : '');
     }
     auditar($db, (int)$yo['id'], 'importacion_libro', json_encode(array_diff_key($res, ['_nuevos' => 1]), JSON_UNESCAPED_UNICODE));
+    // Informe para administración: lo que no entró y lo que entró pero incumple el convenio.
+    $informe = informe_libro($plan);
+    foreach ($convenio as [$quien, $f, $txt]) $informe[] = ['Cuadrante', '', '', $quien, $f, '', 'Importado, pero incumple el convenio: ' . $txt];
+    consulta($db, 'REPLACE INTO ajustes VALUES (?, ?)', ['informe_importacion', json_encode(['fecha' => ahora(), 'archivo' => $plan['archivo'] ?? '', 'resumen' => array_diff_key($res, ['_nuevos' => 1]), 'filas' => array_slice($informe, 0, 3000)], JSON_UNESCAPED_UNICODE)]);
     return $res;
+}
+
+// Todo lo que no se puede importar, fila a fila: [sección, hoja, fila, persona, día, valor, motivo].
+function informe_libro(array $plan): array
+{
+    $nombres = ['personas' => 'Personas', 'turnos' => 'Turnos', 'ratios' => 'Ratios', 'festivos' => 'Festivos', 'ausencias' => 'Ausencias', 'departamentos' => 'Departamentos', 'puestos' => 'Puestos'];
+    $out = [];
+    foreach ($plan['secciones'] as $sec => $s) {
+        if (!empty($s['error'])) $out[] = [$nombres[$sec] ?? 'Cuadrante', $plan['hojas'][$sec] ?? '', '', '', '', '', $s['error']];
+        if ($sec === 'cuadrante') {
+            foreach ($s['resumen']['problemas'] ?? [] as [$hoja, $fila, $quien, $f, $v, $motivo]) $out[] = ['Cuadrante', $hoja, $fila, $quien, $f, $v, $motivo];
+            continue;
+        }
+        if ($sec === 'personas') {
+            foreach ($s['previa']['filas'] ?? [] as $f) if ($f['estado'] === 'error') $out[] = ['Personas', $plan['hojas'][$sec] ?? '', $f['fila'], trim($f['nombre'] . ' ' . $f['apellidos']) ?: $f['email'], '', $f['email'], implode(', ', $f['errores'])];
+            foreach ($s['previa']['horarios_desconocidos'] ?? [] as $h) if (!in_array(normalizar($h), array_map('normalizar', array_column($plan['secciones']['turnos']['filas'] ?? [], 'nombre')), true)) $out[] = ['Personas', $plan['hojas'][$sec] ?? '', '', '', '', $h, 'Horario que no existe ni viene en la hoja Turnos: esas personas quedan sin horario'];
+            foreach ($s['previa']['responsables_desconocidos'] ?? [] as $h) $out[] = ['Personas', $plan['hojas'][$sec] ?? '', '', '', '', $h, 'Responsable que no encuentro: quedan sin responsable'];
+            continue;
+        }
+        foreach ($s['filas'] as $f) if (!empty($f['errores'])) $out[] = [$nombres[$sec], $plan['hojas'][$sec] ?? '', $f['fila'], $f['email'] ?? '', fecha_iso($f['desde'] ?? $f['fecha'] ?? '') ?? '', $f['nombre'] ?? $f['turno'] ?? $f['tipo'] ?? '', implode(', ', $f['errores'])];
+    }
+    return $out;
 }
 
 function duracion(?string $e, ?string $s): string

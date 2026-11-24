@@ -5,6 +5,12 @@
 const MESES_CORTOS = ['ene' => 1, 'feb' => 2, 'mar' => 3, 'abr' => 4, 'may' => 5, 'jun' => 6, 'jul' => 7, 'ago' => 8, 'sep' => 9, 'set' => 9, 'oct' => 10, 'nov' => 11, 'dic' => 12];
 const DESCANSO = ['d', 'l', 'libre', 'descanso', 'descanso semanal', 'ds', 'dl', '-'];
 // Códigos cortos de ausencia → palabra que tiene que aparecer en el nombre del tipo.
+// Tipo que se crea si el cuadrante usa el código y en INDA aún no existe. [nombre, por_horas, retribuida, días/año, justificante, color, cómputo].
+const TIPOS_POR_CODIGO = [
+    'vacaciones' => ['Vacaciones', 0, 1, 26, 0, '#16a34a', 'laborables'], 'baja' => ['Baja por IT', 0, 1, null, 1, '#dc2626', 'naturales'],
+    'libre disposicion' => ['Libre disposición', 0, 1, 6, 0, '#9333ea', 'laborables'], 'asuntos propios' => ['Asuntos propios', 0, 1, 2, 0, '#7c3aed', 'laborables'],
+    'visita medica' => ['Visita médica', 1, 1, null, 1, '#0891b2', 'laborables'], 'accidente de trabajo' => ['Accidente de trabajo (baja)', 0, 0, null, 1, '#b91c1c', 'naturales'],
+];
 const CODIGOS_AUSENCIA = ['v' => 'vacaciones', 'vac' => 'vacaciones', 'it' => 'baja', 'b' => 'baja', 'baja' => 'baja', 'ld' => 'libre disposicion', 'ap' => 'asuntos propios', 'vm' => 'visita medica', 'at' => 'accidente de trabajo'];
 
 // "Enero 2027", "ene-27", "2027-01", "01/2027" → [2027, 1]. null si no hay mes.
@@ -105,7 +111,8 @@ function indice_personas(array $personas): array
 function valor_cuadrante(string $v, ?string $dep, array $turnos, array $tipos): array
 {
     $n = normalizar($v);
-    if ($n === '' || $n === 'f' || $n === 'festivo') return ['nada'];
+    if ($n === '') return ['nada'];
+    if ($n === 'f' || $n === 'festivo') return ['libre', 'festivo']; // festivo no trabajado: descanso
     if (in_array($n, DESCANSO, true)) return ['libre'];
     foreach ($turnos as $t) if (normalizar($t['nombre']) === $n) return ['turno', $t['nombre']];
     $letra = array_values(array_filter($turnos, fn($t) => $t['letra'] !== '' && normalizar($t['letra']) === $n));
@@ -116,27 +123,52 @@ function valor_cuadrante(string $v, ?string $dep, array $turnos, array $tipos): 
         return ['?', "«{$v}» puede ser " . implode(' o ', array_unique(array_column($letra, 'nombre'))) . ': pon el nombre del turno o el departamento de la persona'];
     }
     foreach ($tipos as $t) if (normalizar($t) === $n) return ['ausencia', $t];
-    if ($palabra = CODIGOS_AUSENCIA[$n] ?? null) foreach ($tipos as $t) if (str_contains(normalizar($t), $palabra)) return ['ausencia', $t];
+    if ($palabra = CODIGOS_AUSENCIA[$n] ?? null) {
+        foreach ($tipos as $t) if (str_contains(normalizar($t), $palabra)) return ['ausencia', $t];
+        if (isset(TIPOS_POR_CODIGO[$palabra])) return ['ausencia', TIPOS_POR_CODIGO[$palabra][0], 'crear']; // se crea al importar
+    }
     return ['?', "«{$v}» no es un turno, un descanso ni una ausencia conocidos"];
 }
 
-// Interpreta todas las casillas con las listas dadas. Devuelve el resumen y las asignaciones [email => [fecha => [tipo, valor]]].
+// Interpreta todas las casillas con las listas dadas. Devuelve el resumen, las asignaciones [email => [fecha => [tipo, valor]]],
+// la vista previa [mes => [persona => [fecha => [texto, color, título, ¿error?]]]] y los problemas casilla a casilla.
 function interpretar_cuadrante(array $celdas, array $personas, array $turnos, array $tipos): array
 {
     $ind = indice_personas($personas);
-    $r = ['asig' => [], 'sin_persona' => [], 'dudas' => [], 'cuenta' => ['turno' => 0, 'libre' => 0, 'ausencia' => 0], 'meses' => []];
+    $colores = array_column($turnos, 'color', 'nombre');
+    $r = ['asig' => [], 'sin_persona' => [], 'dudas' => [], 'cuenta' => ['turno' => 0, 'libre' => 0, 'ausencia' => 0], 'meses' => [], 'vista' => [], 'problemas' => [], 'crear_tipos' => []];
     foreach ($celdas as [$quien, $fecha, $v, $hoja, $fila]) {
         $p = persona_cuadrante($quien, $ind);
-        if (!$p) { $k = implode(' · ', $quien); $r['sin_persona'][$k] = ($r['sin_persona'][$k] ?? 0) + 1; continue; }
+        $quien_txt = $p['nombre'] ?? ($quien['nombre'] ?? $quien['email'] ?? $quien['dni'] ?? '?');
+        $mes = substr($fecha, 0, 7);
+        if (!$p) {
+            $k = implode(' · ', array_unique($quien));
+            $r['sin_persona'][$k] = ($r['sin_persona'][$k] ?? 0) + 1;
+            $r['vista'][$mes][$quien_txt][$fecha] = [$v, '', 'Persona no encontrada', true];
+            if ($r['sin_persona'][$k] === 1) $r['problemas'][] = [$hoja, $fila, $k, '', '', 'No encuentro a esta persona (ni por email, DNI ni nombre): su fila no se importa'];
+            continue;
+        }
         $x = valor_cuadrante($v, $p['departamento'] ?? null, $turnos, $tipos);
         if ($x[0] === 'nada') continue;
-        if ($x[0] === '?') { $r['dudas'][$x[1]] = ($r['dudas'][$x[1]] ?? 0) + 1; continue; }
-        $r['asig'][mb_strtolower($p['email'])][$fecha] = $x;
+        if ($x[0] === '?') {
+            $r['dudas'][$x[1]] = ($r['dudas'][$x[1]] ?? 0) + 1;
+            $r['vista'][$mes][$quien_txt][$fecha] = [$v, '', $x[1], true];
+            if (count($r['problemas']) < 3000) $r['problemas'][] = [$hoja, $fila, $quien_txt, $fecha, $v, $x[1]];
+            continue;
+        }
+        if ($x[0] === 'ausencia' && ($x[2] ?? '') === 'crear') $r['crear_tipos'][$x[1]] = true;
+        $r['asig'][mb_strtolower($p['email'])][$fecha] = array_slice($x, 0, 2);
         $r['cuenta'][$x[0]]++;
-        $r['meses'][substr($fecha, 0, 7)] = true;
+        $r['meses'][$mes] = true;
+        $txt = $x[0] === 'turno' ? (($t = array_values(array_filter($turnos, fn($t) => $t['nombre'] === $x[1]))[0] ?? null) && $t['letra'] !== '' ? $t['letra'] : $v) : ($x[0] === 'libre' ? (($x[1] ?? '') === 'festivo' ? 'F' : 'D') : strtoupper($v));
+        $r['vista'][$mes][$quien_txt][$fecha] = [$txt, $x[0] === 'turno' ? ($colores[$x[1]] ?? '') : ($x[0] === 'ausencia' ? '#16a34a' : ''), $x[0] === 'turno' ? $x[1] : ($x[0] === 'ausencia' ? $x[1] : (($x[1] ?? '') === 'festivo' ? 'Festivo (descanso)' : 'Descanso')), false];
     }
     ksort($r['meses']);
     $r['meses'] = array_keys($r['meses']);
+    ksort($r['vista']);
+    foreach ($r['vista'] as &$m) ksort($m);
+    unset($m);
+    $r['crear_tipos'] = array_keys($r['crear_tipos']);
     return $r;
 }
 
@@ -148,12 +180,12 @@ function listas_cuadrante(PDO $db, array $plan = []): array
         $db->query("SELECT * FROM usuarios WHERE rol <> 'inspeccion'")->fetchAll());
     foreach ($plan['secciones']['personas']['previa']['filas'] ?? [] as $f) if ($f['estado'] !== 'error') $personas[] = ['email' => $f['email'],
         'nombre' => trim($f['nombre'] . ' ' . $f['apellidos']), 'dni' => (string)$f['dni'], 'departamento' => normalizar($f['departamento'] ?? '')];
-    $turnos = array_map(fn($h) => ['nombre' => $h['nombre'], 'letra' => $h['abreviatura'], 'departamento' => normalizar($deps[$h['departamento_id']] ?? '')], array_values(array_filter(horarios($db), fn($h) => $h['activo'])));
+    $turnos = array_map(fn($h) => ['nombre' => $h['nombre'], 'letra' => $h['abreviatura'], 'color' => $h['color'] ?: color_turno($h['nombre'], ($h['dias'] ? reset($h['dias'])['entrada'] : '') ?? ''), 'departamento' => normalizar($deps[$h['departamento_id']] ?? '')], array_values(array_filter(horarios($db), fn($h) => $h['activo'])));
     // Los del libro sustituyen a los de la BD con el mismo nombre (así se ve lo que habrá después de importar).
     $turnos = array_column($turnos, null, 'nombre');
     foreach ($plan['secciones']['turnos']['filas'] ?? [] as $f) if (!$f['errores']) {
         foreach (array_keys($turnos) as $k) if (normalizar($k) === normalizar($f['nombre'])) unset($turnos[$k]);
-        $turnos[$f['nombre']] = ['nombre' => $f['nombre'], 'letra' => $f['letra'] ?? '', 'departamento' => normalizar($f['departamento'] ?? '')];
+        $turnos[$f['nombre']] = ['nombre' => $f['nombre'], 'letra' => $f['letra'] ?? '', 'color' => ($f['color'] ?? '') ?: color_turno($f['nombre'], (string)hora_hhmm($f['entrada'] ?? '')), 'departamento' => normalizar($f['departamento'] ?? '')];
     }
     $turnos = array_values($turnos);
     // Igual con las personas: las del libro mandan (su departamento puede cambiar).
@@ -163,17 +195,23 @@ function listas_cuadrante(PDO $db, array $plan = []): array
 }
 
 // Escribe el cuadrante: turnos y descansos en la planificación; las ausencias, agrupadas en días seguidos, como aprobadas.
-// Devuelve [días escritos, ausencias creadas, incumplimientos del convenio (avisos, no bloquean: es su cuadrante real)].
+// Devuelve [días escritos, ausencias creadas, incumplimientos del convenio [[persona, fecha, motivo]] (avisos, no bloquean: es su cuadrante real)].
 function aplicar_cuadrante(PDO $db, array $yo, array $r): array
 {
+    if ($r['crear_tipos'] ?? []) cargar_tipos_ausencia($db, array_values(array_filter(TIPOS_POR_CODIGO, fn($t) => in_array($t[0], $r['crear_tipos'], true))));
     $hors = $tipos = [];
     foreach ($db->query('SELECT id, nombre FROM horarios') as $h) $hors[$h['nombre']] = (int)$h['id'];
     foreach (tipos_ausencia($db, false) as $id => $t) $tipos[$t['nombre']] = $id;
-    [$dias, $aus, $mal] = [0, 0, 0];
+    [$dias, $aus, $mal] = [0, 0, []];
     foreach ($r['asig'] as $email => $fechas) {
         $u = consulta($db, 'SELECT * FROM usuarios WHERE email = ?', [$email])->fetch();
         if (!$u) continue;
         ksort($fechas);
+        // Migración: si el cuadrante empieza antes del alta en INDA, el alta se adelanta (si no, esos turnos no contarían).
+        if (array_key_first($fechas) < local($u['alta_utc'], 'Y-m-d')) {
+            consulta($db, 'UPDATE usuarios SET alta_utc = ? WHERE id = ?', [a_utc(array_key_first($fechas) . ' 00:00:00'), $u['id']]);
+            $u = usuario($db, (int)$u['id']);
+        }
         $tramo = null;
         $cerrar = function () use (&$tramo, &$aus, $db, $u, $yo, $tipos) {
             if (!$tramo) return;
@@ -198,9 +236,9 @@ function aplicar_cuadrante(PDO $db, array $yo, array $r): array
             $dias++;
         }
         $cerrar();
-        $mal += count(array_filter(comprobar_plan($db, $u, min(array_keys($fechas)), max(array_keys($fechas))), fn($m) => $m[3] === 'bloqueo'));
+        foreach (comprobar_plan($db, $u, min(array_keys($fechas)), max(array_keys($fechas))) as $m) if ($m[3] === 'bloqueo') $mal[] = [nombre($u), $m[0], $m[2]];
     }
-    auditar($db, (int)$yo['id'], 'cuadrante_importado', "dias=$dias ausencias=$aus incumplimientos=$mal");
+    auditar($db, (int)$yo['id'], 'cuadrante_importado', "dias=$dias ausencias=$aus incumplimientos=" . count($mal));
     return [$dias, $aus, $mal];
 }
 
@@ -232,4 +270,13 @@ function hojas_cuadrante(PDO $db, int $anio): array
         $out[ucfirst(MESES[$m]) . " $anio"] = $h;
     }
     return $out;
+}
+
+// Color de un turno sin color: por su nombre (mañana, tarde, noche…) o por la hora de entrada.
+function color_turno(string $nombre, string $entrada): string
+{
+    $n = normalizar($nombre);
+    foreach (['noche' => '#6d28d9', 'tarde' => '#2563eb', 'manana' => '#f59e0b', 'partid' => '#0d9488', 'refuerzo' => '#64748b', 'largo' => '#be185d', 'limpieza' => '#0891b2'] as $k => $c) if (str_contains($n, $k)) return $c;
+    $h = (int)substr($entrada, 0, 2);
+    return $entrada === '' ? '#64748b' : ($h >= 20 || $h < 5 ? '#6d28d9' : ($h >= 13 ? '#2563eb' : ($h >= 9 ? '#ea580c' : '#f59e0b')));
 }

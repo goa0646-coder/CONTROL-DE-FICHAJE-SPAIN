@@ -53,7 +53,8 @@ function leer_libro(string $ruta, string $ext): array
                 foreach (str_split($mm[1] ?? 'A') as $l) $col = $col * 26 + ord($l) - 64;
                 $t = (string)$at['t'];
                 $v = $t === 's' ? ($ss[(int)$c->children($m)->v] ?? '') : ($t === 'inlineStr' ? implode('', array_map('strval', $c->xpath('.//*[local-name()="t"]'))) : (string)$c->children($m)->v);
-                $f[$col - 1] = trim($v);
+                // Algunos programas guardan los enteros como «8.0»: se leen como «8» (días, turnos de 7/8/9 h, fechas de Excel).
+                $f[$col - 1] = preg_replace('/^(-?\d+)\.0+$/', '$1', trim($v));
             }
             if ($f) {
                 $max = max(array_keys($f));
@@ -78,6 +79,7 @@ const COLUMNAS = [
     'usuario suspendido' => 'suspendido', 'suspendido' => 'suspendido', 'activo' => 'activo', 'baja' => 'suspendido',
     'telefono' => 'telefono', 'movil' => 'telefono', 'telefono movil' => 'telefono', 'telefono de contacto' => 'telefono',
     'numero seguridad social' => 'nss', 'numero de seguridad social' => 'nss', 'n seguridad social' => 'nss', 'nss' => 'nss', 'naf' => 'nss', 'seguridad social' => 'nss',
+    'fecha de alta' => 'alta', 'fecha alta' => 'alta', 'alta' => 'alta', 'antiguedad' => 'alta', 'fecha de antiguedad' => 'alta', 'fecha de incorporacion' => 'alta',
     'fecha de nacimiento' => 'nacimiento', 'fecha nacimiento' => 'nacimiento', 'nacimiento' => 'nacimiento',
     'n de empleado' => 'num_empleado', 'numero de empleado' => 'num_empleado', 'num empleado' => 'num_empleado', 'codigo' => 'num_empleado', 'id empleado' => 'num_empleado',
 ];
@@ -168,7 +170,7 @@ function preparar_importacion(PDO $db, array $filas): array
             'num_empleado' => $vacio($d['num_empleado'] ?? '') ? null : mb_substr($d['num_empleado'], 0, 20),
             'telefono' => $vacio($d['telefono'] ?? '') ? null : mb_substr(trim($d['telefono']), 0, 30),
             'nss' => $vacio($d['nss'] ?? '') ? null : mb_substr(preg_replace('/\s+/', '', $d['nss']), 0, 20),
-            'nacimiento' => fecha_iso($d['nacimiento'] ?? '')];
+            'nacimiento' => fecha_iso($d['nacimiento'] ?? ''), 'alta' => fecha_iso($d['alta'] ?? '')];
         foreach (['centro' => 'centros', 'departamento' => 'departamentos', 'puesto' => 'puestos'] as $campo => $grupo) {
             $v = $vacio($d[$campo] ?? '') ? null : trim(preg_replace('/\s+/u', ' ', $d[$campo]));
             $f[$campo] = $v;
@@ -219,6 +221,7 @@ function aplicar_importacion(PDO $db, array $plan, bool $actualizar): array
             if ($f['dni'] !== '') $c['dni'] = $f['dni'];
             if ($f['num_empleado']) $c['num_empleado'] = $f['num_empleado'];
             foreach (['telefono' => 'telefono', 'nss' => 'nss', 'nacimiento' => 'fecha_nacimiento'] as $k => $col) if (!empty($f[$k])) $c[$col] = $f[$k];
+            if (!empty($f['alta'])) $c['alta_utc'] = a_utc($f['alta'] . ' 00:00:00'); // antigüedad real de la persona
             $antes = consulta($db, 'SELECT * FROM usuarios WHERE email = ?', [$f['email']])->fetch();
             if ($antes) {
                 if (!$actualizar) {
@@ -233,7 +236,8 @@ function aplicar_importacion(PDO $db, array $plan, bool $actualizar): array
                 $uid = (int)$antes['id'];
                 $res['actualizados']++;
             } else {
-                $c += ['email' => $f['email'], 'rol' => $f['rol'], 'password_hash' => password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT), 'alta_utc' => ahora()];
+                $c += ['email' => $f['email'], 'rol' => $f['rol'], 'password_hash' => password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT)];
+                $c['alta_utc'] ??= ahora();
                 if (!$c['activo']) $c['baja_utc'] = ahora();
                 consulta($db, 'INSERT INTO usuarios (' . implode(', ', array_keys($c)) . ') VALUES (' . rtrim(str_repeat('?, ', count($c)), ', ') . ')', array_values($c));
                 $uid = (int)$db->lastInsertId();
