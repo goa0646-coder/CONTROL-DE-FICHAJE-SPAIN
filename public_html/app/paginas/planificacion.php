@@ -31,6 +31,24 @@ $probar = function (array $plan, bool $publicar) use ($personas) {
     $publicar && !$bloquea ? db()->commit() : db()->rollBack();
     return [$mal, $huecos, $bloquea];
 };
+// Ausencia entre fechas (vacaciones, baja, excedencia…) y recálculo para cumplir los mínimos sin tocar al resto.
+if (es_post() && ($_POST['que'] ?? '') === 'ausencia') {
+    try {
+        $u = array_values(array_filter($personas, fn($p) => $p['id'] == ($_POST['usuario'] ?? 0)))[0] ?? throw new DomainException('Elige a la persona.');
+        $d = $_POST['desde'] ?? '';
+        $h = ($_POST['hasta'] ?? '') ?: $d;
+        db()->beginTransaction();
+        marcar_ausencia(db(), $yo, $u, (int)($_POST['tipo'] ?? 0), $d, $h, $_POST['motivo'] ?? '');
+        $res = isset($_POST['recalcular']) ? recubrir(db(), $d, $h, (int)$yo['id']) : null;
+        db()->commit();
+        $_SESSION['recalculo'] = $res ? ['persona' => nombre($u), 'desde' => $d, 'hasta' => $h, 'nuevos' => $res['nuevos'], 'faltan' => $res['faltan']] : null;
+        aviso('Ausencia de ' . nombre($u) . ' guardada' . ($res ? ': ' . count($res['nuevos']) . ' turnos nuevos para cubrir los mínimos.' : '.'));
+    } catch (DomainException $e) {
+        if (db()->inTransaction()) db()->rollBack();
+        aviso($e->getMessage(), 'error');
+    }
+    redirigir('planificacion', ['semana' => $lunes]);
+}
 if (es_post() && in_array($_POST['que'] ?? '', ['generar', 'publicar', 'descartar'], true)) {
     $que = $_POST['que'];
     if ($que === 'generar') {
@@ -219,6 +237,38 @@ $hz = huecos(db(), $personas, local(ahora(), 'Y-m-d'), date('Y-m-d', strtotime(l
     <?php endforeach ?>
   </table>
   <button name="que" value="cuadrante">Guardar y avisar</button>
+</form>
+
+<?php if ($rc = $_SESSION['recalculo'] ?? null): unset($_SESSION['recalculo']); $hl = horarios(db()); $nom = array_column(array_map(fn($p) => ['id' => $p['id'], 'n' => nombre($p)], $personas), 'n', 'id'); ?>
+<div class="tarjeta">
+  <h2>Recálculo por la ausencia de <?= e($rc['persona']) ?> · <?= date('d/m/Y', strtotime($rc['desde'])) ?>–<?= date('d/m/Y', strtotime($rc['hasta'])) ?></h2>
+  <?php if ($rc['nuevos']): ?>
+  <p>Turnos añadidos para llegar a los mínimos (ya avisados):</p>
+  <table><tr><th>Fecha</th><th>Persona</th><th>Turno</th></tr>
+    <?php foreach (array_slice($rc['nuevos'], 0, 200) as [$uid, $f, $hid]): ?><tr><td><?= date('d/m/Y', strtotime($f)) ?></td><td><?= e($nom[$uid] ?? '') ?></td><td><?= e($hl[$hid]['nombre']) ?></td></tr><?php endforeach ?>
+  </table>
+  <?php elseif (!$rc['faltan']): ?><p class="aviso ok"><?= icono('ok') ?><span>No ha hecho falta añadir turnos: los mínimos siguen cubiertos.</span></p>
+  <?php else: ?><p>No se ha podido añadir ningún turno.</p><?php endif ?>
+  <?php if ($rc['faltan']): $por = $mot = []; foreach ($rc['faltan'] as $x) { $por[$x[1]] = ($por[$x[1]] ?? 0) + $x[3]; $mot[$x[1]] ??= $x[4]; } ?>
+  <div class="aviso error"><?= icono('alerta') ?><div><b>Sigue sin cubrirse:</b><ul><?php foreach ($por as $k => $n): ?><li><b><?= e($hl[$k]['nombre']) ?></b> ×<?= $n ?> — <?= e($mot[$k]) ?>.</li><?php endforeach ?></ul>
+    Opciones: horas extra voluntarias desde «Huecos», cambiar turnos a mano o contratar.</div></div>
+  <?php endif ?>
+</div>
+<?php endif ?>
+
+<form method="post" class="tarjeta">
+  <?= csrf_campo() ?>
+  <h2>Ausencia entre fechas</h2>
+  <p class="nota">Vacaciones, baja, excedencia, permiso… de una persona entre dos fechas. Queda aprobada y, si lo marcas, INDA recalcula el cuadrante para cumplir los mínimos de cada turno: no toca a nadie más que a quien tiene que entrar a cubrir, con las reglas del convenio.</p>
+  <div class="filtros">
+    <label>Persona <select name="usuario" required><option value="">Elige…</option><?php foreach ($personas as $p): ?><option value="<?= e($p['id']) ?>"><?= e(nombre($p)) ?></option><?php endforeach ?></select></label>
+    <label>Tipo <select name="tipo" required><?php foreach (tipos_ausencia(db()) as $id => $t): if ($t['por_horas']) continue; ?><option value="<?= e($id) ?>"><?= e($t['nombre']) ?></option><?php endforeach ?></select></label>
+    <label>Desde <input type="date" name="desde" required></label>
+    <label>Hasta <input type="date" name="hasta" required></label>
+    <label>Motivo <input name="motivo" maxlength="500"></label>
+  </div>
+  <label><input type="checkbox" name="recalcular" checked> Recalcular el cuadrante para cubrir los mínimos</label>
+  <button name="que" value="ausencia">Guardar ausencia</button>
 </form>
 
 <form method="post" class="tarjeta">

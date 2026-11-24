@@ -9,9 +9,12 @@ if (es_post() && $yo['rol'] !== 'inspeccion') {
             $a = resolver_ausencia(db(), $id, $yo, $aprobar, $_POST['comentario'] ?? '');
             auditar(db(), (int)$yo['id'], "ausencia_$res", "ausencia=$id");
             notificar(db(), (int)$a['usuario_id'], "ausencia_res:$id", "Tu solicitud de {$a['tipo']} del " . date('d/m', strtotime($a['desde'])) . " ha sido $res.", 'ausencias');
-            if ($aprobar && ($hz = huecos(db(), array_values(array_filter(equipo_de(db(), $yo), fn($p) => $p['activo'])), max($a['desde'], local(ahora(), 'Y-m-d')), $a['hasta']))) {
-                aviso('Aprobada. Deja ' . array_sum(array_column($hz, 3)) . ' turnos sin cubrir: búscales sustituto en Planificación → Huecos.', 'error');
-                redirigir('planificacion', ['semana' => date('Y-m-d', strtotime('monday this week', strtotime($hz[0][0])))]);
+            // Al aprobar, se recalcula el cuadrante para cubrir los mínimos que deja libres.
+            if ($aprobar && !$a['por_horas'] && $a['hasta'] >= local(ahora(), 'Y-m-d')) {
+                $rc = recubrir(db(), $a['desde'], $a['hasta'], (int)$yo['id']);
+                $_SESSION['recalculo'] = ['persona' => trim($a['nombre'] . ' ' . $a['apellidos']), 'desde' => $a['desde'], 'hasta' => $a['hasta'], 'nuevos' => $rc['nuevos'], 'faltan' => $rc['faltan']];
+                aviso('Aprobada: ' . count($rc['nuevos']) . ' turnos nuevos para cubrir los mínimos' . ($rc['faltan'] ? ' y ' . array_sum(array_column($rc['faltan'], 3)) . ' sin cubrir.' : '.'), $rc['faltan'] ? 'error' : 'ok');
+                redirigir('planificacion', ['semana' => date('Y-m-d', strtotime('monday this week', strtotime(max($a['desde'], local(ahora(), 'Y-m-d')))))]);
             }
         } else {
             resolver_correccion(db(), $id, $yo, $aprobar, $_POST['comentario'] ?? '');

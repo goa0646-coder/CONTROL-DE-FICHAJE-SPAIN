@@ -88,6 +88,24 @@ function pedir_ausencia(PDO $db, array $u, array $d, int $pedida_por, ?string $j
     return (int)$db->lastInsertId();
 }
 
+// Administración marca una ausencia entre fechas (vacaciones, baja, excedencia…) ya aprobada: no consume saldo ni pide permiso.
+function marcar_ausencia(PDO $db, array $yo, array $u, int $tipo, string $desde, string $hasta, string $motivo = ''): int
+{
+    $t = tipos_ausencia($db)[$tipo] ?? throw new DomainException('Elige el tipo de ausencia.');
+    if ($t['por_horas']) throw new DomainException('Para ausencias por horas usa la solicitud normal.');
+    foreach ([$desde, $hasta] as $f) if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $f) || !strtotime($f)) throw new DomainException('Revisa las fechas.');
+    if ($hasta < $desde) throw new DomainException('La fecha final no puede ser anterior a la inicial.');
+    if (consulta($db, "SELECT COUNT(*) FROM ausencias WHERE usuario_id = ? AND estado IN ('pendiente','aprobada') AND desde <= ? AND hasta >= ?", [$u['id'], $hasta, $desde])->fetchColumn()) {
+        throw new DomainException(nombre($u) . ' ya tiene una ausencia en esas fechas.');
+    }
+    consulta($db, "INSERT INTO ausencias (usuario_id, tipo_id, desde, hasta, motivo, pedida_por, pedida_utc, estado, resuelta_por, resuelta_utc)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'aprobada', ?, ?)", [$u['id'], $tipo, $desde, $hasta, mb_substr(trim($motivo), 0, 500), $yo['id'], ahora(), $yo['id'], ahora()]);
+    $id = (int)$db->lastInsertId();
+    auditar($db, (int)$yo['id'], 'ausencia_marcada', "ausencia=$id usuario={$u['id']}");
+    notificar($db, (int)$u['id'], "ausencia_res:$id", "Se ha registrado tu {$t['nombre']} del " . date('d/m/Y', strtotime($desde)) . ' al ' . date('d/m/Y', strtotime($hasta)) . '.', 'ausencias');
+    return $id;
+}
+
 function ausencia(PDO $db, int $id): ?array
 {
     return consulta($db, 'SELECT a.*, t.nombre AS tipo, t.color, t.por_horas, t.justificante AS pide_justificante, u.nombre, u.apellidos, u.responsable_id, u.departamento_id
