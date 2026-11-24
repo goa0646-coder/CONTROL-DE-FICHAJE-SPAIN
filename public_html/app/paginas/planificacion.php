@@ -48,7 +48,7 @@ if (es_post() && in_array($_POST['que'] ?? '', ['generar', 'publicar', 'descarta
         // Motivo de cada turno sin cubrir (el primero que dio el generador).
         $motivos = [];
         foreach ($res['faltan'] as $x) $motivos[$x[1]] ??= $x[4];
-        $_SESSION['borrador'] = ['plan' => $plan, 'desde' => $d, 'hasta' => $h, 'mal' => $mal, 'huecos' => $huecos, 'motivos' => $motivos];
+        $_SESSION['borrador'] = ['plan' => $plan, 'desde' => $d, 'hasta' => $h, 'mal' => $mal, 'huecos' => $huecos, 'motivos' => $motivos, 'quien' => $res['quien']];
         redirigir('planificacion', ['semana' => date('Y-m-d', strtotime('monday this week', strtotime($d)))]);
     }
     $b = $_SESSION['borrador'] ?? null;
@@ -155,6 +155,7 @@ cabecera('Planificación', $yo);
     <?php endforeach ?>
   </table>
   <p class="nota">Letra del turno (pasa el ratón para ver turno y puesto). · = libre. Primero se cubren los mínimos de cada turno y después se completa la jornada de cada persona (hasta sus horas), respetando bajas, vacaciones, descansos, horas semanales y un máximo de 5 días seguidos.</p>
+  <?php if (!empty($b['quien'])): ?><p class="nota"><b>Quién hace cada turno con mínimo:</b> <?= e(implode(' · ', array_map(fn($hid, $q) => $hl[$hid]['nombre'] . ' → ' . $q, array_keys($b['quien']), $b['quien']))) ?>. Se decide por el departamento del turno, por quién lo ha hecho antes o por su nombre; cámbialo en Turnos o en la ficha de cada persona (departamento y puesto).</p><?php endif ?>
   <?php if ($b['huecos']):
       $por = [];
       foreach ($b['huecos'] as $x) { $por[$x[1]]['n'] = ($por[$x[1]]['n'] ?? 0) + $x[3]; $por[$x[1]]['dias'][$x[0]] = true; } ?>

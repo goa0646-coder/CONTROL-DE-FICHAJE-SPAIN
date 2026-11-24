@@ -92,6 +92,34 @@ class CuadranteTest extends Base
         $this->assertStringContainsString('Coordinación', $r['faltan'][0][4]);
     }
 
+    public function testCadaPuestoSusTurnosYDescansoConLoQueYaHay(): void
+    {
+        // Sin departamentos: «AUXILIAR MAÑANA» es de quien tiene el puesto auxiliar (por el nombre); cocina no lo hace.
+        $s = uniqid();
+        $this->db->exec("INSERT INTO puestos (nombre) VALUES ('AUXILIAR /GEROCULTOR $s'), ('AYUDANTE DE COCINA $s'), ('LIMPIADOR $s')");
+        $aux = (int)$this->db->lastInsertId();
+        $m = $this->horario([1, 2, 3, 4, 5, 6, 7], '07:00', '15:00', 480);
+        $this->db->prepare('UPDATE horarios SET nombre = ? WHERE id = ?')->execute(["AUXILIAR MAÑANA $s", $m]);
+        $limp = $this->horario([1, 2, 3, 4, 5, 6, 7], '08:00', '15:00', 420);
+        $this->db->prepare('UPDATE horarios SET nombre = ? WHERE id = ?')->execute(["LIMPIEZA MAÑANA $s", $limp]);
+        $this->necesidad($m, null, 1);
+        $a = $this->persona([$aux]);
+        $cocina = $this->persona([$aux + 1]);
+        $limpia = $this->persona([$aux + 2]);
+        $r = planificar($this->db, [$a, $cocina, $limpia], '2099-03-02', '2099-03-08', ['completar' => true]);
+        $this->assertArrayNotHasKey($cocina['id'], $r['plan'], 'cocina no hace turnos de auxiliar');
+        $this->assertSame([$m], array_values(array_unique(array_column(array_filter($r['plan'][$a['id']]), 'horario_id'))));
+        $this->assertSame([$limp], array_values(array_unique(array_column(array_filter($r['plan'][$limpia['id']]), 'horario_id'))), 'limpieza con su turno');
+        $this->assertCount(5, array_filter($r['plan'][$limpia['id']]));
+        // El día siguiente al periodo ya tiene mañana a las 7: el último día no se le pone una noche que acaba a las 7.
+        $n = $this->horario([1, 2, 3, 4, 5, 6, 7], '23:00', '07:00', 480);
+        $this->db->exec('DELETE FROM necesidades');
+        $this->necesidad($n, null, 1);
+        consulta($this->db, 'INSERT INTO planificacion (usuario_id, fecha, horario_id) VALUES (?, ?, ?)', [$a['id'], '2099-04-07', $m]);
+        $r = planificar($this->db, [$a], '2099-04-06', '2099-04-06');
+        $this->assertNull($r['plan'][$a['id']]['2099-04-06']);
+    }
+
     public function testNoPoneMananaTrasTarde(): void
     {
         // Solo una persona: no puede hacer tarde y mañana seguidas.
