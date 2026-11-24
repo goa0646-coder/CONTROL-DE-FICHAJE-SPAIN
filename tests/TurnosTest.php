@@ -87,4 +87,25 @@ class TurnosTest extends Base
         $this->assertSame(['Su departamento' => [1 => 'M · AUX M (07:00–15:00)'], 'Otros turnos' => [2 => 'M · LIMP M']], opciones_turno($h, ['departamento_id' => 5]));
         $this->assertSame(['Turnos' => [1 => 'M · AUX M (07:00–15:00)', 2 => 'M · LIMP M']], opciones_turno($h, ['departamento_id' => null]));
     }
+
+    public function testUnIncumplimientoHeredadoNoBloqueaElDia(): void
+    {
+        $s = uniqid();
+        guardar_turnos($this->db, [["T $s", 'T', '#3b82f6', '15:00', '23:00', '8:00', ''], ["M $s", 'M', '#f59e0b', '07:00', '15:00', '8:00', ''], ["N $s", 'N', '#6d28d9', '23:00', '07:00', '8:00', '']]);
+        $id = consulta($this->db, 'SELECT nombre, id FROM horarios WHERE nombre IN (?, ?, ?)', ["T $s", "M $s", "N $s"])->fetchAll(PDO::FETCH_KEY_PAIR);
+        $admin = $this->usuario(['rol' => 'admin']);
+        $u = $this->usuario();
+        // Como un cuadrante importado: tarde el lunes y mañana el martes (8 h de descanso).
+        consulta($this->db, "REPLACE INTO planificacion (usuario_id, fecha, horario_id) VALUES (?, '2030-01-07', ?), (?, '2030-01-08', ?)", [$u['id'], $id["T $s"], $u['id'], $id["M $s"]]);
+        $this->assertNotEmpty(array_filter(comprobar_plan($this->db, $u, '2030-01-08', '2030-01-08'), fn($m) => $m[3] === 'bloqueo'));
+        // El miércoles se puede tocar aunque el martes ya incumpla.
+        cambiar_dia($this->db, $admin, $u, '2030-01-09', (string)$id["T $s"]);
+        // Y el propio martes se puede arreglar poniéndolo de tarde.
+        cambiar_dia($this->db, $admin, $u, '2030-01-08', (string)$id["T $s"]);
+        $this->assertSame([], array_filter(comprobar_plan($this->db, $u, '2030-01-07', '2030-01-09'), fn($m) => $m[3] === 'bloqueo'));
+        // Un cambio que crea un incumplimiento nuevo sí se impide: noche el miércoles y mañana el jueves.
+        cambiar_dia($this->db, $admin, $u, '2030-01-09', (string)$id["N $s"]);
+        $this->expectException(DomainException::class);
+        cambiar_dia($this->db, $admin, $u, '2030-01-10', (string)$id["M $s"]);
+    }
 }

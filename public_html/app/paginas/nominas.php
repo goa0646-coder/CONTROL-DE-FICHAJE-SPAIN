@@ -64,6 +64,6 @@ cabecera('Nóminas', $yo);
   <p class="nota">Comprueba la persona de cada fila. Las filas sin persona no se envían. Al pulsar «Enviar», cada persona recibe solo su nómina en Documentos, con aviso por email.</p>
   <button type="button" data-enviar>Enviar</button>
 </div>
-<script src="assets/pdf-lib.min.js"></script>
-<script src="assets/nominas.js"></script>
+<script src="<?= e(asset('assets/pdf-lib.min.js')) ?>"></script>
+<script src="<?= e(asset('assets/nominas.js')) ?>"></script>
 <?php pie();

@@ -518,3 +518,17 @@ button.pequeno, .boton.pequeno { min-height: 32px; padding: .25rem .7rem; font-s
 @media (prefers-color-scheme: dark) {
   .marca-empresa img:not(.icono-inda), .logo-entrada img, .barra-movil .logo img.logo-empresa-movil { background: #fff; padding: .35rem .6rem; border-radius: 10px; }
 }
+/* Navegadores sin color-mix (Chrome < 111, Safari < 16.2): colores fijos para que todo se vea igual. */
+@supports not (color: color-mix(in srgb, red, blue)) {
+  :root { --acento-suave: rgba(37, 99, 235, .1); --acento-borde: rgba(37, 99, 235, .35); }
+  .aviso.ok { background: #ecfdf3; border-color: #abefc6; }
+  .aviso.error { background: #fef3f2; border-color: #fecdca; }
+  .estado.dentro, .pildora.ok { background: #ecfdf3; }
+  .estado.pausa, .pildora.pendiente { background: #fffaeb; }
+  .pildora.mal { background: #fef3f2; }
+  .lateral a.activo { background: #eef4ff; }
+  th { background: #f9fafb; }
+  .cuadrante tr:nth-child(even) td, .cuadrante tr:nth-child(even) td.persona { background-color: #f8faff; }
+  .cuadrante tr td.corto, .cuadrante tr th.corto { background-color: #fef3f2; }
+  .acceso-marca { background: var(--marca); }
+}
