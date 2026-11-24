@@ -73,38 +73,73 @@ function huecos(PDO $db, array $personas, string $desde, string $hasta): array
 }
 
 // Propone un cuadrante: [uid => [fecha => ['horario_id', 'puesto_id'] | null (libre)]].
-// Reglas duras: no está de baja/vacaciones, tiene el puesto, descanso entre jornadas, horas de la semana y máximo 5 días seguidos.
-// Reparto justo: primero quien menos horas, fines de semana y noches lleva.
 function generar_cuadrante(PDO $db, array $personas, string $desde, string $hasta, ?array $r = null): array
 {
-    $r ??= reglas($db);
+    return planificar($db, $personas, $desde, $hasta, ['reglas' => $r])['plan'];
+}
+
+// Pesos medidos con un año de residencia (16 auxiliares para 4+3+2 diarios): reparte la carga de la semana (queda gente
+// para el domingo) y premia seguir en el mismo turno (bloques de unos 4 días en vez de días sueltos).
+const PESO_SEMANA = 32;
+const SEGUIR_TURNO = 400;
+
+// Motor de planificación. Reglas duras: no está de baja/vacaciones, tiene el puesto y es de su departamento, descanso entre
+// jornadas, horas de la semana, máximo 5 días seguidos, un domingo libre cada N semanas y las horas anuales del convenio
+// (repartidas a lo largo del año para no agotarlas antes de diciembre).
+// $o: modo 'justo' (reparte noches, findes y horas) o 'minimo' (llena primero a quien ya trabaja: usa las menos personas),
+//     puestos [uid => [pid]] (sustituye a los de la BD), horarios [hid] (solo esos turnos), bloqueados [uid => [fecha => 1]],
+//     necesidades [fecha => lista] (caché), reglas.
+// Devuelve plan, faltan [[fecha, horario_id, puesto_id, cuántos, motivo]] y min [uid => minutos].
+function planificar(PDO $db, array $personas, string $desde, string $hasta, array $o = []): array
+{
+    $r = $o['reglas'] ?? null ?: reglas($db);
     $h = horarios($db);
-    $pp = puestos_por_persona($db);
+    $pp = $o['puestos'] ?? puestos_por_persona($db);
+    $minimo = ($o['modo'] ?? 'justo') === 'minimo';
+    $solo = isset($o['horarios']) ? array_flip($o['horarios']) : null;
+    $bloq = $o['bloqueados'] ?? [];
     // Solo entra quien puede cubrir algo; al resto no se le toca su horario.
     $cualquiera = (bool)$db->query('SELECT COUNT(*) FROM necesidades WHERE puesto_id IS NULL')->fetchColumn();
     $personas = array_values(array_filter($personas, fn($u) => $cualquiera || !empty($pp[$u['id']])));
+    $fechas = rango_fechas($desde, $hasta);
+    // Horas anuales (prorrateadas al periodo) y ritmo: a mitad de sus días disponibles, como mucho la mitad + 24 h.
+    $tope = $r['horas_anuales'] ? $r['horas_anuales'] * 60 * count($fechas) / 365 : null;
     $ant = date('Y-m-d', strtotime("$desde -7 days"));
-    $prev = [];
     $estado = [];
     foreach ($personas as $u) {
         $uid = (int)$u['id'];
         $cal = calendario_teorico($db, $u, $ant, $hasta);
-        $iv = intervalos_plan(array_filter($cal, fn($f) => $f < $desde, ARRAY_FILTER_USE_KEY));
+        $pasado = array_filter($cal, fn($f) => $f < $desde, ARRAY_FILTER_USE_KEY);
+        $iv = intervalos_plan($pasado);
         $seguidos = 0;
-        foreach (array_reverse(array_filter($cal, fn($f) => $f < $desde, ARRAY_FILTER_USE_KEY)) as $c) {
+        foreach (array_reverse($pasado) as $c) {
             if (!$c['turno']) break;
             $seguidos++;
         }
-        $estado[$uid] = ['fin' => $iv ? end($iv)[2] : 0, 'seguidos' => $seguidos, 'min' => 0, 'finde' => 0, 'noches' => 0, 'semana' => [], 'cal' => $cal];
+        // Días en que puede trabajar (sin vacaciones ni bajas): el ritmo de horas se reparte sobre ellos, así quien vuelve de vacaciones recupera.
+        $disp = [];
+        $k = 0;
+        foreach ($fechas as $f) $disp[$f] = $k += (isset($bloq[$uid][$f]) || ($cal[$f]['ausencia'] && $cal[$f]['ausencia']['minutos'] === null)) ? 0 : 1;
+        $estado[$uid] = ['fin' => $iv ? end($iv)[2] : 0, 'seguidos' => $seguidos, 'min' => 0, 'finde' => 0, 'noches' => 0, 'semana' => [], 'cal' => $cal, 'domingos' => 0,
+            'disp' => $disp, 'disp_total' => max(1, $k)];
     }
-    $plan = [];
-    foreach (rango_fechas($desde, $hasta) as $f) {
+    $plan = $faltan = [];
+    foreach ($fechas as $i => $f) {
         $semana = date('o-W', strtotime($f));
+        $dom = date('N', strtotime($f)) == 7;
         $finde = date('N', strtotime($f)) >= 6 || $estado && reset($estado)['cal'][$f]['festivo'];
         $hoy = [];
-        foreach (necesidades_dia($db, $f) as [$hid, $pid, $n]) {
+        foreach ($o['necesidades'][$f] ?? necesidades_dia($db, $f) as [$hid, $pid, $n]) {
+            if ($solo !== null && !isset($solo[$hid])) continue;
             $d = $h[$hid]['dias'][(int)date('N', strtotime($f))] ?? ($h[$hid]['dias'] ? reset($h[$hid]['dias']) : null);
-            if (!$d || !$d['entrada'] || !$d['salida']) continue;
+            if (!$d || !$d['entrada'] || !$d['salida']) {
+                $faltan[] = [$f, $hid, $pid, $n, 'el turno no tiene hora de entrada y salida'];
+                continue;
+            }
+            if ($d['minutos'] > $r['jornada_max_diaria_h'] * 60) {
+                $faltan[] = [$f, $hid, $pid, $n, 'el turno dura más que la jornada máxima diaria'];
+                continue;
+            }
             $ini = ts_local($f, $d['entrada']);
             $fin = ts_local($f, $d['salida']);
             if ($fin <= $ini) $fin += 86400;
@@ -114,19 +149,25 @@ function generar_cuadrante(PDO $db, array $personas, string $desde, string $hast
                 $uid = (int)$u['id'];
                 $e = $estado[$uid];
                 $c = $e['cal'][$f];
-                if (isset($hoy[$uid]) || ($c['ausencia'] && $c['ausencia']['minutos'] === null)) continue;
+                if (isset($hoy[$uid]) || isset($bloq[$uid][$f]) || ($c['ausencia'] && $c['ausencia']['minutos'] === null)) continue;
                 if ($pid && !in_array($pid, $pp[$uid] ?? [], true)) continue;
                 if ($h[$hid]['departamento_id'] && $u['departamento_id'] != $h[$hid]['departamento_id']) continue; // turno de otro departamento
                 if ($e['fin'] && $ini - $e['fin'] < $r['descanso_entre_jornadas_h'] * 3600) continue;
                 if (($e['semana'][$semana] ?? 0) + $d['minutos'] > $r['horas_semana_media'] * 60) continue;
                 if ($e['seguidos'] >= 5) continue;
-                if ($d['minutos'] > $r['jornada_max_diaria_h'] * 60) continue;
-                // Menos es mejor: horas acumuladas, fines de semana y noches; mismo turno que ayer, mejor.
-                $cand[$uid] = $e['min'] / 60 + ($finde ? 8 * $e['finde'] : 0) + ($noche ? 8 * $e['noches'] : 0)
-                    - (($plan[$uid][date('Y-m-d', strtotime("$f -1 day"))]['horario_id'] ?? null) == $hid ? 2 : 0) + $uid / 1e6;
+                if ($dom && $r['domingo_cada_semanas'] && $e['domingos'] >= $r['domingo_cada_semanas'] - 1) continue;
+                if ($tope && ($e['min'] + $d['minutos'] > $tope || $e['min'] + $d['minutos'] > $tope * $e['disp'][$f] / $e['disp_total'] + 24 * 60)) continue;
+                $ayer = ($plan[$uid][date('Y-m-d', strtotime("$f -1 day"))]['horario_id'] ?? null) == $hid ? SEGUIR_TURNO : 0;
+                // Justo: menos es mejor (horas, findes y noches acumuladas). Mínimo: primero quien ya trabaja más.
+                $cand[$uid] = $minimo ? -$e['min'] / 60 - $ayer + $uid / 1e6
+                    : $e['min'] / 60 + ($finde ? 8 * $e['finde'] : 0) + ($noche ? 8 * $e['noches'] : 0) - $ayer + $uid / 1e6
+                    // Quien ya lleva más horas esta semana, después: así queda gente libre para el domingo.
+                    + PESO_SEMANA * ($e['semana'][$semana] ?? 0) / 60;
             }
             asort($cand);
-            foreach (array_slice(array_keys($cand), 0, $n) as $uid) {
+            $elegidos = array_slice(array_keys($cand), 0, $n);
+            if (count($elegidos) < $n) $faltan[] = [$f, $hid, $pid, $n - count($elegidos), 'no hay más personas disponibles que cumplan las reglas'];
+            foreach ($elegidos as $uid) {
                 $hoy[$uid] = true;
                 $plan[$uid][$f] = ['horario_id' => $hid, 'puesto_id' => $pid];
                 $estado[$uid]['fin'] = $fin;
@@ -138,6 +179,7 @@ function generar_cuadrante(PDO $db, array $personas, string $desde, string $hast
         }
         foreach ($personas as $u) {
             $uid = (int)$u['id'];
+            if ($dom) $estado[$uid]['domingos'] = isset($hoy[$uid]) ? $estado[$uid]['domingos'] + 1 : 0;
             if (isset($hoy[$uid])) $estado[$uid]['seguidos']++;
             else {
                 $estado[$uid]['seguidos'] = 0;
@@ -145,7 +187,8 @@ function generar_cuadrante(PDO $db, array $personas, string $desde, string $hast
             }
         }
     }
-    return $plan;
+    return ['plan' => $plan, 'faltan' => $faltan, 'min' => array_map(fn($e) => $e['min'], $estado),
+        'noches' => array_map(fn($e) => $e['noches'], $estado), 'findes' => array_map(fn($e) => $e['finde'], $estado)];
 }
 
 // Escribe un cuadrante (de generar_cuadrante) en la planificación. Las ausencias aprobadas se respetan solas.

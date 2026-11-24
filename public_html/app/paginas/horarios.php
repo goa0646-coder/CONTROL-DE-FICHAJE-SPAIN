@@ -79,6 +79,11 @@ if (es_post()) {
             if ($id = (int)($_POST['id'] ?? 0)) consulta(db(), 'UPDATE motivos_pausa SET nombre = ?, retribuida = ?, activo = ? WHERE id = ?', [...$d, $id]);
             else consulta(db(), 'INSERT INTO motivos_pausa (nombre, retribuida, activo) VALUES (?, ?, ?)', $d);
             auditar(db(), (int)$yo['id'], 'motivo_pausa_guardado', $nombre);
+        } elseif ($que === 'permisos_et') {
+            $n = cargar_tipos_ausencia(db(), PERMISOS_ET);
+            auditar(db(), (int)$yo['id'], 'permisos_et_cargados', "nuevos=$n");
+            aviso($n ? "Añadidos $n tipos de permiso. Ya se pueden pedir desde Ausencias." : 'Ya estaban todos.');
+            redirigir('horarios');
         } elseif ($que === 'tipo') {
             $nombre = trim($_POST['nombre'] ?? '') ?: throw new DomainException('Pon un nombre.');
             $dias = ($_POST['dias_anuales'] ?? '') === '' ? null : max(0, (float)str_replace(',', '.', $_POST['dias_anuales']));
@@ -216,6 +221,10 @@ foreach ($lista as $x) $existentes[normalizar($x['nombre'])] = $x; ?>
 <?php endforeach ?>
 
 <h2>Tipos de ausencia</h2>
+<form method="post" class="filtros"><?= csrf_campo() ?>
+  <span class="nota">Vacaciones, bajas, libre disposición, permisos por horas o por días: todo se pide desde «Ausencias» y lo aprueba el responsable.</span>
+  <button name="que" value="permisos_et" class="secundario">Añadir los permisos del Estatuto (matrimonio, hospitalización, fallecimiento, mudanza…)</button>
+</form>
 <p class="nota">Días al año vacío = sin límite. Los días se cuentan laborables según el horario de cada persona.</p>
 <?php foreach ([...array_values($tipos), ['id' => '', 'nombre' => '', 'por_horas' => 0, 'retribuida' => 1, 'dias_anuales' => null, 'justificante' => 0, 'color' => '#2563eb', 'activo' => 1]] as $t): ?>
 <form method="post" class="filtros tarjeta">
