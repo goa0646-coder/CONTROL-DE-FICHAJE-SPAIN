@@ -70,6 +70,9 @@ function leer_cuadrantes(array $hojas): array
                 $quien = array_filter(['email' => $cols['email'] !== null ? trim($fila[$cols['email']] ?? '') : '', 'dni' => $cols['dni'] !== null ? trim($fila[$cols['dni']] ?? '') : '',
                     'nombre' => $cols['nombre'] !== null ? trim($fila[$cols['nombre']] ?? '') : '']);
                 if (!$quien) continue;
+                // Fila de ayuda con la letra de cada día (L M X J V S D) bajo la cabecera: no es una persona.
+                $letras = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+                if (count(array_filter($fechas, fn($f, $j) => strtoupper(trim($fila[$j] ?? '')) === $letras[(int)date('N', strtotime($f)) - 1], ARRAY_FILTER_USE_BOTH)) >= count($fechas) - 1) continue;
                 foreach ($fechas as $j => $fecha) {
                     $v = trim((string)($fila[$j] ?? ''));
                     if ($v !== '') $celdas[] = [$quien, $fecha, $v, $nombre, $k + 1];
