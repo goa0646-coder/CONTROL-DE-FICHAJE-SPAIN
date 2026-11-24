@@ -538,3 +538,34 @@ button.pequeno, .boton.pequeno { min-height: 32px; padding: .25rem .7rem; font-s
 .calendario th.finde { color: var(--marca-2); }
 .informe-import td { white-space: normal; font-size: .84rem; }
 .informe-import td:last-child { min-width: 18rem; }
+/* Calendario: navegación de mes y vista mensual de cada trabajador */
+.navegar-mes { align-items: center; }
+.mes-flechas { display: inline-flex; align-items: center; gap: .5rem; }
+.mes-flechas .boton { min-width: 42px; padding: 0; }
+.mes-nombre { min-width: 9.5rem; text-align: center; font-size: 1.05rem; }
+.elegir-mes { flex: 0 1 12rem !important; }
+.mes-personal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .4rem; margin: 1rem 0; }
+.mes-personal .cab { text-align: center; font-size: .74rem; font-weight: 600; color: var(--gris-2); text-transform: uppercase; }
+.mes-personal .dia { position: relative; min-height: 5.2rem; padding: .4rem .45rem; border-radius: 12px; background: var(--tarjeta); border: 1px solid var(--linea); display: flex; flex-direction: column; gap: .15rem; overflow: hidden; }
+.mes-personal .dia .num { font-size: .78rem; font-weight: 600; color: var(--gris); }
+.mes-personal .dia b { font-size: 1.15rem; line-height: 1.1; }
+.mes-personal .dia small { font-size: .68rem; line-height: 1.2; color: var(--gris); overflow: hidden; text-overflow: ellipsis; }
+.mes-personal .dia.con-turno { background: var(--c); border-color: var(--c); color: #fff; }
+.mes-personal .dia.con-turno .num, .mes-personal .dia.con-turno small { color: rgba(255, 255, 255, .85); }
+.mes-personal .dia.libre { background: var(--relleno); }
+.mes-personal .dia.libre b { color: var(--gris-2); }
+.mes-personal .dia.hoy { box-shadow: 0 0 0 2px var(--tarjeta), 0 0 0 4px var(--marca); }
+@media (max-width: 960px) {
+  .navegar-mes .mes-flechas { flex: 1 1 100%; justify-content: space-between; }
+  .navegar-mes .elegir-mes { display: none; }
+  .mes-personal { gap: .25rem; }
+  .mes-personal .dia { min-height: 3.6rem; padding: .3rem; border-radius: 9px; }
+  .mes-personal .dia b { font-size: 1rem; }
+  .mes-personal .dia small { display: none; }
+}
+@media (max-width: 960px) {
+  .p-calendario .cifras { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .4rem; margin: .6rem 0 1rem; }
+  .p-calendario .cifras > div { padding: .55rem .5rem; border-radius: 10px; }
+  .p-calendario .cifras span { font-size: .66rem; line-height: 1.2; }
+  .p-calendario .cifras strong { font-size: 1.05rem; }
+}
