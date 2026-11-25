@@ -94,7 +94,7 @@ function preparar_libro(PDO $db, array $libro): array
     // Nombres que existirán tras importar (en la BD o en el propio libro), para avisar antes de lo que no cuadra.
     $existen = fn(string $sql, array $extra) => array_merge(array_map('normalizar', $db->query($sql)->fetchAll(PDO::FETCH_COLUMN)), array_map('normalizar', $extra));
     $turnos = $existen('SELECT nombre FROM horarios', array_column($plan['secciones']['turnos']['filas'] ?? [], 'nombre'));
-    $puestos = $existen('SELECT nombre FROM puestos', array_merge(array_column($plan['secciones']['puestos']['filas'] ?? [], 'nombre'), array_filter(array_column($plan['secciones']['personas']['filas'] ?? [], 'puesto'))));
+    $puestos = $existen('SELECT nombre FROM puestos', array_merge(array_column($plan['secciones']['puestos']['filas'] ?? [], 'nombre'), array_filter(array_merge([], ...array_map(fn($x) => array_map('trim', explode(';', (string)$x)), array_column($plan['secciones']['personas']['filas'] ?? [], 'puesto'))))));
     $tipos = $existen('SELECT nombre FROM tipos_ausencia', []);
     $emails = $existen('SELECT email FROM usuarios', array_column($plan['secciones']['personas']['filas'] ?? [], 'email'));
     foreach ($plan['secciones'] as $sec => &$s) {
@@ -104,7 +104,7 @@ function preparar_libro(PDO $db, array $libro): array
                 if (!hora_hhmm($f['entrada'] ?? '') || !hora_hhmm($f['salida'] ?? '')) $e[] = 'falta la hora de entrada o de salida';
             } elseif ($sec === 'ratios') {
                 if (!in_array(normalizar($f['turno'] ?? ''), $turnos, true)) $e[] = 'el turno no existe';
-                if (($f['puesto'] ?? '') !== '' && !in_array(normalizar($f['puesto']), $puestos, true)) $e[] = 'el puesto no existe';
+                foreach (array_filter(array_map('trim', explode(';', (string)($f['puesto'] ?? '')))) as $x) if (!in_array(normalizar($x), $puestos, true)) $e[] = "el puesto «{$x}» no existe";
                 if ((int)($f['personas'] ?? 0) < 1) $e[] = 'pon el mínimo de personas';
                 if (!array_key_exists(normalizar($f['dia'] ?? ''), DIAS_RATIO)) $e[] = 'día no válido (Todos, Lunes…Domingo)';
             } elseif ($sec === 'festivos') {

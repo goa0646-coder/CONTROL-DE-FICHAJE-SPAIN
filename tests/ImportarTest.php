@@ -98,6 +98,16 @@ class ImportarTest extends Base
         $this->assertSame(1, (int)$this->db->query("SELECT COUNT(*) FROM centros WHERE nombre = 'RESIDENCIA PRUEBA'")->fetchColumn());
     }
 
+    public function testVariosPuestosSeparadosPorPuntoYComa(): void
+    {
+        $em = uniqid() . '@x.es';
+        $plan = preparar_importacion($this->db, [['nombre' => 'Coord', 'apellidos' => 'Prueba', 'email' => $em, 'puesto' => 'AUXILIAR X; COORDINACIÓN X']]);
+        aplicar_importacion($this->db, $plan, true);
+        $id = consulta($this->db, 'SELECT id FROM usuarios WHERE email = ?', [$em])->fetchColumn();
+        $n = consulta($this->db, 'SELECT p.nombre FROM usuarios_puestos up JOIN puestos p ON p.id = up.puesto_id WHERE up.usuario_id = ? ORDER BY p.nombre', [$id])->fetchAll(PDO::FETCH_COLUMN);
+        $this->assertSame(['AUXILIAR X', 'COORDINACIÓN X'], $n);
+    }
+
     public function testNoQuitaElRolDeAdministrador(): void
     {
         $admin = $this->usuario(['rol' => 'admin']);

@@ -173,9 +173,11 @@ function preparar_importacion(PDO $db, array $filas): array
             'nacimiento' => fecha_iso($d['nacimiento'] ?? ''), 'alta' => fecha_iso($d['alta'] ?? '')];
         foreach (['centro' => 'centros', 'departamento' => 'departamentos', 'puesto' => 'puestos'] as $campo => $grupo) {
             $v = $vacio($d[$campo] ?? '') ? null : trim(preg_replace('/\s+/u', ' ', $d[$campo]));
-            $f[$campo] = $v;
-            $existe = $v !== null && isset(['centros' => $centros, 'departamentos' => $deps, 'puestos' => $pts][$grupo][normalizar($v)]);
-            if ($v !== null && !$existe) $plan['crear'][$grupo][normalizar($v)] = $v;
+            // Varios puestos separados por «;» (p. ej. «AUXILIAR / GEROCULTOR; COORDINACIÓN / AUXILIAR»).
+            $lista = $v === null ? [] : ($campo === 'puesto' ? array_values(array_filter(array_map('trim', explode(';', $v)))) : [$v]);
+            $f[$campo] = $lista[0] ?? null;
+            if ($campo === 'puesto') $f['puestos'] = $lista;
+            foreach ($lista as $x) if (!isset(['centros' => $centros, 'departamentos' => $deps, 'puestos' => $pts][$grupo][normalizar($x)])) $plan['crear'][$grupo][normalizar($x)] = $x;
         }
         $h = $vacio($d['horario'] ?? '') ? null : trim($d['horario']);
         $f['horario_id'] = $h !== null ? ($hors[normalizar($h)] ?? null) : null;
@@ -244,7 +246,7 @@ function aplicar_importacion(PDO $db, array $plan, bool $actualizar): array
                 if ($f['activo']) $res['nuevos'][] = $uid;
             }
             $por_email[$f['email']] = $uid;
-            if ($f['puesto']) consulta($db, 'INSERT IGNORE INTO usuarios_puestos VALUES (?, ?)', [$uid, $ids['puestos'][normalizar($f['puesto'])]]);
+            foreach ($f['puestos'] ?? array_filter([$f['puesto']]) as $x) consulta($db, 'INSERT IGNORE INTO usuarios_puestos VALUES (?, ?)', [$uid, $ids['puestos'][normalizar($x)]]);
         }
         // Responsables, cuando ya existen todos. Quien tiene equipo a su cargo pasa a «responsable» si era empleado.
         foreach ($plan['filas'] as $f) {

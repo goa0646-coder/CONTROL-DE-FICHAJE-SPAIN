@@ -179,6 +179,11 @@ function planificar(PDO $db, array $personas, string $desde, string $hasta, arra
     $pares = [];
     foreach ($nec as $l) foreach ($l as [$hid, $pid]) $pares[$hid . ':' . $pid] = [$hid, $pid];
     foreach ($pares as [$hid, $pid]) foreach ($personas as $u) if ((!$pid || in_array($pid, $pp[$u['id']] ?? [], true)) && $vale($u, $hid)) $cubre[$u['id']][$hid] = true;
+    // Primero los turnos que menos gente puede hacer (p. ej. el partido, solo coordinación): así no se quedan sin nadie.
+    $cuantos_pueden = [];
+    foreach ($cubre as $hs) foreach ($hs as $hid => $_) $cuantos_pueden[$hid] = ($cuantos_pueden[$hid] ?? 0) + 1;
+    foreach ($nec as &$l) usort($l, fn($a, $b) => [$a[1] === null, $cuantos_pueden[$a[0]] ?? 0] <=> [$b[1] === null, $cuantos_pueden[$b[0]] ?? 0]);
+    unset($l);
     $turnos_de = [];
     foreach ($personas as $u) foreach ($h as $hid => $x) {
         if (!$x['activo'] || $x['flexible'] || !$x['dias'] || ($solo !== null && !isset($solo[$hid]))) continue;
