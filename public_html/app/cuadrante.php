@@ -57,6 +57,12 @@ function cubrir_dia(array $necesidades, array $dia, array $puestos_de): array
 // Huecos entre $desde y $hasta: [[fecha, horario_id, puesto_id, faltan], …]. Tiene en cuenta bajas y vacaciones aprobadas.
 function huecos(PDO $db, array $personas, string $desde, string $hasta): array
 {
+    return array_values(array_filter(desvios($db, $personas, $desde, $hasta), fn($x) => $x[3] > 0));
+}
+
+// El ratio es exacto: [[fecha, horario_id, puesto_id, diferencia], …] con diferencia > 0 si faltan y < 0 si sobran.
+function desvios(PDO $db, array $personas, string $desde, string $hasta): array
+{
     $pp = puestos_por_persona($db);
     $cals = [];
     foreach ($personas as $u) $cals[$u['id']] = calendario_teorico($db, $u, $desde, $hasta);
@@ -67,7 +73,16 @@ function huecos(PDO $db, array $personas, string $desde, string $hasta): array
             $c = $cal[$f];
             if ($c['horario_id'] && $c['turno'] > 0) $dia[$uid] = ['horario_id' => $c['horario_id'], 'puesto_id' => $c['puesto_id']];
         }
-        foreach (cubrir_dia(necesidades_dia($db, $f), $dia, $pp) as [$h, $p, $faltan]) if ($faltan > 0) $out[] = [$f, $h, $p, $faltan];
+        $nec = necesidades_dia($db, $f);
+        $usados = [];
+        foreach (cubrir_dia($nec, $dia, $pp) as [$h, $p, $faltan, $asig]) {
+            if ($faltan > 0) $out[] = [$f, $h, $p, $faltan];
+            foreach ($asig as $uid) $usados[$uid] = true;
+        }
+        // De más: gente en un turno con ratio que no ha hecho falta para cubrirlo.
+        $sobran = [];
+        foreach ($dia as $uid => $c) if (!isset($usados[$uid]) && in_array($c['horario_id'], array_column($nec, 0))) $sobran[$c['horario_id']] = ($sobran[$c['horario_id']] ?? 0) + 1;
+        foreach ($sobran as $h => $n) $out[] = [$f, $h, null, -$n];
     }
     return $out;
 }
@@ -75,7 +90,7 @@ function huecos(PDO $db, array $personas, string $desde, string $hasta): array
 // Propone un cuadrante: [uid => [fecha => ['horario_id', 'puesto_id'] | null (libre)]].
 function generar_cuadrante(PDO $db, array $personas, string $desde, string $hasta, ?array $r = null): array
 {
-    return planificar($db, $personas, $desde, $hasta, ['reglas' => $r, 'completar' => true])['plan'];
+    return planificar($db, $personas, $desde, $hasta, ['reglas' => $r])['plan'];
 }
 
 // Pesos medidos con un año de residencia (16 auxiliares para 4+3+2 diarios): reparte la carga de la semana (queda gente
@@ -506,12 +521,12 @@ function revisar_ratios(PDO $db, ?string $ahora = null): int
     $admins = array_map('intval', $db->query("SELECT id FROM usuarios WHERE rol = 'admin' AND activo = 1")->fetchAll(PDO::FETCH_COLUMN));
     $n = 0;
     $lineas = [];
-    foreach (huecos($db, $personas, $hoy, $manana) as [$f, $h, $p, $faltan]) {
-        $txt = ($f === $hoy ? 'Hoy' : 'Mañana') . ' faltan ' . $faltan . ' en ' . ($hors[$h]['nombre'] ?? 'turno') . ($p ? ' (' . ($pn[$p] ?? '') . ')' : '') . ' para llegar al mínimo.';
+    foreach (desvios($db, $personas, $hoy, $manana) as [$f, $h, $p, $faltan]) {
+        $txt = ($f === $hoy ? 'Hoy' : 'Mañana') . ($faltan > 0 ? ' faltan ' . $faltan : ' sobran ' . -$faltan) . ' en ' . ($hors[$h]['nombre'] ?? 'turno') . ($p ? ' (' . ($pn[$p] ?? '') . ')' : '') . ' para cumplir el ratio.';
         $nuevo = false;
         foreach ($admins as $a) $nuevo = notificar($db, $a, "ratio:$f:$h:" . ($p ?? '') . ":$faltan", $txt, 'planificacion&semana=' . $f) || $nuevo;
         if ($nuevo) { $n++; $lineas[] = $txt; }
     }
-    if ($lineas) avisar_administracion('INDA: no se llega al mínimo de personal', implode("\n", $lineas) . "\n\n" . rtrim(config()['url'] ?? '', '/') . '/?p=planificacion');
+    if ($lineas) avisar_administracion('INDA: hay turnos que no cumplen el ratio', implode("\n", $lineas) . "\n\n" . rtrim(config()['url'] ?? '', '/') . '/?p=planificacion');
     return $n;
 }

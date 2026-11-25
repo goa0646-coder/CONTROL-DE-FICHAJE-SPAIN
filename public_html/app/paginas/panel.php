@@ -27,7 +27,8 @@ $recibidos = envios_recibidos(db(), $yo, true);
 $hasta = date('Y-m-d', strtotime("$hoy +6 days"));
 $todos = db()->query("SELECT * FROM usuarios WHERE activo = 1 AND rol <> 'inspeccion'")->fetchAll();
 $faltan = [];
-foreach (huecos(db(), $todos, $hoy, $hasta) as [$f, , , $n]) $faltan[$f] = ($faltan[$f] ?? 0) + $n;
+$sobran = [];
+foreach (desvios(db(), $todos, $hoy, $hasta) as [$f, , , $n]) if ($n > 0) $faltan[$f] = ($faltan[$f] ?? 0) + $n; else $sobran[$f] = ($sobran[$f] ?? 0) - $n;
 $dias = [];
 foreach (rango_fechas($hoy, $hasta) as $f) $dias[$f] = ['minimo' => array_sum(array_column(necesidades_dia(db(), $f), 2)), 'hay' => 0];
 foreach ($todos as $p) foreach (calendario_teorico(db(), $p, $hoy, $hasta) as $f => $c) if ($c['turno'] > 0 && !$c['ausencia']) $dias[$f]['hay']++;
@@ -61,15 +62,15 @@ cabecera('Inicio', $yo);
   <section class="tarjeta">
     <h2>Cobertura de la semana</h2>
     <div class="barras">
-      <?php foreach ($dias as $f => $d): $corto = isset($faltan[$f]); ?>
-      <a class="barra-dia<?= $corto ? ' corto' : '' ?>" href="?p=planificacion&semana=<?= date('Y-m-d', strtotime('monday this week', strtotime($f))) ?>" title="<?= $d['hay'] ?> con turno · mínimo <?= $d['minimo'] ?><?= $corto ? ' · faltan ' . $faltan[$f] : '' ?>">
+      <?php foreach ($dias as $f => $d): $corto = isset($faltan[$f]) || isset($sobran[$f]); ?>
+      <a class="barra-dia<?= $corto ? ' corto' : '' ?>" href="?p=planificacion&semana=<?= date('Y-m-d', strtotime('monday this week', strtotime($f))) ?>" title="<?= $d['hay'] ?> con turno · ratio <?= $d['minimo'] ?><?= isset($faltan[$f]) ? ' · faltan ' . $faltan[$f] : '' ?><?= isset($sobran[$f]) ? ' · sobran ' . $sobran[$f] : '' ?>">
         <span class="valor"><?= $d['hay'] ?></span>
         <span class="columna"><i style="height:<?= round(100 * $d['hay'] / $max) ?>%"></i><?php if ($d['minimo']): ?><b style="bottom:<?= round(100 * $d['minimo'] / $max) ?>%"></b><?php endif ?></span>
         <small><?= mb_substr(DIAS[(int)date('N', strtotime($f))], 0, 3) ?> <?= (int)substr($f, 8) ?></small>
       </a>
       <?php endforeach ?>
     </div>
-    <p class="nota leyenda-barras"><span><i class="muestra"></i> Personas con turno</span><span><b class="muestra-linea"></b> Mínimo de los ratios</span><?= $faltan ? '<span><i class="muestra roja"></i> No llega</span>' : '' ?></p>
+    <p class="nota leyenda-barras"><span><i class="muestra"></i> Personas con turno</span><span><b class="muestra-linea"></b> Ratio</span><?= $faltan || $sobran ? '<span><i class="muestra roja"></i> No cumple el ratio</span>' : '' ?></p>
   </section>
 
   <section class="tarjeta" id="sin-fichar">

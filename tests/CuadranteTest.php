@@ -145,6 +145,21 @@ class CuadranteTest extends Base
         marcar_ausencia($this->db, $admin, $b, $tipo, '2099-05-07', '2099-05-09');
     }
 
+    public function testRatioExactoNiUnoMasNiUnoMenos(): void
+    {
+        $this->necesidad($this->manana, null, 1);
+        $gente = array_map(fn() => $this->persona([]), range(1, 3));
+        $plan = generar_cuadrante($this->db, $gente, '2099-08-03', '2099-08-09');
+        foreach (rango_fechas('2099-08-03', '2099-08-09') as $f) $this->assertSame(1, count(array_filter(array_column($plan, $f))), "uno exacto el $f");
+        guardar_cuadrante($this->db, $plan);
+        $this->assertSame([], desvios($this->db, $gente, '2099-08-03', '2099-08-09'));
+        // Uno de más el lunes: sale como «sobran 1».
+        $libre = array_values(array_filter($gente, fn($u) => !$plan[$u['id']]['2099-08-03']))[0];
+        consulta($this->db, 'REPLACE INTO planificacion (usuario_id, fecha, horario_id) VALUES (?, ?, ?)', [$libre['id'], '2099-08-03', $this->manana]);
+        $this->assertSame([['2099-08-03', $this->manana, null, -1]], desvios($this->db, $gente, '2099-08-03', '2099-08-09'));
+        $this->assertSame([], huecos($this->db, $gente, '2099-08-03', '2099-08-09'));
+    }
+
     public function testNoPoneMananaTrasTarde(): void
     {
         // Solo una persona: no puede hacer tarde y mañana seguidas.
