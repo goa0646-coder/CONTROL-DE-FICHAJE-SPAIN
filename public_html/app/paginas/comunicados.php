@@ -18,8 +18,9 @@ if (es_post()) {
         }
         if ($que === 'publicar' && $puede) {
             $uids = resolver_destinatarios(db(), $yo, (array)($_POST['para'] ?? []));
+            if (!isset($_POST['por_email'])) sin_correo(true);
             $id = crear_anuncio(db(), $yo, $_POST['titulo'] ?? '', $_POST['texto'] ?? '', $uids, guardar_varios($_FILES['adjuntos'] ?? null));
-            aviso('Anuncio enviado a ' . count($uids) . (count($uids) === 1 ? ' persona' : ' personas') . '. Les llega aviso en INDA y por email.');
+            aviso('Anuncio enviado a ' . count($uids) . (count($uids) === 1 ? ' persona' : ' personas') . (isset($_POST['por_email']) ? '. Les llega aviso en INDA y por email.' : '. Les llega aviso en INDA (sin email).'));
             redirigir('comunicados', ['ver' => 'enviados', 'id' => $id]);
         }
         throw new DomainException('Acción no válida.');
@@ -84,6 +85,7 @@ cabecera('Anuncios', $yo);
     </div>
   </fieldset>
   <p class="nota">Cada persona recibe un aviso en INDA y un email, y debe pulsar «Confirmo que lo he leído». Verás quién lo ha leído, cuándo y desde qué IP.</p>
+  <label><input type="checkbox" name="por_email" value="1" checked> Avisar también por email</label>
   <button name="que" value="publicar">Enviar anuncio</button> <a class="boton secundario" href="?p=comunicados&ver=enviados">Cancelar</a>
 </form>
 <?php else: ?>

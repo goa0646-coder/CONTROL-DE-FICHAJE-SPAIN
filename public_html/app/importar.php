@@ -269,10 +269,14 @@ function aplicar_importacion(PDO $db, array $plan, bool $actualizar): array
 }
 
 // Email de bienvenida con enlace para elegir contraseña (válido 7 días).
-function enviar_bienvenida(PDO $db, array $u): bool
+function enviar_bienvenida(PDO $db, array $u, bool $cambio = false): bool
 {
     $t = bin2hex(random_bytes(32));
-    consulta($db, 'UPDATE usuarios SET reset_hash = ?, reset_expira_utc = ? WHERE id = ?', [hash('sha256', $t), gmdate('Y-m-d H:i:s', time() + 7 * 86400), $u['id']]);
+    consulta($db, 'UPDATE usuarios SET reset_hash = ?, reset_expira_utc = ?, acceso_enviado_utc = ? WHERE id = ?', [hash('sha256', $t), gmdate('Y-m-d H:i:s', time() + 7 * 86400), ahora(), $u['id']]);
+    if ($cambio) {
+        $url = rtrim(config()['url'] ?? '', '/');
+        return enviar_correo($u['email'], 'INDA: cambia tu contraseña', "Hola, {$u['nombre']}:\n\nPara poner una contraseña nueva en INDA entra aquí (el enlace vale 7 días):\n$url/?p=recuperar&t=$t\n\nSi no lo has pedido tú, avisa a la empresa.");
+    }
     $url = rtrim(config()['url'] ?? '', '/');
     $empresa = $db->query('SELECT nombre FROM empresa WHERE id = 1')->fetchColumn() ?: 'tu empresa';
     return enviar_correo($u['email'], "Bienvenida a INDA · $empresa", "Hola, {$u['nombre']}:\n\n$empresa usa INDA para el registro de jornada.\n"

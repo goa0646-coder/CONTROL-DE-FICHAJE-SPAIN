@@ -4,7 +4,7 @@ declare(strict_types=1);
 date_default_timezone_set('UTC');
 const ZONA = 'Europe/Madrid';
 // Versión que se ve abajo en el menú: sirve para comprobar que el servidor tiene la última subida.
-const VERSION = '2026.11.25l';
+const VERSION = '2026.11.25m';
 
 // Dirección de un archivo de assets con su fecha: así el navegador y el móvil no usan uno viejo de su caché.
 function asset(string $ruta): string
@@ -180,6 +180,7 @@ function usuario_actual(): ?array
         if ($u) {
             session_regenerate_id(true);
             $_SESSION['uid'] = $u['id'];
+            consulta(db(), 'UPDATE usuarios SET ultimo_acceso_utc = ? WHERE id = ?', [ahora(), $u['id']]);
             poner_cookie_dispositivo($t);
         } else {
             poner_cookie_dispositivo('');

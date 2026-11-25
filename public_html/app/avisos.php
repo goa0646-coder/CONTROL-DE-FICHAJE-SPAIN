@@ -7,6 +7,8 @@ function notificar(PDO $db, int $uid, string $clave, string $texto, string $enla
         [$uid, mb_substr($clave, 0, 100), mb_substr($texto, 0, 500), $enlace, ahora()]);
     if (!$s->rowCount()) return false;
     $u = usuario($db, $uid);
+    // Envío marcado «sin email» (casilla del formulario): queda en la campana de INDA, sin correo ni móvil.
+    if (!$siempre && sin_correo()) return true;
     // «Avisar a los trabajadores» desactivado (p. ej. mientras se suben datos): queda en la campana, sin correo ni móvil.
     if (!$siempre && $u && $u['rol'] === 'empleado' && !avisos_a_trabajadores($db)) return true;
     if ($u && $u['activo']) {
@@ -15,6 +17,14 @@ function notificar(PDO $db, int $uid, string $clave, string $texto, string $enla
         enviar_push($db, $uid);
     }
     return true;
+}
+
+// Durante esta petición, no mandar correos (sin_correo(true)); sin argumento, dice si está activo.
+function sin_correo(?bool $v = null): bool
+{
+    static $sin = false;
+    if ($v !== null) $sin = $v;
+    return $sin;
 }
 
 function avisos_a_trabajadores(PDO $db): bool
