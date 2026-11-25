@@ -156,8 +156,43 @@ class CuadranteTest extends Base
         // Uno de más el lunes: sale como «sobran 1».
         $libre = array_values(array_filter($gente, fn($u) => !$plan[$u['id']]['2099-08-03']))[0];
         consulta($this->db, 'REPLACE INTO planificacion (usuario_id, fecha, horario_id) VALUES (?, ?, ?)', [$libre['id'], '2099-08-03', $this->manana]);
-        $this->assertSame([['2099-08-03', $this->manana, null, -1]], desvios($this->db, $gente, '2099-08-03', '2099-08-09'));
+        $d = desvios($this->db, $gente, '2099-08-03', '2099-08-09');
+        $this->assertCount(1, $d);
+        $this->assertSame(['2099-08-03', $this->manana, null, -1], array_slice($d[0], 0, 4));
         $this->assertSame([], huecos($this->db, $gente, '2099-08-03', '2099-08-09'));
+    }
+
+    public function testPresenciaOrientativaNoCuentaParaHuecos(): void
+    {
+        $this->db->exec('DELETE FROM presencias');
+        $this->db->prepare('INSERT INTO presencias (nombre, puesto_id, personas) VALUES (?, ?, 1)')->execute(['ENFERMERÍA', $this->encargado]);
+        $a = $this->persona([$this->encargado]);
+        consulta($this->db, 'REPLACE INTO planificacion (usuario_id, fecha, horario_id) VALUES (?, ?, ?)', [$a['id'], '2099-08-03', $this->manana]);
+        consulta($this->db, 'REPLACE INTO planificacion (usuario_id, fecha, horario_id) VALUES (?, ?, NULL)', [$a['id'], '2099-08-04']);
+        $p = presencia_orientativa($this->db, '2099-08-03', '2099-08-04');
+        $this->assertSame([1, 0], array_column($p, 2));
+        $this->assertSame([], huecos($this->db, [$a], '2099-08-03', '2099-08-04'));
+    }
+
+    public function testPersonalDeMasSePasaAUnHueco(): void
+    {
+        $this->necesidad($this->manana, null, 1);
+        $a = $this->persona([]);
+        $b = $this->persona([]);
+        // Lunes 3: A y B de mañana (sobra uno). Martes 4: nadie (falta uno).
+        foreach ([$a, $b] as $u) {
+            consulta($this->db, 'REPLACE INTO planificacion (usuario_id, fecha, horario_id) VALUES (?, ?, ?)', [$u['id'], '2099-08-03', $this->manana]);
+            consulta($this->db, 'REPLACE INTO planificacion (usuario_id, fecha, horario_id) VALUES (?, ?, NULL)', [$u['id'], '2099-08-04']);
+        }
+        $p = reubicar_sobrantes($this->db, [$a, $b], '2099-08-03', '2099-08-04');
+        $this->assertCount(1, $p);
+        [$f, $h, $uid, $g, $h2] = $p[0];
+        $this->assertSame(['2099-08-03', $this->manana, '2099-08-04', $this->manana], [$f, $h, $g, $h2]);
+        pasar_turno($this->db, $uid, $f, $g, $h2);
+        $this->assertSame([], desvios($this->db, [$a, $b], '2099-08-03', '2099-08-04'));
+        // Sin hueco: la propuesta es dejarla libre.
+        consulta($this->db, 'REPLACE INTO planificacion (usuario_id, fecha, horario_id) VALUES (?, ?, ?)', [$uid, '2099-08-03', $this->manana]);
+        $this->assertSame([null, null], array_slice(reubicar_sobrantes($this->db, [$a, $b], '2099-08-03', '2099-08-03')[0], 3));
     }
 
     public function testPreferenciasSonSugerenciasNoReglas(): void

@@ -32,6 +32,26 @@ $probar = function (array $plan, bool $publicar) use ($personas) {
     return [$mal, $huecos, $bloquea];
 };
 // Ausencia entre fechas (vacaciones, baja, excedencia…) y recálculo para cumplir los mínimos sin tocar al resto.
+// Personal de más: aplicar una propuesta (o todas) de reubicar_sobrantes. Cada una se vuelve a comprobar antes de guardarla.
+if (es_post() && ($_POST['que'] ?? '') === 'reubicar') {
+    $hechos = 0;
+    foreach ((array)($_POST['m'] ?? []) as $m) {
+        [$uid, $f, $g, $h2] = array_pad(explode('|', (string)$m), 4, '');
+        $uid = (int)$uid;
+        $fecha = fn($x) => preg_match('/^\d{4}-\d{2}-\d{2}$/', $x) && $x >= local(ahora(), 'Y-m-d');
+        if (!in_array($uid, $ids) || !$fecha($f) || ($g !== '' && (!$fecha($g) || !isset($hors[(int)$h2])))) continue;
+        $u = usuario(db(), $uid);
+        if (!pasar_turno_valido(db(), $u, $f, $g ?: null, $g ? (int)$h2 : null)) continue;
+        pasar_turno(db(), $uid, $f, $g ?: null, $g ? (int)$h2 : null);
+        notificar(db(), $uid, 'horario:' . ahora() . ":$uid", 'Tu horario ha cambiado. Revísalo en el calendario.', 'calendario');
+        auditar(db(), (int)$yo['id'], 'planificacion', "reubicar $uid $f" . ($g ? " -> $g $h2" : ' -> libre'));
+        $hechos++;
+    }
+    $n = count((array)($_POST['m'] ?? []));
+    aviso($hechos === $n ? "Hecho: $hechos cambios guardados y avisadas las personas." : "Guardados $hechos de $n: el resto ya no cumplía el convenio o ha cambiado.", $hechos === $n ? 'ok' : 'error');
+    redirigir('planificacion', ['semana' => $lunes]);
+}
+
 if (es_post() && ($_POST['que'] ?? '') === 'ausencia') {
     try {
         // Una o varias personas a la vez (p. ej. bajas o vacaciones de golpe); quien ya tenga algo esas fechas se salta y se avisa.
@@ -224,6 +244,40 @@ $hz = huecos(db(), $personas, local(ahora(), 'Y-m-d'), date('Y-m-d', strtotime(l
     <?php endforeach ?>
   </table>
   <?php if (count($hz) > 40): ?><p class="nota">… y <?= count($hz) - 40 ?> más. Genera el cuadrante o revisa las necesidades.</p><?php endif ?>
+</div>
+<?php endif ?>
+<?php $sob = reubicar_sobrantes(db(), $personas, date('Y-m-d', strtotime(local(ahora(), 'Y-m-d') . ' +1 day')), date('Y-m-d', strtotime(local(ahora(), 'Y-m-d') . ' +20 days')));
+$nom = array_column(array_map(fn($p) => ['id' => $p['id'], 'n' => nombre($p)], $personas), 'n', 'id');
+$dia = fn($f) => DIAS[(int)date('N', strtotime($f))] . ' ' . date('d/m', strtotime($f)); ?>
+<?php if ($sob): ?>
+<div class="tarjeta" id="sobrantes">
+  <h2>Personal de más · próximas 3 semanas (<?= count($sob) ?>)</h2>
+  <p class="nota">Personas que superan el ratio de su turno. INDA propone pasarlas a un hueco (otro día que tienen libre u otro turno) sin romper el convenio; si no hay hueco, dejarlas libres ese día (ojo: son horas que dejan de hacer).</p>
+  <form method="post">
+    <?= csrf_campo() ?><input type="hidden" name="que" value="reubicar">
+    <table>
+      <tr><th></th><th>Día</th><th>Turno</th><th>Persona</th><th>Propuesta</th><th></th></tr>
+      <?php foreach (array_slice($sob, 0, 60) as [$f, $h, $uid, $g, $h2]): $v = "$uid|$f|" . ($g ? "$g|$h2" : '|'); ?>
+      <tr><td><input type="checkbox" name="m[]" value="<?= e($v) ?>"<?= $g ? ' checked' : '' ?>></td><td><?= $dia($f) ?></td><td><?= e($hl[$h]['nombre'] ?? '') ?></td><td><?= e($nom[$uid] ?? '') ?></td>
+        <td><?= $g ? 'Pasar a <strong>' . $dia($g) . ' · ' . e($hl[$h2]['nombre'] ?? '') . '</strong>' : '<span class="nota">Sin hueco: dejar libre</span>' ?></td>
+        <td><button class="secundario" name="m[]" value="<?= e($v) ?>" formnovalidate onclick="this.form.querySelectorAll('input[type=checkbox]').forEach(c => c.checked = false)">Aplicar</button></td></tr>
+      <?php endforeach ?>
+    </table>
+    <?php if (count($sob) > 60): ?><p class="nota">… y <?= count($sob) - 60 ?> más.</p><?php endif ?>
+    <button>Aplicar las marcadas</button>
+  </form>
+</div>
+<?php endif ?>
+<?php $po = array_filter(presencia_orientativa(db(), local(ahora(), 'Y-m-d'), date('Y-m-d', strtotime(local(ahora(), 'Y-m-d') . ' +13 days'))), fn($x) => $x[2] < $x[3]); ?>
+<?php if ($po): ?>
+<div class="tarjeta">
+  <h2>Presencia orientativa · próximas 2 semanas</h2>
+  <p class="nota">No es obligatoria: es la referencia que pusiste en Necesidades. Días que no se llega.</p>
+  <table>
+    <?php foreach ($po as [$f, $n, $hay, $ref, $quien]): ?>
+    <tr><td><?= $dia($f) ?></td><td><?= e($n) ?></td><td class="nota"><?= $hay ?> de <?= $ref ?><?= $quien ? ' · ' . e(implode(', ', $quien)) : ' · nadie' ?></td></tr>
+    <?php endforeach ?>
+  </table>
 </div>
 <?php endif ?>
 <?php $hfull = horarios(db()); ?>

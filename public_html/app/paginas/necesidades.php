@@ -20,6 +20,11 @@ if (es_post()) {
             max(0, min(7, (int)($_POST['dia'] ?? 0))), max(1, min(99, (int)($_POST['personas'] ?? 1))), $fecha('desde'), $fecha('hasta'), isset($_POST['festivos']) ? 1 : 0, isset($_POST['activo']) ? 1 : 0];
         if ($h && ($id = (int)($_POST['id'] ?? 0))) consulta(db(), 'UPDATE necesidades SET nombre = ?, horario_id = ?, puesto_id = ?, centro_id = ?, dia = ?, personas = ?, desde = ?, hasta = ?, festivos = ?, activo = ? WHERE id = ?', [...$datos, $id]);
         elseif ($h) consulta(db(), 'INSERT INTO necesidades (nombre, horario_id, puesto_id, centro_id, dia, personas, desde, hasta, festivos, activo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', $datos);
+    } elseif ($que === 'presencia') {
+        $pu = (int)($_POST['puesto_id'] ?? 0);
+        $d = [mb_substr(trim($_POST['nombre'] ?? ''), 0, 100) ?: 'PRESENCIA', $pu, max(1, min(99, (int)($_POST['personas'] ?? 1))), isset($_POST['activo']) ? 1 : 0];
+        if ($pu && ($id = (int)($_POST['id'] ?? 0))) consulta(db(), 'UPDATE presencias SET nombre = ?, puesto_id = ?, personas = ?, activo = ? WHERE id = ?', [...$d, $id]);
+        elseif ($pu) consulta(db(), 'INSERT INTO presencias (nombre, puesto_id, personas, activo) VALUES (?, ?, ?, ?)', $d);
     } elseif ($que === 'quitar') {
         consulta(db(), 'DELETE FROM necesidades WHERE id = ?', [(int)$_POST['id']]);
     } elseif ($que === 'ratios') {
@@ -97,5 +102,18 @@ cabecera('Puestos y necesidades', $yo);
   <p class="nota">Crea de una vez las reglas que tenías: <?= e(implode(' · ', array_map(fn($k, $v) => "$k: {$v[1]} en {$v[0]}", array_keys(RATIOS_RESIDENCIA), RATIOS_RESIDENCIA))) ?>. Los turnos tienen que existir en Horarios con ese nombre. La de tarde añádela arriba con su número.</p>
   <button name="que" value="ratios" class="secundario">Cargar ratios de la residencia</button>
 </form>
+<h2>Presencia orientativa (no obligatoria)</h2>
+<p class="nota">Referencia de cuántas personas de un puesto (p. ej. enfermería) conviene que haya cada día. No cuenta para generar el cuadrante ni para los huecos: solo se muestra en Planificación los días que no se llega.</p>
+<?php $pres = db()->query('SELECT * FROM presencias ORDER BY nombre')->fetchAll(); $pop = array_column(array_filter($puestos, fn($p) => $p['activo']), 'nombre', 'id'); ?>
+<?php foreach ([...$pres, ['id' => '', 'nombre' => '', 'puesto_id' => '', 'personas' => 1, 'activo' => 1]] as $x): ?>
+<form method="post" class="filtros">
+  <?= csrf_campo() ?><input type="hidden" name="id" value="<?= e($x['id']) ?>">
+  <label>Nombre <input name="nombre" value="<?= e($x['nombre']) ?>" placeholder="PRESENCIA ENFERMERÍA" maxlength="100"></label>
+  <label>Puesto <select name="puesto_id" required><?= opciones(['' => 'Elige…'] + $pop, $x['puesto_id']) ?></select></label>
+  <label>Personas al día <input type="number" name="personas" min="1" max="99" value="<?= e($x['personas']) ?>"></label>
+  <label><input type="checkbox" name="activo" <?= $x['activo'] ? 'checked' : '' ?>> Activa</label>
+  <button name="que" value="presencia" class="<?= $x['id'] ? 'secundario' : '' ?>"><?= $x['id'] ? 'Guardar' : 'Añadir' ?></button>
+</form>
+<?php endforeach ?>
 <p class="nota">Una regla de un día concreto sustituye a la de «Todos los días» para ese turno y puesto.</p>
 <?php pie();
