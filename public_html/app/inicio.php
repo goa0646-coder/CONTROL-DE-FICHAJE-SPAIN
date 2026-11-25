@@ -4,7 +4,7 @@ declare(strict_types=1);
 date_default_timezone_set('UTC');
 const ZONA = 'Europe/Madrid';
 // Versión que se ve abajo en el menú: sirve para comprobar que el servidor tiene la última subida.
-const VERSION = '2026.11.25q';
+const VERSION = '2026.11.25r';
 
 // Dirección de un archivo de assets con su fecha: así el navegador y el móvil no usan uno viejo de su caché.
 function asset(string $ruta): string
@@ -39,6 +39,7 @@ require __DIR__ . '/libro.php';
 require __DIR__ . '/cuadrante_excel.php';
 require __DIR__ . '/marca.php';
 require __DIR__ . '/cambios.php';
+require __DIR__ . '/valoraciones.php';
 require __DIR__ . '/encuestas.php';
 require __DIR__ . '/consultas.php';
 require __DIR__ . '/preferencias.php';

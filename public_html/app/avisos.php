@@ -88,7 +88,7 @@ function revisar_avisos(PDO $db, ?string $ahora = null): int
     $n = 0;
     $incidencias = [];
     $suma = fn(string $h, int $min) => date('H:i:s', strtotime("2000-01-01 $h") + 60 * $min);
-    foreach ($db->query("SELECT * FROM usuarios WHERE activo = 1 AND sin_fichaje = 0 AND rol IN ('empleado','responsable','admin')")->fetchAll() as $u) {
+    foreach ($db->query("SELECT * FROM usuarios WHERE activo = 1 AND sin_fichaje = 0 AND fichaje_auto = 0 AND rol IN ('empleado','responsable','admin')")->fetchAll() as $u) {
         $c = calendario_teorico($db, $u, $hoy, $hoy)[$hoy];
         $estado = estado_actual($db, (int)$u['id']);
         if (!$c['flexible'] && $c['entrada'] && $c['minutos'] > 0) {

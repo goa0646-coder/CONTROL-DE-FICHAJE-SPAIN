@@ -128,7 +128,7 @@ function olvidos_fichaje(PDO $db, array $personas, ?string $ahora = null): array
         if (isset($ids[$r['usuario_id']])) $out[] = ['salida', $ids[$r['usuario_id']], local($r['momento_utc'], 'H:i'), strtotime($r['momento_utc'] . ' UTC') - 60];
     }
     foreach ($personas as $p) {
-        if (!empty($p['sin_fichaje'])) continue;
+        if (!empty($p['sin_fichaje']) || !empty($p['fichaje_auto'])) continue;
         $c = calendario_teorico($db, $p, $hoy, $hoy)[$hoy];
         if (!$c['turno'] || $c['ausencia'] || $c['flexible'] || !$c['entrada']) continue;
         $ini = ts_local($hoy, $c['entrada']);
@@ -168,7 +168,7 @@ function cerrar_jornadas(PDO $db, ?string $ahora = null): int
     $n = 0;
     $lineas = [];
     foreach ($db->query("SELECT * FROM usuarios WHERE activo = 1 AND rol IN ('empleado','responsable','admin')")->fetchAll() as $u) {
-        if (!empty($u['sin_fichaje']) || estado_actual($db, (int)$u['id']) === 'fuera') continue;
+        if (!empty($u['sin_fichaje']) || !empty($u['fichaje_auto']) || estado_actual($db, (int)$u['id']) === 'fuera') continue;
         $e = consulta($db, "SELECT id, momento_utc FROM fichajes f WHERE usuario_id = ? AND tipo = 'entrada' AND " . NO_ANULADO . ' ORDER BY momento_utc DESC, id DESC LIMIT 1', [$u['id']])->fetch();
         if (!$e) continue;
         $te = strtotime("{$e['momento_utc']} UTC");

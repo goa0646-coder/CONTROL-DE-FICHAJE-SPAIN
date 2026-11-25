@@ -4,7 +4,10 @@ $token_nuevo = null;
 if (es_post()) {
     try {
         $que = $_POST['que'] ?? '';
-        if ($que === 'foto') {
+        if ($que === 'valoraciones') {
+            activar_valoraciones(db(), $u, isset($_POST['activar']));
+            aviso(isset($_POST['activar']) ? 'Valoración de calidad activada: solo tú la verás en la ficha de cada persona.' : 'Valoración de calidad desactivada (los datos se conservan).');
+        } elseif ($que === 'foto') {
             guardar_foto(db(), $u, $_FILES['foto'] ?? null);
             auditar(db(), (int)$u['id'], 'foto_cambiada');
             aviso('Foto actualizada.');
@@ -141,5 +144,16 @@ $pts = array_intersect_key(puestos(db()), array_flip(puestos_por_persona(db())[$
     <button name="que" value="token">Crear código</button>
   </form>
 </div>
+<?php endif;
+if ($u['rol'] === 'admin' && (!valoraciones_de(db()) || ve_valoraciones(db(), $u))): ?>
+<details class="tarjeta">
+  <summary>Funciones privadas</summary>
+  <form method="post">
+    <?= csrf_campo() ?>
+    <label><input type="checkbox" name="activar" <?= ve_valoraciones(db(), $u) ? 'checked' : '' ?>> Valoración de calidad (1–5 estrellas) en la ficha de cada persona</label>
+    <p class="nota">Solo la verás tú: ni otros administradores, ni responsables, ni los trabajadores, ni Inspección. No sale en exportaciones ni en el asistente.</p>
+    <button name="que" value="valoraciones" class="secundario">Guardar</button>
+  </form>
+</details>
 <?php endif;
 pie();

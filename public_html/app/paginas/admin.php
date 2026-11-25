@@ -26,6 +26,12 @@ if (es_post()) {
         auditar(db(), (int)$yo['id'], 'avisos_trabajadores', isset($_POST['avisar']) ? 'si' : 'no');
         aviso(isset($_POST['avisar']) ? 'Los trabajadores recibirán los avisos.' : 'Avisos a los trabajadores en pausa: no se envían correos.');
         redirigir('admin');
+    } elseif ($que === 'pausa_si' || $que === 'pausa_no') {
+        $si = $que === 'pausa_si';
+        $n = consulta(db(), "UPDATE usuarios SET pausa_auto_min = ? WHERE activo = 1 AND rol <> 'inspeccion'", [$si ? 15 : 0])->rowCount();
+        auditar(db(), (int)$yo['id'], 'pausa_auto_todos', $si ? 'si' : 'no');
+        aviso($si ? "Pausa automática de 15 min puesta a $n personas." : "Pausa automática quitada a $n personas.");
+        redirigir('admin');
     } elseif ($que === 'anunciar') {
         $t = trim($_POST['texto'] ?? '');
         $t === '' ? aviso('Escribe el mensaje.', 'error') : aviso('Aviso enviado a ' . anunciar_cambios(db(), $yo, mb_substr($t, 0, 300)) . ' personas.');
@@ -219,7 +225,15 @@ cabecera('Empresa y centros', $yo);
   <button name="que" value="correo_prueba" class="secundario">Guardar y enviar correo de prueba</button>
 </form>
 
-<?php $r = reglas(db()); ?>
+<?php $r = reglas(db()); $con = (int)db()->query("SELECT COUNT(*) FROM usuarios WHERE activo = 1 AND rol <> 'inspeccion' AND pausa_auto_min > 0")->fetchColumn(); ?>
+<form method="post" class="tarjeta">
+  <?= csrf_campo() ?>
+  <h2>Pausa automática de 15 minutos</h2>
+  <p class="nota">Ahora la tienen <?= $con ?> personas. Quien la tiene no ficha la pausa: en cada jornada de más de 6 h sin pausas se apunta sola (computa como trabajo). También se pone o quita en la ficha de cada persona.</p>
+  <button name="que" value="pausa_si" class="secundario" data-confirmar="¿Poner la pausa automática a toda la plantilla?">Ponérsela a todos</button>
+  <button name="que" value="pausa_no" class="secundario" data-confirmar="¿Quitar la pausa automática a toda la plantilla?">Quitársela a todos</button>
+</form>
+
 <form method="post" class="tarjeta">
   <?= csrf_campo() ?>
   <h2>Avisos a los trabajadores</h2>

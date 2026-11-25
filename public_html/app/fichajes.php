@@ -243,3 +243,53 @@ function revisar_justificantes(PDO $db, ?string $ahora = null): int
     }
     return $n;
 }
+
+// Pausa automática de la ficha: en cada jornada de más de 6 h sin pausas fichadas se apunta la pausa (computa como trabajo,
+// así no tiene que ficharla y se cumple el descanso del art. 34.4 ET).
+function con_pausa_auto(array $jornadas, array $u): array
+{
+    $min = (int)($u['pausa_auto_min'] ?? 0);
+    if (!$min) return $jornadas;
+    foreach ($jornadas as &$j) {
+        if ($j['salida'] && !$j['pausas'] && strtotime($j['salida'] . ' UTC') - strtotime($j['entrada'] . ' UTC') > 6 * 3600) {
+            $j['pausas'] = $min * 60;
+            $j['pausa_auto'] = $min * 60;
+        }
+    }
+    return $jornadas;
+}
+
+// Fichaje automático: a quien lo tiene en su ficha, INDA le ficha la entrada y la salida a la hora de su turno
+// (origen «automatico», visible en su registro). No se ficha en ausencias, festivos ni días sin turno.
+function fichajes_automaticos(PDO $db, ?string $ahora = null): int
+{
+    $ahora ??= ahora();
+    $t = strtotime("$ahora UTC");
+    $n = 0;
+    foreach ($db->query("SELECT * FROM usuarios WHERE activo = 1 AND fichaje_auto = 1 AND rol <> 'inspeccion'")->fetchAll() as $u) {
+        $hoy = local($ahora, 'Y-m-d');
+        foreach ([date('Y-m-d', strtotime("$hoy -1 day")), $hoy] as $dia) {
+            $c = calendario_teorico($db, $u, $dia, $dia)[$dia];
+            if (!$c['turno'] || $c['ausencia'] || $c['flexible'] || !$c['entrada'] || !$c['salida']) continue;
+            $ini = ts_local($dia, $c['entrada']);
+            $fin = ts_local($dia, $c['salida']);
+            if ($fin <= $ini) $fin += 86400;
+            if ($t < $ini) continue;
+            $hay = consulta($db, "SELECT COUNT(*) FROM fichajes f WHERE usuario_id = ? AND tipo = 'entrada' AND momento_utc >= ? AND momento_utc < ? AND " . NO_ANULADO,
+                [$u['id'], gmdate('Y-m-d H:i:s', $ini - 4 * 3600), gmdate('Y-m-d H:i:s', $fin)])->fetchColumn();
+            $ultimo = (int)strtotime(consulta($db, 'SELECT MAX(momento_utc) FROM fichajes WHERE usuario_id = ?', [$u['id']])->fetchColumn() . ' UTC');
+            try {
+                if (!$hay && $t < $fin && estado_actual($db, (int)$u['id']) === 'fuera') {
+                    registrar_fichaje($db, $u, 'entrada', 'automatico', [], gmdate('Y-m-d H:i:s', max($ini, $ultimo + 1)));
+                    $n++;
+                } elseif ($hay && $t >= $fin && estado_actual($db, (int)$u['id']) !== 'fuera') {
+                    if (estado_actual($db, (int)$u['id']) === 'pausa') registrar_fichaje($db, $u, 'pausa_fin', 'automatico', [], gmdate('Y-m-d H:i:s', max($fin - 1, $ultimo + 1)));
+                    registrar_fichaje($db, $u, 'salida', 'automatico', [], gmdate('Y-m-d H:i:s', max($fin, $ultimo + 2)));
+                    $n++;
+                }
+            } catch (DomainException) {
+            }
+        }
+    }
+    return $n;
+}

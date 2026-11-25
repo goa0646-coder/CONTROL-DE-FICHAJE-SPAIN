@@ -38,6 +38,17 @@ if (es_post() && isset($_POST['quitar_foto'])) {
     redirigir('usuarios', ['u' => $id]);
 }
 
+if (es_post() && isset($_POST['valorar'])) {
+    $id = (int)$_POST['valorar'];
+    try {
+        valorar(db(), $yo, $id, (int)($_POST['estrellas'] ?? 0), $_POST['nota'] ?? '');
+        aviso('Valoración guardada.');
+    } catch (DomainException $e) {
+        aviso($e->getMessage(), 'error');
+    }
+    redirigir('usuarios', ['u' => $id]);
+}
+
 if (es_post() && isset($_POST['saldos'])) {
     $id = (int)$_POST['id'];
     $anio = (int)$_POST['anio'];
@@ -88,7 +99,8 @@ if (es_post()) {
         'responsable_id' => (int)$p['responsable_id'] ?: null,
         'departamento_id' => (int)($p['departamento_id'] ?? 0) ?: null, 'horario_id' => (int)($p['horario_id'] ?? 0) ?: null, 'gps_modo' => isset($gps[$p['gps_modo']]) && $p['gps_modo'] !== '' ? $p['gps_modo'] : null,
         'acceso_hasta' => $p['rol'] === 'inspeccion' ? ($p['acceso_hasta'] ?: gmdate('Y-m-d', strtotime('+30 days'))) : null,
-        'activo' => $activo, 'sin_fichaje' => isset($p['sin_fichaje']) ? 1 : 0,
+        'activo' => $activo, 'sin_fichaje' => ($p['modo_fichaje'] ?? '') === 'sin' ? 1 : 0, 'fichaje_auto' => ($p['modo_fichaje'] ?? '') === 'auto' ? 1 : 0,
+        'pausa_auto_min' => isset($p['pausa_auto']) ? 15 : 0,
         'baja_utc' => $activo ? null : ($antes['baja_utc'] ?? ahora()),
     ];
     if ($p['clave'] !== '') $campos['password_hash'] = password_hash($p['clave'], PASSWORD_DEFAULT);
@@ -176,7 +188,8 @@ cabecera($editando ? ($u['id'] ? nombre($u) : 'Nueva persona') : 'Usuarios', $yo
   </fieldset>
   <?php endif ?>
   <label>GPS al fichar <select name="gps_modo"><?= opciones($gps, $u['gps_modo'] ?? '') ?></select></label>
-  <label><input type="checkbox" name="sin_fichaje" value="1" <?= !empty($u['sin_fichaje']) ? 'checked' : '' ?>> No tiene que fichar (usa INDA para pedir cosas y ver su horario; si no ficha, su registro es su horario)</label>
+  <label>Fichaje <select name="modo_fichaje"><?= opciones(['' => 'Normal: ficha la persona', 'sin' => 'Sin fichaje: su registro es su horario (si no ficha)', 'auto' => 'Automático: INDA ficha entrada y salida a la hora de su turno'], !empty($u['fichaje_auto']) ? 'auto' : (!empty($u['sin_fichaje']) ? 'sin' : '')) ?></select></label>
+  <label><input type="checkbox" name="pausa_auto" value="1" <?= !empty($u['pausa_auto_min']) ? 'checked' : '' ?>> Pausa automática de 15 min (no la tiene que fichar; en jornadas de más de 6 h sin pausa se apunta sola y computa como trabajo)</label>
   <label>Nº de empleado (quiosco) <input name="num_empleado" value="<?= e($u['num_empleado']) ?>"></label>
   <label>PIN de quiosco (4–8 cifras) <input name="pin" inputmode="numeric" autocomplete="off" placeholder="<?= $u['pin_hash'] ? 'Dejar vacío para no cambiarlo' : '' ?>"></label>
   <label>Contraseña <input type="password" name="clave" autocomplete="new-password" placeholder="<?= $u['id'] ? 'Dejar vacío para no cambiarla' : 'Mínimo 8 caracteres' ?>"></label>
@@ -185,6 +198,18 @@ cabecera($editando ? ($u['id'] ? nombre($u) : 'Nueva persona') : 'Usuarios', $yo
   <div class="pie-form"><button>Guardar</button> <a class="boton secundario" href="?p=usuarios">Cancelar</a></div>
 </form>
 
+<?php if ($u['id'] && $u['rol'] !== 'inspeccion' && ve_valoraciones(db(), $yo)): $va = valoraciones(db(), $yo, (int)$u['id']); ?>
+<form method="post" class="tarjeta">
+  <?= csrf_campo() ?>
+  <h2>Calidad <span class="estrellas"><?= estrellas($va['media']) ?></span> <small class="nota"><?= $va['media'] !== null ? $va['media'] . ' de media · ' . count($va['lista']) . ' valoraciones' : 'sin valorar' ?> · solo lo ves tú</small></h2>
+  <div class="filtros">
+    <label>Estrellas <select name="estrellas"><?= opciones([5 => '★★★★★ 5', 4 => '★★★★☆ 4', 3 => '★★★☆☆ 3', 2 => '★★☆☆☆ 2', 1 => '★☆☆☆☆ 1'], 5) ?></select></label>
+    <label>Nota (opcional) <input name="nota" maxlength="500"></label>
+    <button name="valorar" value="<?= e($u['id']) ?>">Valorar</button>
+  </div>
+  <?php foreach (array_slice($va['lista'], 0, 10) as $x): ?><p class="nota"><?= estrellas((float)$x['estrellas']) ?> · <?= e(local($x['creado_utc'], 'd/m/Y')) ?><?= $x['nota'] !== '' ? ' · ' . e($x['nota']) : '' ?></p><?php endforeach ?>
+</form>
+<?php endif ?>
 <?php if ($u['id'] && $u['rol'] !== 'inspeccion'):
     $anio = (int)($_GET['anio'] ?? local(ahora(), 'Y'));
     $saldos = saldos_ausencia(db(), $u, $anio);

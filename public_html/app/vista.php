@@ -22,6 +22,7 @@ const ICONOS = [
     'usuarios' => '<circle cx="10" cy="8" r="4"/><path d="M3 21c.9-4 3.8-6 7-6 1.5 0 2.9.4 4 1.2M18 15v6M15 18h6"/>',
     'horarios' => '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/>',
     'quioscos' => '<rect x="5" y="2.5" width="14" height="19" rx="3"/><path d="M11 18h2"/>',
+    'protocolo' => '<path d="M9 3h6l1 2h3v16H5V5h3l1-2z"/><path d="M9 12l2 2 4-4"/>',
     'auditoria' => '<path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6l8-3z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>',
     'avisos' => '<path d="M6 16V11a6 6 0 0112 0v5l2 2H4l2-2z"/><path d="M10 20a2 2 0 004 0"/>',
     'perfil' => '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.2 4.2-6 8-6s7 1.8 8 6"/>',
@@ -81,6 +82,7 @@ function menu_de(array $u): array
     if ($r === 'admin') $a = ['admin' => 'Empresa', 'usuarios' => 'Usuarios', 'horarios' => 'Horarios', 'quioscos' => 'Quioscos'];
     if (in_array($r, ['admin', 'inspeccion'], true)) $a['auditoria'] = 'Auditoría';
     if ($r === 'admin') $a['diagnostico'] = 'Diagnóstico';
+    if ($r === 'admin') $a['protocolo'] = 'Protocolo Inspección';
     if ($a) $g['Administración'] = $a;
     return $g;
 }

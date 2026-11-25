@@ -79,7 +79,7 @@ function resumen(PDO $db, array $u, string $desde, string $hasta): array
     foreach ($cal as $f => $c) $dias[$f] = $c + ['trabajado' => 0, 'nocturno' => 0, 'jornadas' => []];
     $todos = fichajes_de($db, (int)$u['id'], a_utc("$desde -1 day"), a_utc("$hasta +2 day"));
     $r = reglas($db);
-    foreach (jornadas($todos) as $j) {
+    foreach (con_pausa_auto(jornadas($todos), $u) as $j) {
         $f = local($j['entrada'], 'Y-m-d');
         if (!isset($dias[$f])) continue;
         $dias[$f]['trabajado'] += $j['trabajado'];
