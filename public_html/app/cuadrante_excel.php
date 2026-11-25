@@ -119,7 +119,9 @@ function valor_cuadrante(string $v, ?string $dep, array $turnos, array $tipos): 
     if ($n === 'f' || $n === 'festivo') return ['libre', 'festivo']; // festivo no trabajado: descanso
     if (in_array($n, DESCANSO, true)) return ['libre'];
     foreach ($turnos as $t) if (normalizar($t['nombre']) === $n) return ['turno', $t['nombre']];
-    $letra = array_values(array_filter($turnos, fn($t) => $t['letra'] !== '' && normalizar($t['letra']) === $n));
+    // Su letra o uno de sus otros códigos (alias, p. ej. «8» = mañana en un Excel antiguo).
+    $letra = array_values(array_filter($turnos, fn($t) => $t['letra'] !== '' && normalizar($t['letra']) === $n
+        || in_array($n, array_map('normalizar', preg_split('/[\s,;\/]+/', $t['alias'] ?? '', -1, PREG_SPLIT_NO_EMPTY)), true)));
     if ($letra) {
         $suyos = array_values(array_filter($letra, fn($t) => $dep && $t['departamento'] === $dep));
         $generales = array_values(array_filter($letra, fn($t) => $t['departamento'] === ''));
@@ -184,12 +186,12 @@ function listas_cuadrante(PDO $db, array $plan = []): array
         $db->query("SELECT * FROM usuarios WHERE rol <> 'inspeccion'")->fetchAll());
     foreach ($plan['secciones']['personas']['previa']['filas'] ?? [] as $f) if ($f['estado'] !== 'error') $personas[] = ['email' => $f['email'],
         'nombre' => trim($f['nombre'] . ' ' . $f['apellidos']), 'dni' => (string)$f['dni'], 'departamento' => normalizar($f['departamento'] ?? '')];
-    $turnos = array_map(fn($h) => ['nombre' => $h['nombre'], 'letra' => $h['abreviatura'], 'color' => $h['color'] ?: color_turno($h['nombre'], ($h['dias'] ? reset($h['dias'])['entrada'] : '') ?? ''), 'departamento' => normalizar($deps[$h['departamento_id']] ?? '')], array_values(array_filter(horarios($db), fn($h) => $h['activo'])));
+    $turnos = array_map(fn($h) => ['nombre' => $h['nombre'], 'letra' => $h['abreviatura'], 'alias' => $h['alias'] ?? '', 'color' => $h['color'] ?: color_turno($h['nombre'], ($h['dias'] ? reset($h['dias'])['entrada'] : '') ?? ''), 'departamento' => normalizar($deps[$h['departamento_id']] ?? '')], array_values(array_filter(horarios($db), fn($h) => $h['activo'])));
     // Los del libro sustituyen a los de la BD con el mismo nombre (así se ve lo que habrá después de importar).
     $turnos = array_column($turnos, null, 'nombre');
     foreach ($plan['secciones']['turnos']['filas'] ?? [] as $f) if (!$f['errores']) {
         foreach (array_keys($turnos) as $k) if (normalizar($k) === normalizar($f['nombre'])) unset($turnos[$k]);
-        $turnos[$f['nombre']] = ['nombre' => $f['nombre'], 'letra' => $f['letra'] ?? '', 'color' => ($f['color'] ?? '') ?: color_turno($f['nombre'], (string)hora_hhmm($f['entrada'] ?? '')), 'departamento' => normalizar($f['departamento'] ?? '')];
+        $turnos[$f['nombre']] = ['nombre' => $f['nombre'], 'letra' => $f['letra'] ?? '', 'alias' => $f['alias'] ?? ($turnos[$f['nombre']]['alias'] ?? ''), 'color' => ($f['color'] ?? '') ?: color_turno($f['nombre'], (string)hora_hhmm($f['entrada'] ?? '')), 'departamento' => normalizar($f['departamento'] ?? '')];
     }
     $turnos = array_values($turnos);
     // Igual con las personas: las del libro mandan (su departamento puede cambiar).

@@ -7,6 +7,17 @@ if (!puede($yo, 'informes')) {
 $fecha = fn($k, $def) => preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET[$k] ?? '') ? $_GET[$k] : $def;
 $desde = $fecha('desde', local(ahora(), 'Y-m') . '-01');
 $hasta = max($desde, $fecha('hasta', local(ahora(), 'Y-m-d')));
+// Semana, mes o año (con ‹ › para moverse): fija el periodo a partir de la fecha de referencia.
+$periodo = in_array($_GET['periodo'] ?? '', ['semana', 'mes', 'anio'], true) ? $_GET['periodo'] : null;
+if ($periodo) {
+    $ref = strtotime($fecha('ref', local(ahora(), 'Y-m-d')));
+    [$desde, $hasta] = match ($periodo) {
+        'semana' => [date('Y-m-d', strtotime('monday this week', $ref)), date('Y-m-d', strtotime('sunday this week', $ref))],
+        'mes' => [date('Y-m-01', $ref), date('Y-m-t', $ref)],
+        'anio' => [date('Y-01-01', $ref), date('Y-12-31', $ref)],
+    };
+}
+$mover = fn(int $n) => date('Y-m-d', strtotime(($n > 0 ? '+' : '') . $n . ' ' . ['semana' => 'week', 'mes' => 'month', 'anio' => 'year'][$periodo ?? 'mes'], strtotime($desde)));
 if ((strtotime($hasta) - strtotime($desde)) > 400 * 86400) $hasta = date('Y-m-d', strtotime("$desde +400 days"));
 $dep = (int)($_GET['dep'] ?? 0);
 $cen = (int)($_GET['centro'] ?? 0);
@@ -94,6 +105,12 @@ cabecera('Informes', $yo);
 ?>
 <div class="solo-imprimir"><p><strong><?= e($empresa['nombre']) ?></strong> · CIF <?= e($empresa['cif']) ?> · Informe de jornada del <?= date('d/m/Y', strtotime($desde)) ?> al <?= date('d/m/Y', strtotime($hasta)) ?></p></div>
 <nav class="segmentos no-imprimir"><a href="?p=informes" class="activo">Resumen del periodo</a><a href="?p=informes&vista=diario">Presencia diaria</a></nav>
+<?php $q = fn(array $x) => '?' . http_build_query(array_merge(array_diff_key($_GET, ['desde' => 1, 'hasta' => 1, 'csv' => 1]), ['p' => 'informes'], $x)); ?>
+<nav class="segmentos no-imprimir">
+  <?php foreach (['semana' => 'Semana', 'mes' => 'Mes', 'anio' => 'Año'] as $k => $t): ?><a href="<?= e($q(['periodo' => $k, 'ref' => $desde])) ?>" class="<?= $periodo === $k ? 'activo' : '' ?>"><?= $t ?></a><?php endforeach ?>
+  <?php if ($periodo): ?><a href="<?= e($q(['ref' => $mover(-1)])) ?>" aria-label="Anterior">‹</a><a href="<?= e($q(['ref' => $mover(1)])) ?>" aria-label="Siguiente">›</a><?php endif ?>
+</nav>
+<p class="no-imprimir"><strong><?= $periodo === 'semana' ? 'Semana del ' . date('d/m', strtotime($desde)) . ' al ' . date('d/m/Y', strtotime($hasta)) : ($periodo === 'mes' ? ucfirst(MESES[(int)substr($desde, 5, 2)]) . ' ' . substr($desde, 0, 4) : ($periodo === 'anio' ? 'Año ' . substr($desde, 0, 4) : 'Del ' . date('d/m/Y', strtotime($desde)) . ' al ' . date('d/m/Y', strtotime($hasta)))) ?></strong> · horas trabajadas (fichadas) frente a las de su cuadrante</p>
 <form class="filtros no-imprimir">
   <input type="hidden" name="p" value="informes">
   <label>Desde <input type="date" name="desde" value="<?= e($desde) ?>"></label>
