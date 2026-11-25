@@ -1,6 +1,7 @@
 <?php
 $yo = requiere('responsable', 'admin', 'inspeccion');
 if (es_post() && $yo['rol'] !== 'inspeccion') {
+    $volver = ($_POST['volver'] ?? '') === 'solicitudes' ? 'solicitudes' : 'equipo';
     try {
         $aprobar = ($_POST['decision'] ?? '') === 'aprobar';
         $id = (int)($_POST['id'] ?? 0);
@@ -8,7 +9,7 @@ if (es_post() && $yo['rol'] !== 'inspeccion') {
         if (($_POST['que'] ?? '') === 'cambio') {
             resolver_cambio(db(), $yo, $id, $aprobar, $_POST['comentario'] ?? '');
             aviso($aprobar ? 'Cambio aprobado: ya está en el calendario de los dos.' : 'Cambio rechazado.');
-            redirigir('equipo');
+            redirigir($volver);
         }
         if (($_POST['que'] ?? '') === 'ausencia') {
             $a = resolver_ausencia(db(), $id, $yo, $aprobar, $_POST['comentario'] ?? '');
@@ -31,7 +32,7 @@ if (es_post() && $yo['rol'] !== 'inspeccion') {
     } catch (DomainException $e) {
         aviso($e->getMessage(), 'error');
     }
-    redirigir('equipo');
+    redirigir($volver);
 }
 $pendientes = $yo['rol'] === 'inspeccion' ? [] : correcciones_pendientes(db(), $yo);
 $ausencias = $yo['rol'] === 'inspeccion' ? [] : ausencias_pendientes(db(), $yo);

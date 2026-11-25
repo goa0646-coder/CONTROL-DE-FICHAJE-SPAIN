@@ -19,13 +19,18 @@ function correo_cfg(): array
 function enviar_correo(string $para, string $asunto, string $texto): bool
 {
     $c = correo_cfg();
-    if ($c['desde'] === '' || $para === '') return false;
+    if ($c['desde'] === '' || $para === '') {
+        if ($para !== '' && function_exists('registrar_error')) registrar_error('Correo sin enviar: falta el «Email de envío» en Administración → Correo', __FILE__, __LINE__);
+        return false;
+    }
     if (!empty($c['smtp']['host'])) {
         try {
             smtp_enviar($c['smtp'], $c['desde'], $para, $asunto, $texto);
             return true;
         } catch (RuntimeException $e) {
             error_log('INDA correo: ' . $e->getMessage());
+            // Se ve en Administración → Diagnóstico (sin el destinatario).
+            if (function_exists('registrar_error')) registrar_error('Correo no enviado (SMTP): ' . $e->getMessage(), __FILE__, __LINE__);
             return false;
         }
     }

@@ -50,6 +50,7 @@ if (es_post()) {
         $clave = ($_POST['smtp_clave'] ?? '') !== '' ? $_POST['smtp_clave'] : ($ant['smtp']['clave'] ?? '');
         consulta(db(), 'REPLACE INTO ajustes VALUES (?, ?)', ['correo', json_encode(['desde' => $desde, 'admin' => $admin, 'smtp' => [
             'host' => trim($_POST['smtp_host'] ?? ''), 'puerto' => (int)($_POST['smtp_puerto'] ?? 465), 'usuario' => trim($_POST['smtp_usuario'] ?? '') ?: $desde, 'clave' => $clave]])]);
+        consulta(db(), 'REPLACE INTO ajustes VALUES (?, ?)', ['recordatorio_horas', (string)max(0, min(720, (int)($_POST['recordatorio_horas'] ?? 24))) ?: 'no']);
         auditar(db(), (int)$yo['id'], 'correo_configurado');
         if ($que === 'correo_prueba') {
             $c = correo_cfg();
@@ -214,6 +215,7 @@ cabecera('Empresa y centros', $yo);
   <label>Contraseña del buzón <input type="password" name="smtp_clave" autocomplete="new-password" placeholder="<?= !empty($cc['smtp']['clave']) ? 'Guardada · déjalo vacío para no cambiarla' : '' ?>"></label>
   <label>Correo de administración (recibe las incidencias de fichaje y las solicitudes; varios separados por comas) <input name="admin" value="<?= e($cc['admin'] ?? '') ?>" placeholder="rrhh@vuestrodominio.es"></label>
   <button name="que" value="correo">Guardar</button>
+  <label>Recordatorio de solicitudes pendientes cada <input type="number" name="recordatorio_horas" min="0" max="720" value="<?= e((int)(ajuste(db(), 'recordatorio_horas') ?? 24)) ?>" style="display:inline-block;width:5.5rem"> horas (0 = no enviar). Llega al correo de administración con todo lo que falta por decidir.</label>
   <button name="que" value="correo_prueba" class="secundario">Guardar y enviar correo de prueba</button>
 </form>
 

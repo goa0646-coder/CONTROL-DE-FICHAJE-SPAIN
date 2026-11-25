@@ -82,6 +82,8 @@ function pedir_cambio(PDO $db, array $u, int $companero, string $fecha, string $
         [$u['id'], $o['id'], $fecha, $devuelve ?: null, mb_substr(trim($motivo), 0, 500), ahora()]);
     $id = (int)$db->lastInsertId();
     auditar($db, (int)$u['id'], 'cambio_pedido', "cambio=$id con={$o['id']}");
+    avisar_administracion('INDA: cambio de turno pedido · ' . nombre($u), nombre($u) . ' pide cambiar el turno del ' . date('d/m/Y', strtotime($fecha)) . ' con ' . nombre($o)
+        . ($devuelve ? ' (le devuelve el ' . date('d/m/Y', strtotime($devuelve)) . ')' : '') . '. Primero tiene que aceptarlo ' . nombre($o) . "; después lo apruebas tú.\n\n" . rtrim(config()['url'] ?? '', '/') . '/?p=solicitudes');
     notificar($db, (int)$o['id'], "cambio:$id", nombre($u) . ' te propone cambiar el turno del ' . date('d/m', strtotime($fecha)) . ($devuelve ? ' (y te devuelve el ' . date('d/m', strtotime($devuelve)) . ')' : '') . '. Acepta o rechaza en Cambios de turno.', 'cambios');
     return $id;
 }
@@ -104,7 +106,10 @@ function responder_cambio(PDO $db, array $yo, int $id, bool $acepta): array
 function resolver_cambio(PDO $db, array $yo, int $id, bool $aprobar, string $comentario = ''): array
 {
     $c = cambio($db, $id);
-    if (!$c || $c['estado'] !== 'aprobacion') throw new DomainException('Este cambio ya no está pendiente.');
+    // Administración tiene la última palabra: aprueba cuando ya ha aceptado el compañero; rechazar, en cualquier momento.
+    if (!$c || !in_array($c['estado'], $aprobar ? ['aprobacion'] : ['aprobacion', 'companero'], true)) {
+        throw new DomainException($c && $c['estado'] === 'companero' ? 'Todavía no lo ha aceptado el compañero: puedes rechazarlo, pero no aprobarlo.' : 'Este cambio ya no está pendiente.');
+    }
     $a = usuario($db, (int)$c['solicitante_id']);
     $b = usuario($db, (int)$c['companero_id']);
     if (!puede_aprobar($yo, $a)) throw new DomainException('No puedes aprobar este cambio.');
@@ -137,10 +142,53 @@ function cambios_de(PDO $db, int $uid): array
     return consulta($db, 'SELECT * FROM cambios_turno WHERE ? IN (solicitante_id, companero_id) ORDER BY id DESC LIMIT 100', [$uid])->fetchAll();
 }
 
-// Pendientes de aprobar por $yo.
-function cambios_por_aprobar(PDO $db, array $yo): array
+// Pendientes de aprobar por $yo (con $tambien_companero, también los que esperan al compañero).
+function cambios_por_aprobar(PDO $db, array $yo, bool $tambien_companero = false): array
 {
     $out = [];
-    foreach ($db->query("SELECT * FROM cambios_turno WHERE estado = 'aprobacion' ORDER BY fecha") as $c) if (puede_aprobar($yo, usuario($db, (int)$c['solicitante_id']))) $out[] = $c;
+    foreach ($db->query("SELECT * FROM cambios_turno WHERE estado IN ('aprobacion'" . ($tambien_companero ? ",'companero'" : '') . ") ORDER BY fecha") as $c) if (puede_aprobar($yo, usuario($db, (int)$c['solicitante_id']))) $out[] = $c;
     return $out;
+}
+
+// Todo lo que piden los trabajadores y espera a $yo: cambios de turno (también los que esperan al compañero), ausencias,
+// correcciones de fichaje, justificantes de pausa sin subir y envíos a la empresa sin revisar.
+function solicitudes_pendientes(PDO $db, array $yo): array
+{
+    $equipo = array_column(equipo_de($db, $yo), null, 'id');
+    return [
+        'cambios' => cambios_por_aprobar($db, $yo, true),
+        'ausencias' => ausencias_pendientes($db, $yo),
+        'correcciones' => correcciones_pendientes($db, $yo),
+        'justificantes' => array_values(array_filter(pausas_sin_justificante($db, null, gmdate('Y-m-d H:i:s', strtotime('-30 days'))), fn($x) => isset($equipo[$x['usuario_id']]) && $x['usuario_id'] != $yo['id'])),
+        'envios' => envios_recibidos($db, $yo, true),
+    ];
+}
+
+// Cuántas esperan una decisión (los justificantes y envíos se cuentan aparte: no se aprueban).
+function n_por_decidir(array $s): int
+{
+    return count(array_filter($s['cambios'], fn($c) => $c['estado'] === 'aprobacion')) + count($s['ausencias']) + count($s['correcciones']);
+}
+
+// Cron: recordatorio por correo a administración con lo pendiente, cada N horas (Administración → Correo; 0 = nunca).
+function recordar_solicitudes(PDO $db, ?string $ahora = null): bool
+{
+    $ahora ??= ahora();
+    $cada = (int)(ajuste($db, 'recordatorio_horas') ?? 24);
+    if ($cada <= 0) return false;
+    $ult = ajuste($db, 'recordatorio_ultimo');
+    if ($ult && strtotime($ult . ' UTC') > strtotime($ahora . ' UTC') - $cada * 3600) return false;
+    $admin = $db->query("SELECT * FROM usuarios WHERE rol = 'admin' AND activo = 1 ORDER BY id LIMIT 1")->fetch();
+    if (!$admin) return false;
+    $s = solicitudes_pendientes($db, $admin);
+    $lineas = [];
+    foreach ($s['cambios'] as $c) $lineas[] = '· Cambio de turno: ' . nombre(usuario($db, (int)$c['solicitante_id'])) . ' ⇄ ' . nombre(usuario($db, (int)$c['companero_id'])) . ' (' . date('d/m', strtotime($c['fecha'])) . ') — ' . ESTADOS_CAMBIO[$c['estado']];
+    foreach ($s['ausencias'] as $a) $lineas[] = '· Ausencia: ' . nombre($a) . " — {$a['tipo']} del " . date('d/m', strtotime($a['desde'])) . ($a['hasta'] !== $a['desde'] ? ' al ' . date('d/m', strtotime($a['hasta'])) : '');
+    foreach ($s['correcciones'] as $c) $lineas[] = '· Corrección de fichaje: ' . nombre($c) . ' — ' . local($c['pedida_utc'], 'd/m H:i');
+    foreach ($s['justificantes'] as $j) if ($j['vence_utc'] < $ahora) $lineas[] = '· Justificante sin subir: ' . nombre(usuario($db, (int)$j['usuario_id'])) . " — pausa {$j['motivo']} del " . local($j['momento_utc'], 'd/m');
+    foreach ($s['envios'] as $e) $lineas[] = '· Envío a la empresa sin revisar: ' . ($e['asunto'] ?? $e['titulo'] ?? 'documento');
+    if (!$lineas) return false;
+    consulta($db, 'REPLACE INTO ajustes VALUES (?, ?)', ['recordatorio_ultimo', $ahora]);
+    avisar_administracion('INDA: ' . count($lineas) . ' solicitudes pendientes', "Pendiente de revisar en INDA:\n\n" . implode("\n", $lineas) . "\n\n" . rtrim(config()['url'] ?? '', '/') . '/?p=solicitudes');
+    return true;
 }
