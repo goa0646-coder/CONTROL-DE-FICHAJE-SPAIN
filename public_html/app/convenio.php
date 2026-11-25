@@ -237,7 +237,7 @@ function horas_extra_anio(PDO $db, array $u, int $anio): int
 function comprobar_real(PDO $db, array $u, string $desde, string $hasta, ?array $r = null): array
 {
     $r ??= reglas($db);
-    $js = jornadas(fichajes_de($db, (int)$u['id'], a_utc("$desde -2 day"), a_utc("$hasta +1 day")));
+    $js = con_pausa_auto(jornadas(fichajes_de($db, (int)$u["id"], a_utc("$desde -2 day"), a_utc("$hasta +1 day"))), $u);
     $mal = [];
     $prev = $prev_dia = null;
     foreach ($js as $j) {

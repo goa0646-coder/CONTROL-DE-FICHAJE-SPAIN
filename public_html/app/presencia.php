@@ -9,7 +9,7 @@ function presencia_dia(PDO $db, array $personas, string $fecha): array
     foreach ($personas as $p) {
         $c = calendario_teorico($db, $p, $fecha, $fecha)[$fecha];
         // Jornadas que empiezan ese día (una noche que acaba al día siguiente cuenta en el día que empezó).
-        $js = array_values(array_filter(jornadas(fichajes_de($db, (int)$p['id'], a_utc(date('Y-m-d', strtotime("$fecha -1 day")) . ' 00:00:00'), a_utc(date('Y-m-d', strtotime("$fecha +2 days")) . ' 00:00:00'))),
+        $js = array_values(array_filter(con_pausa_auto(jornadas(fichajes_de($db, (int)$p['id'], a_utc(date('Y-m-d', strtotime("$fecha -1 day")) . ' 00:00:00'), a_utc(date('Y-m-d', strtotime("$fecha +2 days")) . ' 00:00:00'))), $p),
             fn($j) => $j['entrada'] >= $ini && $j['entrada'] < $fin));
         $trab = 0;
         $pausas = 0;
