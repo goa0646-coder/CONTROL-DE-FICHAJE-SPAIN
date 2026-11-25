@@ -151,7 +151,7 @@ if ($u['rol'] === 'admin' && (!valoraciones_de(db()) || ve_valoraciones(db(), $u
   <form method="post">
     <?= csrf_campo() ?>
     <label><input type="checkbox" name="activar" <?= ve_valoraciones(db(), $u) ? 'checked' : '' ?>> Valoración de calidad (1–5 estrellas) en la ficha de cada persona</label>
-    <p class="nota">Solo la verás tú: ni otros administradores, ni responsables, ni los trabajadores, ni Inspección. No sale en exportaciones ni en el asistente.</p>
+    <p class="nota">Solo la verás tú: ni otros administradores, ni responsables, ni los trabajadores, ni Inspección. Al activarla, también la lectura con IA y el asistente quedan solo para ti.</p>
     <button name="que" value="valoraciones" class="secundario">Guardar</button>
   </form>
 </details>

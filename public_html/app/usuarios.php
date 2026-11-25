@@ -134,3 +134,32 @@ function login_pin(PDO $db, string $num, string $pin): array|string
     }
     return $u;
 }
+
+// Acceso de Inspección por enlace (sin contraseña): crea o reactiva la cuenta «INSPECCIÓN» con acceso hasta $hasta y
+// devuelve el enlace secreto (solo se guarda su huella). Un enlace nuevo invalida el anterior.
+function crear_acceso_inspeccion(PDO $db, array $yo, string $hasta): string
+{
+    if ($yo['rol'] !== 'admin') throw new DomainException('Solo administración.');
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $hasta) || $hasta < gmdate('Y-m-d')) throw new DomainException('Pon hasta qué día tiene acceso.');
+    $email = 'inspeccion@' . (parse_url(config()['url'] ?? '', PHP_URL_HOST) ?: 'inda.local');
+    $u = consulta($db, 'SELECT * FROM usuarios WHERE email = ?', [$email])->fetch();
+    if ($u) consulta($db, "UPDATE usuarios SET activo = 1, baja_utc = NULL, rol = 'inspeccion', acceso_hasta = ? WHERE id = ?", [$hasta, $u['id']]);
+    else consulta($db, "INSERT INTO usuarios (nombre, apellidos, email, password_hash, rol, acceso_hasta, alta_utc) VALUES ('INSPECCIÓN', '', ?, ?, 'inspeccion', ?, ?)",
+        [$email, password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT), $hasta, ahora()]);
+    $uid = $u ? (int)$u['id'] : (int)$db->lastInsertId();
+    $t = bin2hex(random_bytes(24));
+    consulta($db, 'REPLACE INTO ajustes VALUES (?, ?)', ['inspeccion_enlace', hash('sha256', $t) . "|$uid"]);
+    auditar($db, (int)$yo['id'], 'inspeccion_enlace', "hasta $hasta");
+    return rtrim(config()['url'] ?? '', '/') . '/?p=acceso&t=' . $t;
+}
+
+// Usuario de un enlace de Inspección válido (cuenta activa y dentro de su fecha), o null.
+function usuario_de_enlace(PDO $db, string $t): ?array
+{
+    $v = ajuste($db, 'inspeccion_enlace');
+    if (!$v || $t === '' || !str_contains($v, '|')) return null;
+    [$h, $uid] = explode('|', $v, 2);
+    if (!hash_equals($h, hash('sha256', $t))) return null;
+    $u = usuario($db, (int)$uid);
+    return $u && $u['rol'] === 'inspeccion' && acceso_vigente($u) ? $u : null;
+}

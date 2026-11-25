@@ -154,6 +154,8 @@ function generar_cuadrante(PDO $db, array $personas, string $desde, string $hast
 // para el domingo) y premia seguir en el mismo turno (bloques de unos 4 días en vez de días sueltos).
 const PESO_SEMANA = 32;
 const SEGUIR_TURNO = 400;
+// Cuánto peor (en coste del reparto) se acepta a alguien para subir la media de calidad de un turno.
+const PESO_CALIDAD = 60;
 // Hueco que se arregla con más gente (el resto, como un turno sin horas o sin nadie del departamento, no).
 const MOTIVO_REGLAS = 'no hay más personas libres sin pasarse de horas, días seguidos o descansos';
 
@@ -178,6 +180,8 @@ function planificar(PDO $db, array $personas, string $desde, string $hasta, arra
     $bloq = $o['bloqueados'] ?? [];
     // Preferencias del trabajador: solo desempatan entre candidatos válidos (nunca saltan una regla ni el ratio).
     $prefs = $o['preferencias'] ?? preferencias_activas($db);
+    $calidad = $o['calidad'] ?? null; // [uid => nota de 1 a 5]: solo si quien genera lo marca
+    $bajos = [];
     $fechas = rango_fechas($desde, $hasta);
     $nec = [];
     foreach ($fechas as $f) $nec[$f] = array_values(array_filter($o['necesidades'][$f] ?? necesidades_dia($db, $f), fn($x) => $solo === null || isset($solo[$x[0]])));
@@ -399,6 +403,21 @@ function planificar(PDO $db, array $personas, string $desde, string $hasta, arra
             }
             asort($cand);
             $elegidos = array_slice(array_keys($cand), 0, $n);
+            // Calidad (privada): en turnos que no son de noche, si la media de los elegidos baja de 3, se cambia al peor por el
+            // siguiente candidato que la mejore, si su coste es parecido. Nunca rompe ratios ni reglas: solo elige entre los que valen.
+            if ($calidad && !$t[3] && $n > 1) {
+                $q = fn($x) => $calidad[$x] ?? 3.0;
+                $resto = array_slice(array_keys($cand), $n, 8);
+                while (count($elegidos) === $n && array_sum(array_map($q, $elegidos)) / $n < 3 && $resto) {
+                    usort($elegidos, fn($x, $y) => $q($x) <=> $q($y));
+                    $mejor = null;
+                    foreach ($resto as $i => $x) if ($q($x) > $q($elegidos[0]) && $cand[$x] - $cand[$elegidos[0]] <= PESO_CALIDAD) { $mejor = $i; break; }
+                    if ($mejor === null) break;
+                    $elegidos[0] = $resto[$mejor];
+                    unset($resto[$mejor]);
+                }
+                if (count($elegidos) === $n && ($m = array_sum(array_map($q, $elegidos)) / $n) < 3) $bajos[] = [$f, $hid, round($m, 1)];
+            }
             // Mantener: si no hay nadie libre, se cambia de turno a quien hoy está donde sobra gente (mismas horas, con sus descansos).
             if ($fijo && count($elegidos) < $n) foreach ($libres_fijos as $uid => [$fh, $fp]) {
                 if (count($elegidos) >= $n) break;
@@ -522,7 +541,7 @@ function planificar(PDO $db, array $personas, string $desde, string $hasta, arra
     }
     $quien = [];
     foreach ($turnos_nec as $hid) $quien[$hid] = $de_turno[$hid] === null ? 'cualquiera' : implode(', ', array_map(fn($k) => $nombre_grupo[$k] ?? $k, array_keys($de_turno[$hid])));
-    return ['plan' => $plan, 'faltan' => $faltan, 'quien' => $quien, 'nuevos' => $nuevos, 'min' => array_map(fn($e) => $e['min'], $estado),
+    return ['plan' => $plan, 'calidad_baja' => $bajos, 'faltan' => $faltan, 'quien' => $quien, 'nuevos' => $nuevos, 'min' => array_map(fn($e) => $e['min'], $estado),
         'noches' => array_map(fn($e) => $e['noches'], $estado), 'findes' => array_map(fn($e) => $e['finde'], $estado)];
 }
 

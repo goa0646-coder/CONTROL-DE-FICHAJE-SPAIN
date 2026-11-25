@@ -77,7 +77,7 @@ function menu_de(array $u): array
     $a = [];
     if (puede($u, 'documentos') && $r !== 'empleado') $e['nominas'] = 'Nóminas';
     if ($r === 'admin') $e['estudio'] = 'Estudio de plantilla';
-    if ($r === 'admin') $e['preguntar'] = 'Asistente';
+    if ($r === 'admin' && ia_permitida($u)) $e['preguntar'] = 'Asistente';
     if ($e) $g['Equipo'] = $e;
     if ($r === 'admin') $a = ['admin' => 'Empresa', 'usuarios' => 'Usuarios', 'horarios' => 'Horarios', 'quioscos' => 'Quioscos'];
     if (in_array($r, ['admin', 'inspeccion'], true)) $a['auditoria'] = 'Auditoría';

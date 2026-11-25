@@ -1,6 +1,10 @@
 <?php
 // Asistente (Gemini) para administración: preguntas sobre fichajes, horas, ausencias y ratios. Solo lectura.
 $yo = requiere('admin');
+if (!ia_permitida($yo)) {
+    http_response_code(403);
+    exit('No tienes permiso para ver esta página.');
+}
 $hist = $_SESSION['chat_ia'] ?? [];
 if (es_post()) {
     if (isset($_POST['borrar'])) {

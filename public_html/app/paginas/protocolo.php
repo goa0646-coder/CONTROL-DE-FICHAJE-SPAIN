@@ -1,17 +1,55 @@
 <?php
 // Protocolo ante un requerimiento o visita de la Inspección de Trabajo: pasos, cuentas de Inspección y lo que han consultado.
 $yo = requiere('admin');
+if (es_post() && ($_POST['que'] ?? '') === 'enlace') {
+    try {
+        $_SESSION['enlace_inspeccion'] = crear_acceso_inspeccion(db(), $yo, $_POST['hasta'] ?? '');
+    } catch (DomainException $e) {
+        aviso($e->getMessage(), 'error');
+    }
+    redirigir('protocolo');
+}
 if (es_post() && ($_POST['que'] ?? '') === 'cerrar') {
     $n = consulta(db(), "UPDATE usuarios SET activo = 0, baja_utc = ? WHERE rol = 'inspeccion' AND activo = 1", [ahora()])->rowCount();
+    consulta(db(), "DELETE FROM ajustes WHERE clave = 'inspeccion_enlace'");
     auditar(db(), (int)$yo['id'], 'inspeccion_cerrada', "cuentas=$n");
     aviso("Acceso de Inspección cerrado ($n cuentas). Todo lo que consultaron queda en la auditoría.");
     redirigir('protocolo');
 }
+if (($_GET['descargar'] ?? '') === 'protocolo') {
+    header('Content-Type: text/plain; charset=utf-8');
+    header('Content-Disposition: attachment; filename="protocolo-inspeccion.txt"');
+    echo "PROTOCOLO ANTE LA INSPECCIÓN DE TRABAJO\n\n1. Anotar el requerimiento: fecha, inspector/a, documentación pedida, periodo y plazo.\n2. Crear el acceso de Inspección en INDA (Protocolo Inspección) con fecha de fin y enviarlo a su correo oficial.\n3. Preparar el registro de jornada del periodo, horas extra y nocturnas, y los cuadrantes.\n4. Comprobar la integridad de los fichajes en Auditoría.\n5. Al terminar, cerrar el acceso y archivar el requerimiento y lo entregado.\n\nEl registro se conserva 4 años a disposición de las personas trabajadoras, su representación legal y la Inspección (art. 34.9 ET).\n\nFecha: ________  Firma: ________\n";
+    exit;
+}
 $cuentas = db()->query("SELECT * FROM usuarios WHERE rol = 'inspeccion' ORDER BY activo DESC, id DESC")->fetchAll();
 $ids = array_column($cuentas, 'id') ?: [0];
 $vistos = consulta(db(), 'SELECT * FROM auditoria WHERE usuario_id IN (' . implode(',', array_map('intval', $ids)) . ') ORDER BY momento_utc DESC LIMIT 30')->fetchAll();
+$enlace = $_SESSION['enlace_inspeccion'] ?? null;
+unset($_SESSION['enlace_inspeccion']);
 cabecera('Protocolo Inspección', $yo);
 ?>
+<form method="post" class="tarjeta">
+  <?= csrf_campo() ?>
+  <h2>Acceso para Inspección (sin contraseña)</h2>
+  <p class="nota">Crea la cuenta «INSPECCIÓN» (solo lectura del registro de jornada y la auditoría) y un enlace para entrar sin contraseña hasta la fecha que pongas. Un enlace nuevo anula el anterior. Mándalo solo al correo oficial del inspector o inspectora.</p>
+  <?php if ($enlace): ?><p class="aviso">Enlace (cópialo ahora, no se vuelve a mostrar):<br><input readonly value="<?= e($enlace) ?>" onclick="this.select()" style="width:100%"></p><?php endif ?>
+  <div class="filtros">
+    <label>Acceso hasta <input type="date" name="hasta" value="<?= date('Y-m-d', strtotime('+30 days')) ?>" required></label>
+    <button name="que" value="enlace">Crear enlace de acceso</button>
+  </div>
+</form>
+
+<div class="tarjeta">
+  <h2>Descargables</h2>
+  <ul>
+    <li><a href="?p=informes">Registro de jornada (PDF o Excel)</a>: elige periodo y personas; incluye horas extra y nocturnas.</li>
+    <li><a href="?p=informes&vista=diario">Presencia diaria (entradas, salidas y pausas)</a></li>
+    <li><a href="?p=planificacion">Cuadrantes publicados</a></li>
+    <li><a href="?p=auditoria">Auditoría e integridad de los fichajes</a></li>
+    <li><a href="?p=protocolo&descargar=protocolo">Este protocolo en texto (para imprimir y firmar)</a></li>
+  </ul>
+</div>
 <div class="tarjeta">
   <h2>Si llega la Inspección de Trabajo</h2>
   <ol>

@@ -2,6 +2,11 @@
 
 class AutomaticoTest extends Base
 {
+    protected function tearDown(): void
+    {
+        $this->db->exec("DELETE FROM ajustes WHERE clave IN ('valoraciones_admin', 'inspeccion_enlace')");
+    }
+
     private function con(array $u, array $campos): array
     {
         foreach ($campos as $k => $v) consulta($this->db, "UPDATE usuarios SET $k = ? WHERE id = ?", [$v, $u['id']]);
@@ -59,5 +64,57 @@ class AutomaticoTest extends Base
         }
         $this->expectException(DomainException::class);
         activar_valoraciones($this->db, $b, true);
+    }
+
+    public function testEvaluacionConApuntesYSinContarBajas(): void
+    {
+        $this->db->exec("DELETE FROM ajustes WHERE clave = 'valoraciones_admin'");
+        $a = $this->usuario(['rol' => 'admin']);
+        $w = $this->usuario(['horario_id' => $this->horario([1, 2, 3, 4, 5], '07:00', '15:00'), 'alta_utc' => gmdate('Y-m-d H:i:s', strtotime('-20 days'))]);
+        $this->assertNull(evaluacion($this->db, $a, $w), 'oculta hasta activarla');
+        activar_valoraciones($this->db, $a, true);
+        valorar_apartados($this->db, $a, (int)$w['id'], ['trato' => 5, 'tecnica' => 5, 'equipo' => 5, 'iniciativa' => 5, 'actitud' => 5], '');
+        $this->assertNull(evaluacion($this->db, $a, $w)['objetiva']['confianza'], 'aún no ficha en INDA: no hay faltas');
+        $lunes = date('Y-m-d', strtotime('monday this week -2 weeks'));
+        $this->fichar($w, 'entrada', "$lunes 07:00:00");
+        $this->fichar($w, 'salida', "$lunes 15:00:00");
+        $ev = evaluacion($this->db, $a, $w);
+        $this->assertSame(1, $ev['objetiva']['confianza'], 'desde que ficha, los días de turno sin fichar son faltas');
+        $antes = $ev['final'];
+        apuntar($this->db, $a, (int)$w['id'], 'incidencia', gmdate('Y-m-d'), 'llegó tarde');
+        $this->assertSame($antes, evaluacion($this->db, $a, $w)['final'], 'un apunte no resta');
+        apuntar($this->db, $a, (int)$w['id'], 'amonestacion', gmdate('Y-m-d'), 'otra');
+        $this->assertEqualsWithDelta(max(1.0, $antes - 1), evaluacion($this->db, $a, $w)['final'], 0.051, 'dos apuntes restan 1 estrella');
+        // Baja aprobada todo el periodo: ya no son faltas.
+        $tipo = (int)$this->db->query("SELECT id FROM tipos_ausencia ORDER BY id LIMIT 1")->fetchColumn();
+        consulta($this->db, "INSERT INTO ausencias (usuario_id, tipo_id, desde, hasta, estado, pedida_utc, pedida_por) VALUES (?, ?, ?, ?, 'aprobada', ?, ?)", [$w['id'], $tipo, gmdate('Y-m-d', strtotime('-25 days')), gmdate('Y-m-d'), ahora(), $a['id']]);
+        $this->assertNull(evaluacion_objetiva($this->db, $w)['confianza'], 'de baja: no hay turnos que evaluar');
+        $this->assertSame([], apuntes_de($this->db, $this->usuario(['rol' => 'admin']), (int)$w['id']), 'otro admin no ve los apuntes');
+    }
+
+    public function testCalidadEquilibraElTurnoSiPuede(): void
+    {
+        $this->db->exec('DELETE FROM necesidades');
+        $h = $this->horario([1, 2, 3, 4, 5, 6, 7], '07:00', '15:00');
+        $this->db->prepare('INSERT INTO necesidades (horario_id, puesto_id, dia, personas) VALUES (?, NULL, 0, 2)')->execute([$h]);
+        $g = array_map(fn() => $this->usuario(['alta_utc' => '2099-01-01 00:00:00']), range(1, 4));
+        $notas = [(int)$g[0]['id'] => 1.0, (int)$g[1]['id'] => 1.0, (int)$g[2]['id'] => 5.0, (int)$g[3]['id'] => 5.0];
+        $r = planificar($this->db, $g, '2099-08-03', '2099-08-03', ['calidad' => $notas]);
+        $dentro = array_keys(array_filter(array_map(fn($d) => $d['2099-08-03'] ?? null, $r['plan'])));
+        $this->assertGreaterThanOrEqual(3, array_sum(array_map(fn($x) => $notas[$x], $dentro)) / count($dentro));
+        $this->assertSame([], $r['calidad_baja']);
+    }
+
+    public function testEnlaceDeInspeccionSinContrasena(): void
+    {
+        $GLOBALS['CONFIG']['url'] ??= 'https://ejemplo.es';
+        $a = $this->usuario(['rol' => 'admin']);
+        $url = crear_acceso_inspeccion($this->db, $a, gmdate('Y-m-d', strtotime('+3 days')));
+        parse_str(parse_url($url, PHP_URL_QUERY), $q);
+        $u = usuario_de_enlace($this->db, $q['t']);
+        $this->assertSame(['inspeccion', 'INSPECCIÓN'], [$u['rol'], $u['nombre']]);
+        $this->assertNull(usuario_de_enlace($this->db, 'falso'));
+        crear_acceso_inspeccion($this->db, $a, gmdate('Y-m-d', strtotime('+3 days')));
+        $this->assertNull(usuario_de_enlace($this->db, $q['t']), 'el enlace nuevo anula el anterior');
     }
 }
