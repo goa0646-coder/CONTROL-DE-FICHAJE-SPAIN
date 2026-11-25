@@ -98,7 +98,7 @@ if (($_GET['vista'] ?? '') === 'diario') {
     <td><?= e($f['jornada']) ?></td>
     <td class="<?= $tarde ? 'error' : '' ?>"><?= $hm($f['entrada']) ?: ($f['teorico'] ? '<span class="error">Sin fichar</span>' : '') ?></td>
     <td><?= $f['abierta'] ? '<span class="estado dentro">Dentro</span>' : $hm($f['salida']) ?></td>
-    <td><?= $f['pausas'] ? horas($f['pausas']) : '' ?></td><td><?= horas($f['teorico']) ?></td><td><?= horas($f['trabajado']) ?></td>
+    <td class="<?= $f['pausa_obligatoria'] && $f['entrada'] && $f['pausas'] < $f['pausa_obligatoria'] ? 'error' : '' ?>" title="<?= $f['pausa_obligatoria'] ? 'Pausa obligatoria del turno: ' . horas($f['pausa_obligatoria']) . ' h' : '' ?>"><?= $f['pausas'] ? horas($f['pausas']) : '' ?></td><td><?= horas($f['teorico']) ?></td><td><?= horas($f['trabajado']) ?></td>
     <td class="<?= $f['diferencia'] < 0 ? 'error' : '' ?>"><?= horas_signo($f['diferencia']) ?></td></tr>
   <?php endforeach ?>
 </table>

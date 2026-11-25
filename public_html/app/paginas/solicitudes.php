@@ -3,7 +3,7 @@
 // Las decisiones las guarda la página de Personas (misma lógica); aquí solo se listan y se vuelve aquí.
 $yo = requiere('responsable', 'admin');
 $s = solicitudes_pendientes(db(), $yo);
-$boton = fn(string $que, int $id, bool $aprobar = true) => '<form method="post" class="filtros">' . csrf_campo() . '<input type="hidden" name="volver" value="solicitudes"><input type="hidden" name="que" value="' . $que . '"><input type="hidden" name="id" value="' . $id . '">'
+$boton = fn(string $que, int $id, bool $aprobar = true) => '<form method="post" action="?p=equipo" class="filtros">' . csrf_campo() . '<input type="hidden" name="volver" value="solicitudes"><input type="hidden" name="que" value="' . $que . '"><input type="hidden" name="id" value="' . $id . '">'
     . '<input name="comentario" maxlength="500" placeholder="Comentario (opcional)">' . ($aprobar ? '<button name="decision" value="aprobar" class="pequeno">Aprobar</button>' : '') . '<button name="decision" value="rechazar" class="secundario pequeno">Rechazar</button></form>';
 $recientes = consulta(db(), "SELECT * FROM cambios_turno WHERE estado IN ('aprobado','rechazado','cancelado') AND COALESCE(resuelto_utc, respondido_utc, pedido_utc) >= ? ORDER BY id DESC LIMIT 30", [gmdate('Y-m-d H:i:s', strtotime('-30 days'))])->fetchAll();
 cabecera('Solicitudes', $yo);

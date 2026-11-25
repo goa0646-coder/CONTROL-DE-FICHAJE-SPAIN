@@ -19,7 +19,7 @@ if (es_post() && $yo['rol'] !== 'inspeccion') {
             if ($aprobar && !$a['por_horas'] && $a['hasta'] >= local(ahora(), 'Y-m-d')) {
                 $rc = recubrir(db(), $a['desde'], $a['hasta'], (int)$yo['id']);
                 $_SESSION['recalculo'] = ['persona' => trim($a['nombre'] . ' ' . $a['apellidos']), 'desde' => $a['desde'], 'hasta' => $a['hasta'], 'nuevos' => $rc['nuevos'], 'faltan' => $rc['faltan']];
-                aviso('Aprobada: ' . count($rc['nuevos']) . ' turnos nuevos para cubrir los mínimos' . ($rc['faltan'] ? ' y ' . array_sum(array_column($rc['faltan'], 3)) . ' sin cubrir.' : '.'), $rc['faltan'] ? 'error' : 'ok');
+                aviso('Aprobada: ' . count($rc['nuevos']) . ' turnos nuevos para cumplir los ratios' . ($rc['faltan'] ? ' y ' . array_sum(array_column($rc['faltan'], 3)) . ' sin cubrir.' : '.'), $rc['faltan'] ? 'error' : 'ok');
                 redirigir('planificacion', ['semana' => date('Y-m-d', strtotime('monday this week', strtotime(max($a['desde'], local(ahora(), 'Y-m-d')))))]);
             }
         } else {

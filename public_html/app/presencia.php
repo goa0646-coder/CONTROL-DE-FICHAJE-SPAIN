@@ -21,7 +21,9 @@ function presencia_dia(PDO $db, array $personas, string $fecha): array
         $jornada = $c['ausencia'] ? $c['ausencia']['tipo'] : ($c['festivo'] ? 'Festivo: ' . $c['festivo'] : ($c['minutos'] ? ($c['horario'] ?: 'Laborable') : 'Descanso'));
         $out[] = ['persona' => $p, 'jornada' => $jornada, 'ausencia' => (bool)$c['ausencia'], 'horario_entrada' => $c['entrada'] ?? null,
             'entrada' => $js[0]['entrada'] ?? null, 'salida' => $js ? end($js)['salida'] : null, 'abierta' => $js && end($js)['salida'] === null,
-            'pausas' => $pausas, 'teorico' => $teorico, 'trabajado' => $trab, 'diferencia' => $trab - $teorico];
+            'pausas' => $pausas, 'teorico' => $teorico, 'trabajado' => $trab, 'diferencia' => $trab - $teorico,
+            // Pausa obligatoria del turno (p. ej. 2 h de comida del partido): cuánta pedía.
+            'pausa_obligatoria' => $c['horario_id'] && $c['turno'] ? (int)(horarios($db)[$c['horario_id']]['pausa_min'] ?? 0) * 60 : 0];
     }
     return $out;
 }
