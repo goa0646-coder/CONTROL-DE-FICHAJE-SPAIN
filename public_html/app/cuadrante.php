@@ -489,8 +489,9 @@ function guardar_cuadrante(PDO $db, array $plan): void
 }
 
 // Ratios de AS FRAGAS (capturas de su configuración anterior): turno => mínimo de personas.
-// La tarde no venía en las capturas: se deja para que la empresa la añada con su número.
-const RATIOS_RESIDENCIA = ['RATIO AUXILIARES MAÑANA' => ['AUXILIAR MAÑANA', 4], 'RATIO AUXILIARES NOCHE' => ['AUXILIAR NOCHE', 2], 'RATIO PARTIDO' => ['COORDINACIÓN PARTIDO', 2]];
+// Ratios exactos de AS FRAGAS (ni uno más ni uno menos): turno => personas.
+const RATIOS_RESIDENCIA = ['RATIO AUXILIARES MAÑANA' => ['AUXILIAR MAÑANA', 4], 'RATIO AUXILIARES TARDE' => ['AUXILIAR TARDE', 3], 'RATIO AUXILIARES NOCHE' => ['AUXILIAR NOCHE', 2],
+    'RATIO PARTIDO' => ['COORDINACIÓN PARTIDO', 2], 'RATIO LIMPIEZA MAÑANA' => ['LIMPIEZA MAÑANA', 1], 'RATIO LIMPIEZA TARDE' => ['LIMPIEZA TARDE', 1]];
 
 // Crea las reglas cuyo turno ya existe (por nombre, sin importar mayúsculas ni tildes). Devuelve [creadas, turnos que faltan].
 function cargar_ratios(PDO $db, array $ratios = RATIOS_RESIDENCIA): array
