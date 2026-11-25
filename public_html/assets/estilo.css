@@ -17,8 +17,9 @@
   --lateral: 264px; --barra: 60px;
   color-scheme: light;
 }
+/* Oscuro: automático según el sistema, o elegido con el botón (data-tema en <html>). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-tema="claro"]) {
     --acento: color-mix(in srgb, var(--marca) 70%, white); --acento-suave: color-mix(in srgb, var(--marca) 22%, transparent);
     --verde: #3ccb8f; --rojo: #f97066; --ambar: #fdb022;
     --fondo: #0b0d12; --tarjeta: #151820; --relleno: #1d212b; --linea: #262b36; --linea-fuerte: #343b49;
@@ -27,6 +28,15 @@
     --vidrio: rgba(21, 24, 32, .85);
     color-scheme: dark;
   }
+}
+:root[data-tema="oscuro"] {
+  --acento: color-mix(in srgb, var(--marca) 70%, white); --acento-suave: color-mix(in srgb, var(--marca) 22%, transparent);
+  --verde: #3ccb8f; --rojo: #f97066; --ambar: #fdb022;
+  --fondo: #0b0d12; --tarjeta: #151820; --relleno: #1d212b; --linea: #262b36; --linea-fuerte: #343b49;
+  --texto: #f2f4f7; --gris: #a3adbf; --gris-2: #667085;
+  --sombra: 0 0 0 1px rgba(255, 255, 255, .04);
+  --vidrio: rgba(21, 24, 32, .85);
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -516,8 +526,14 @@ button.pausa_inicio { background: #dc6803; }
 @media (max-width: 960px) { .ficha-persona { grid-template-columns: 1fr; } }
 button.pequeno, .boton.pequeno { min-height: 32px; padding: .25rem .7rem; font-size: .82rem; }
 @media (prefers-color-scheme: dark) {
-  .marca-empresa img:not(.icono-inda), .logo-entrada img, .barra-movil .logo img.logo-empresa-movil { background: #fff; padding: .35rem .6rem; border-radius: 10px; }
+  :root:not([data-tema="claro"]) :is(.marca-empresa img:not(.icono-inda), .logo-entrada img, .barra-movil .logo img.logo-empresa-movil) { background: #fff; padding: .35rem .6rem; border-radius: 10px; }
 }
+:root[data-tema="oscuro"] :is(.marca-empresa img:not(.icono-inda), .logo-entrada img, .barra-movil .logo img.logo-empresa-movil) { background: #fff; padding: .35rem .6rem; border-radius: 10px; }
+button.tema { filter: none; box-shadow: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--linea); background: var(--tarjeta); color: var(--gris); cursor: pointer; padding: 0; min-height: 0; }
+button.tema:hover { filter: none; color: var(--texto); background: var(--relleno); }
+.tema .luna { display: none; }
+:root[data-tema="oscuro"] .tema .sol { display: none; } :root[data-tema="oscuro"] .tema .luna { display: block; }
+@media (prefers-color-scheme: dark) { :root:not([data-tema]) .tema .sol { display: none; } :root:not([data-tema]) .tema .luna { display: block; } }
 /* Navegadores sin color-mix (Chrome < 111, Safari < 16.2): colores fijos para que todo se vea igual. */
 @supports not (color: color-mix(in srgb, red, blue)) {
   :root { --acento-suave: rgba(37, 99, 235, .1); --acento-borde: rgba(37, 99, 235, .35); }
@@ -574,3 +590,4 @@ button.pequeno, .boton.pequeno { min-height: 32px; padding: .25rem .7rem; font-s
 .aviso.justificar span { flex: 1 1 14rem; }
 .aviso.justificar input[type=file] { flex: 1 1 12rem; max-width: 100%; }
 [data-contador] { font-variant-numeric: tabular-nums; }
+.tarjeta > input[type=hidden]:first-child + h2, .tarjeta > input[type=hidden] + input[type=hidden] + h2 { margin-top: 0; }

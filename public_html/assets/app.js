@@ -9,6 +9,14 @@ for (const v of document.querySelectorAll('[data-cerrar-menu]')) v.addEventListe
 addEventListener('keydown', e => { if (e.key === 'Escape') menu(false); });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 
+// Fondo claro u oscuro: el botón alterna y se recuerda en este dispositivo.
+for (const b of document.querySelectorAll('[data-tema-boton]')) b.addEventListener('click', () => {
+  const r = document.documentElement;
+  const oscuro = r.dataset.tema ? r.dataset.tema === 'oscuro' : matchMedia('(prefers-color-scheme: dark)').matches;
+  r.dataset.tema = oscuro ? 'claro' : 'oscuro';
+  try { localStorage.setItem('tema', r.dataset.tema); } catch (e) {}
+});
+
 // Reloj en hora de Madrid
 for (const el of document.querySelectorAll('[data-reloj]')) {
   const seg = el.hasAttribute('data-segundos');
