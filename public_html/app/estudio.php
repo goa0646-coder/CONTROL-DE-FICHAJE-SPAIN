@@ -78,7 +78,7 @@ function minimo_personas(PDO $db, array $grupo, string $desde, string $hasta, ar
     $res['cota'] = $n = cota_personas($db, $grupo, $desde, $hasta, $nec);
     $puestos = array_values(array_unique(array_filter(array_merge(...array_map(fn($l) => array_column($l, 1), array_values($nec))))));
     // Reparto equilibrado entre N personas: cubre más con menos gente que «llenar» a unas pocas (medido en un año real).
-    $o = ['reglas' => $r, 'horarios' => $grupo['horarios'], 'necesidades' => $nec, 'modo' => 'justo'];
+    $o = ['reglas' => $r, 'horarios' => $grupo['horarios'], 'necesidades' => $nec, 'modo' => 'justo', 'preferencias' => []];
     $ultimo = null;
     for (; $n <= $maximo; $n++) {
         [$personas, $o['bloqueados'], $o['puestos']] = plantilla_ficticia($grupo, $n, $fechas, $vacaciones, $puestos);
@@ -142,7 +142,7 @@ function plan_anual(PDO $db, array $grupos, string $desde, string $hasta, string
             $vacs = vacaciones_previstas($db, $usar, $fechas, $vac);
             $bloq = [];
             foreach ($vacs as $uid => [$a, $b]) foreach (rango_fechas($a, $b) as $f) $bloq[$uid][$f] = 1;
-            $r = planificar($db, $usar, $desde, $hasta, ['modo' => 'justo', 'horarios' => $g['horarios'], 'necesidades' => $nec, 'bloqueados' => $bloq]);
+            $r = planificar($db, $usar, $desde, $hasta, ['modo' => 'justo', 'horarios' => $g['horarios'], 'necesidades' => $nec, 'bloqueados' => $bloq, 'preferencias' => []]);
             if (!$r['faltan'] || $n >= count($gente)) break;
         }
         // Las que no hacen falta: descanso todo el periodo (quedan como bolsa para bajas).

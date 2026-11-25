@@ -160,6 +160,27 @@ class CuadranteTest extends Base
         $this->assertSame([], huecos($this->db, $gente, '2099-08-03', '2099-08-09'));
     }
 
+    public function testPreferenciasSonSugerenciasNoReglas(): void
+    {
+        $this->necesidad($this->manana, null, 1);
+        [$a, $b] = array_map(fn() => $this->persona([]), range(1, 2));
+        // A prefiere librar los domingos y trabajar los lunes.
+        guardar_preferencia($this->db, $a, ['tipo' => 'dia', 'dia' => 7, 'prefiere' => '0', 'fecha' => '']);
+        guardar_preferencia($this->db, $a, ['tipo' => 'dia', 'dia' => 1, 'prefiere' => '1']);
+        $plan = generar_cuadrante($this->db, [$a, $b], '2099-11-02', '2099-11-08'); // lunes a domingo
+        $this->assertNotNull($plan[$a['id']]['2099-11-02'], 'el lunes trabaja A');
+        $this->assertNull($plan[$a['id']]['2099-11-08'], 'el domingo libra A');
+        $this->assertNotNull($plan[$b['id']]['2099-11-08'], 'y lo cubre B: el ratio se cumple igual');
+        $c = cumplimiento_preferencias($plan, preferencias_activas($this->db));
+        $this->assertSame([2, 2], $c[$a['id']]);
+        // Si solo está A, el ratio manda: trabaja el domingo aunque prefiera librar.
+        $solo = generar_cuadrante($this->db, [$a], '2099-11-15', '2099-11-15');
+        $this->assertNotNull($solo[$a['id']]['2099-11-15']);
+        $this->assertStringContainsString('librar', texto_preferencia(preferencias_activas($this->db)[$a['id']][0], horarios($this->db)));
+        $this->expectException(DomainException::class);
+        guardar_preferencia($this->db, $a, ['tipo' => 'turno']);
+    }
+
     public function testNoPoneMananaTrasTarde(): void
     {
         // Solo una persona: no puede hacer tarde y mañana seguidas.

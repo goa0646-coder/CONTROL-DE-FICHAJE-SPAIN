@@ -104,7 +104,8 @@ function ejecutar_consulta(PDO $db, array $yo, string $nombre, array $a): array
                         if ($c['entrada'] && ((int)substr($c['entrada'], 0, 2) >= 20 || (int)substr((string)$c['salida'], 0, 2) <= 7 && $c['salida'] < $c['entrada'])) $noches++;
                         if ((int)date('N', strtotime($f)) >= 6) $findes++;
                     }
-                    return ['persona' => nombre($p), 'turnos' => $n, 'horas' => $h($min * 60), 'noches' => $noches, 'fines_de_semana' => $findes];
+                    return ['persona' => nombre($p), 'turnos' => $n, 'horas' => $h($min * 60), 'noches' => $noches, 'fines_de_semana' => $findes,
+                        'preferencias' => array_map(fn($x) => texto_preferencia($x, horarios($db)), preferencias_activas($db, [(int)$p['id']])[$p['id']] ?? [])];
                 }, $gente)];
             case 'trabajando_ahora':
                 $out = [];

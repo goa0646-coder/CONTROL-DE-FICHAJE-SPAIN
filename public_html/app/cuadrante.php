@@ -119,6 +119,8 @@ function planificar(PDO $db, array $personas, string $desde, string $hasta, arra
     if ($mantener) $completar = false;
     $solo = isset($o['horarios']) ? array_flip($o['horarios']) : null;
     $bloq = $o['bloqueados'] ?? [];
+    // Preferencias del trabajador: solo desempatan entre candidatos válidos (nunca saltan una regla ni el ratio).
+    $prefs = $o['preferencias'] ?? preferencias_activas($db);
     $fechas = rango_fechas($desde, $hasta);
     $nec = [];
     foreach ($fechas as $f) $nec[$f] = array_values(array_filter($o['necesidades'][$f] ?? necesidades_dia($db, $f), fn($x) => $solo === null || isset($solo[$x[0]])));
@@ -336,6 +338,7 @@ function planificar(PDO $db, array $personas, string $desde, string $hasta, arra
                     : $e['min'] / 60 + ($finde ? 8 * $e['finde'] : 0) + ($t[3] ? 8 * $e['noches'] : 0) - $ayer + $uid / 1e6
                     // Quien ya lleva más horas esta semana, después: así queda gente libre para el domingo.
                     + PESO_SEMANA * ($e['semana'][$semana] ?? 0) / 60;
+                if (!empty($prefs[$uid])) $cand[$uid] += ajuste_preferencias($prefs[$uid], $f, $hid);
             }
             asort($cand);
             $elegidos = array_slice(array_keys($cand), 0, $n);
