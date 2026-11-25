@@ -81,10 +81,67 @@ function desvios(PDO $db, array $personas, string $desde, string $hasta): array
         }
         // De más: gente en un turno con ratio que no ha hecho falta para cubrirlo.
         $sobran = [];
-        foreach ($dia as $uid => $c) if (!isset($usados[$uid]) && in_array($c['horario_id'], array_column($nec, 0))) $sobran[$c['horario_id']] = ($sobran[$c['horario_id']] ?? 0) + 1;
-        foreach ($sobran as $h => $n) $out[] = [$f, $h, null, -$n];
+        foreach ($dia as $uid => $c) if (!isset($usados[$uid]) && in_array($c['horario_id'], array_column($nec, 0))) $sobran[$c['horario_id']][] = $uid;
+        foreach ($sobran as $h => $quienes) $out[] = [$f, $h, null, -count($quienes), $quienes];
     }
     return $out;
+}
+
+// Personal de más: para cada persona que sobra en un turno propone pasarla a un hueco (otro día que tenga libre u otro turno
+// del mismo día) de su misma familia de turnos (auxiliar, limpieza, coordinación…) sin romper el convenio. Si no hay hueco
+// posible, la propuesta es dejarla libre ese día. Devuelve [[fecha, horario_id, uid, fecha destino|null, horario destino|null], …].
+function reubicar_sobrantes(PDO $db, array $personas, string $desde, string $hasta): array
+{
+    $hs = [];
+    foreach ($db->query('SELECT id, nombre, departamento_id FROM horarios') as $x) {
+        $w = array_values(array_filter(preg_split('/[^a-z]+/', normalizar($x['nombre'])), fn($w) => strlen($w) >= 5));
+        $hs[$x['id']] = $x['departamento_id'] ? 'd' . $x['departamento_id'] : substr($w[0] ?? $x['nombre'], 0, 5);
+    }
+    $dv = desvios($db, $personas, $desde, $hasta);
+    $faltas = [];
+    foreach ($dv as $x) for ($i = 0; $i < $x[3]; $i++) $faltas[] = [$x[0], $x[1]];
+    $por_id = array_column($personas, null, 'id');
+    $cal = [];
+    $out = [];
+    foreach ($dv as $x) {
+        if ($x[3] >= 0) continue;
+        [$f, $h] = $x;
+        foreach ($x[4] as $uid) {
+            $u = $por_id[$uid];
+            $cal[$uid] ??= calendario_teorico($db, $u, $desde, $hasta);
+            $dest = null;
+            foreach ($faltas as $i => [$g, $h2]) {
+                if (($hs[$h2] ?? 1) !== ($hs[$h] ?? 2)) continue;
+                if ($g !== $f && ($cal[$uid][$g]['turno'] > 0 || $cal[$uid][$g]['ausencia'])) continue;
+                if (pasar_turno_valido($db, $u, $f, $g, $h2)) { $dest = [$g, $h2]; unset($faltas[$i]); break; }
+            }
+            $out[] = [$f, $h, $uid, $dest[0] ?? null, $dest[1] ?? null];
+        }
+    }
+    return $out;
+}
+
+// ¿Se puede dejar libre a $u el día $f y ponerle el turno $h2 el día $g sin un bloqueo nuevo del convenio? Prueba y deshace.
+function pasar_turno_valido(PDO $db, array $u, string $f, ?string $g, ?int $h2): bool
+{
+    $a = min($f, $g ?? $f);
+    $b = date('Y-m-d', strtotime(max($f, $g ?? $f) . ' +1 day'));
+    $antes = count(bloqueos(comprobar_plan($db, $u, $a, $b)));
+    $propia = !$db->inTransaction();
+    $propia ? $db->beginTransaction() : $db->exec('SAVEPOINT mover');
+    try {
+        pasar_turno($db, (int)$u['id'], $f, $g, $h2);
+        return count(bloqueos(comprobar_plan($db, $u, $a, $b))) <= $antes;
+    } finally {
+        $propia ? $db->rollBack() : $db->exec('ROLLBACK TO SAVEPOINT mover');
+    }
+}
+
+// Deja libre el día $f y, si hay destino, pone el turno $h2 el día $g (el mismo día = cambio de turno).
+function pasar_turno(PDO $db, int $uid, string $f, ?string $g, ?int $h2): void
+{
+    consulta($db, 'REPLACE INTO planificacion (usuario_id, fecha, horario_id) VALUES (?, ?, NULL)', [$uid, $f]);
+    if ($g && $h2) consulta($db, 'REPLACE INTO planificacion (usuario_id, fecha, horario_id) VALUES (?, ?, ?)', [$uid, $g, $h2]);
 }
 
 // Propone un cuadrante: [uid => [fecha => ['horario_id', 'puesto_id'] | null (libre)]].
@@ -538,4 +595,21 @@ function revisar_ratios(PDO $db, ?string $ahora = null): int
     }
     if ($lineas) avisar_administracion('INDA: hay turnos que no cumplen el ratio', implode("\n", $lineas) . "\n\n" . rtrim(config()['url'] ?? '', '/') . '/?p=planificacion');
     return $n;
+}
+
+// Presencia orientativa (no obligatoria): por cada regla activa y día, cuántas personas de ese puesto trabajan.
+// Devuelve [[fecha, nombre, hay, referencia, [nombres]], …] (todos los días, cumplan o no).
+function presencia_orientativa(PDO $db, string $desde, string $hasta): array
+{
+    $out = [];
+    foreach ($db->query('SELECT * FROM presencias WHERE activo = 1 ORDER BY nombre') as $r) {
+        $gente = consulta($db, 'SELECT u.* FROM usuarios u JOIN usuarios_puestos up ON up.usuario_id = u.id WHERE up.puesto_id = ? AND u.activo = 1', [$r['puesto_id']])->fetchAll();
+        $cals = array_map(fn($u) => calendario_teorico($db, $u, $desde, $hasta), $gente);
+        foreach (rango_fechas($desde, $hasta) as $f) {
+            $quien = [];
+            foreach ($gente as $i => $u) if ($cals[$i][$f]['turno'] > 0 && !$cals[$i][$f]['ausencia']) $quien[] = nombre($u);
+            $out[] = [$f, $r['nombre'], count($quien), (int)$r['personas'], $quien];
+        }
+    }
+    return $out;
 }
