@@ -23,6 +23,36 @@ $dep = (int)($_GET['dep'] ?? 0);
 $cen = (int)($_GET['centro'] ?? 0);
 $personas = array_values(array_filter(personas_visibles(db(), $yo), fn($p) => (!$dep || $p['departamento_id'] == $dep) && (!$cen || $p['centro_id'] == $cen)
     && local($p['alta_utc'], 'Y-m-d') <= $hasta && (!$p['baja_utc'] || local($p['baja_utc'], 'Y-m-d') >= $desde)));
+// Equidad: reparto de turnos, noches, fines de semana y festivos frente a la media de su puesto, y preferencias cumplidas.
+if (($_GET['vista'] ?? '') === 'equidad') {
+    [$filas, $medias] = equidad(db(), array_values(array_filter($personas, fn($p) => $p['activo'])), $desde, $hasta);
+    $plan = [];
+    foreach ($filas as $x) foreach (calendario_teorico(db(), $x['persona'], $desde, $hasta) as $f => $c) $plan[$x['persona']['id']][$f] = $c['turno'] ? ['horario_id' => $c['horario_id']] : null;
+    $cumple = cumplimiento_preferencias($plan, preferencias_activas(db()));
+    $ev = [];
+    foreach (consulta(db(), "SELECT v.sobre_id, AVG(r.valor) m FROM encuesta_respuestas r JOIN encuesta_envios v ON v.id = r.envio_id JOIN encuesta_preguntas q ON q.id = r.pregunta_id
+        WHERE v.sobre_id IS NOT NULL AND q.tipo = 'escala' GROUP BY v.sobre_id") as $r) $ev[$r['sobre_id']] = (float)$r['m'];
+    usort($filas, fn($a, $b) => [$a['grupo'], nombre($a['persona'])] <=> [$b['grupo'], nombre($b['persona'])]);
+    $marca = function (array $x, string $k) use ($medias) {
+        $m = $medias[$x['grupo']][$k];
+        $d = $m ? ($x[$k] - $m) / $m : 0;
+        return '<td class="' . (abs($d) > .2 && abs($x[$k] - $m) >= 2 ? ($d > 0 ? 'error' : 'nota') : '') . '" title="Media del puesto: ' . round($k === 'min' ? $m / 60 : $m, 1) . '">' . ($k === 'min' ? horas($x[$k] * 60) : $x[$k]) . '</td>';
+    };
+    cabecera('Informes', $yo); ?>
+<nav class="segmentos no-imprimir"><a href="?p=informes">Resumen del periodo</a><a href="?p=informes&vista=diario">Presencia diaria</a><a href="?p=informes&vista=equidad" class="activo">Equidad de turnos</a></nav>
+<form class="filtros no-imprimir"><input type="hidden" name="p" value="informes"><input type="hidden" name="vista" value="equidad">
+  <label>Desde <input type="date" name="desde" value="<?= e($desde) ?>"></label><label>Hasta <input type="date" name="hasta" value="<?= e($hasta) ?>"></label><button>Ver</button></form>
+<p class="nota">Turnos del cuadrante (lo planificado). En <span class="error">rojo</span>, más de un 20 % por encima de la media de su puesto; en gris, por debajo. Pasa el ratón para ver la media. Las preferencias son sugerencias del trabajador; la valoración, la media de sus evaluaciones (1 a 5), solo informativa.</p>
+<table>
+  <tr><th>Persona</th><th>Puesto</th><th>Turnos</th><th>Horas</th><th>Noches</th><th>Fines de semana</th><th>Festivos</th><th>Preferencias</th><th>Valoración</th></tr>
+  <?php foreach ($filas as $x): $c = $cumple[$x['persona']['id']] ?? null; ?>
+  <tr><td><?= e(nombre($x['persona'])) ?></td><td><small><?= e($x['grupo']) ?></small></td><?= $marca($x, 'turnos') . $marca($x, 'min') . $marca($x, 'noches') . $marca($x, 'findes') . $marca($x, 'festivos') ?>
+    <td><?= $c ? $c[0] . ' de ' . $c[1] . ' (' . round(100 * $c[0] / $c[1]) . ' %)' : '' ?></td><td><?= isset($ev[$x['persona']['id']]) ? number_format($ev[$x['persona']['id']], 1, ',', '') : '' ?></td></tr>
+  <?php endforeach ?>
+</table>
+<?php pie();
+    return;
+}
 // Presencia diaria: un día, persona a persona.
 if (($_GET['vista'] ?? '') === 'diario') {
     $dia = $fecha('dia', local(ahora(), 'Y-m-d'));
@@ -104,7 +134,7 @@ foreach ($filas as $f) foreach ($tot as $k => $_) $tot[$k] += $f[$k];
 cabecera('Informes', $yo);
 ?>
 <div class="solo-imprimir"><p><strong><?= e($empresa['nombre']) ?></strong> · CIF <?= e($empresa['cif']) ?> · Informe de jornada del <?= date('d/m/Y', strtotime($desde)) ?> al <?= date('d/m/Y', strtotime($hasta)) ?></p></div>
-<nav class="segmentos no-imprimir"><a href="?p=informes" class="activo">Resumen del periodo</a><a href="?p=informes&vista=diario">Presencia diaria</a></nav>
+<nav class="segmentos no-imprimir"><a href="?p=informes" class="activo">Resumen del periodo</a><a href="?p=informes&vista=diario">Presencia diaria</a><a href="?p=informes&vista=equidad&desde=<?= e($desde) ?>&hasta=<?= e($hasta) ?>">Equidad de turnos</a></nav>
 <?php $q = fn(array $x) => '?' . http_build_query(array_merge(array_diff_key($_GET, ['desde' => 1, 'hasta' => 1, 'csv' => 1]), ['p' => 'informes'], $x)); ?>
 <nav class="segmentos no-imprimir">
   <?php foreach (['semana' => 'Semana', 'mes' => 'Mes', 'anio' => 'Año'] as $k => $t): ?><a href="<?= e($q(['periodo' => $k, 'ref' => $desde])) ?>" class="<?= $periodo === $k ? 'activo' : '' ?>"><?= $t ?></a><?php endforeach ?>

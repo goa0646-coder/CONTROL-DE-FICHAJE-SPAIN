@@ -173,7 +173,8 @@ cabecera('Planificación', $yo);
 <div class="tarjeta">
   <h2>Propuesta de cuadrante · <?= date('d/m', strtotime($b['desde'])) ?>–<?= date('d/m', strtotime($b['hasta'])) ?></h2>
   <table class="calendario">
-    <tr><th class="persona"></th><?php foreach ($fs as $f): ?><th><?= mb_substr(DIAS[(int)date('N', strtotime($f))], 0, 1) ?><br><?= (int)substr($f, 8) ?></th><?php endforeach ?><th>Horas</th></tr>
+    <?php $cumple = cumplimiento_preferencias($b['plan'], preferencias_activas(db())); ?>
+    <tr><th class="persona"></th><?php foreach ($fs as $f): ?><th><?= mb_substr(DIAS[(int)date('N', strtotime($f))], 0, 1) ?><br><?= (int)substr($f, 8) ?></th><?php endforeach ?><th>Horas</th><th title="Preferencias del trabajador cumplidas">Pref.</th></tr>
     <?php foreach ($personas as $u): if (!isset($b['plan'][$u['id']])) continue; $min = 0; $aus = ausencias_por_dia(db(), (int)$u['id'], $b['desde'], $b['hasta']); ?>
     <tr><td class="persona"><?= e(nombre($u)) ?></td>
       <?php foreach ($fs as $f): $x = $b['plan'][$u['id']][$f] ?? null; ?>
@@ -181,7 +182,7 @@ cabecera('Planificación', $yo);
       <td class="<?= $t['color'] ? 'turno' : '' ?>"<?= $t['color'] ? ' style="background:' . e($t['color']) . '"' : '' ?> title="<?= e($t['nombre'] . ($x['puesto_id'] ? ' · ' . ($pn[$x['puesto_id']] ?? '') : '')) ?>"><?= e($t['abreviatura'] !== '' ? $t['abreviatura'] : mb_substr($t['nombre'], 0, 1)) ?></td>
       <?php elseif (($a = $aus[$f] ?? null) && $a['minutos'] === null): ?><td class="turno" style="background:<?= e($a['color']) ?>" title="<?= e($a['tipo']) ?>"><?= e(celda_turno(['ausencia' => $a], [], true)[0]) ?></td>
       <?php else: ?><td class="libre">·</td><?php endif ?>
-      <?php endforeach ?><td><?= horas($min * 60) ?></td></tr>
+      <?php endforeach ?><td><?= horas($min * 60) ?></td><td><?= isset($cumple[$u['id']]) ? $cumple[$u['id']][0] . '/' . $cumple[$u['id']][1] : '' ?></td></tr>
     <?php endforeach ?>
   </table>
   <p class="nota">Letra del turno (pasa el ratón para ver turno y puesto). · = libre (descanso). Las vacaciones, bajas y permisos salen con su color y no cuentan como descanso. Cada turno lleva exactamente las personas de su ratio (ni una más ni una menos), repartiendo de forma justa y respetando bajas, vacaciones, descansos, horas semanales y un máximo de 5 días seguidos.</p>
