@@ -192,7 +192,7 @@ function botones_fichaje(string $estado): string
     $txt = ['entrada' => 'Entrar', 'pausa_inicio' => 'Empezar pausa', 'pausa_fin' => 'Volver de la pausa', 'salida' => 'Salir'];
     $html = '';
     foreach (PERMITIDOS[$estado] as $t) {
-        $motivos = $t === 'pausa_inicio' ? db()->query('SELECT id, nombre FROM motivos_pausa WHERE activo = 1 ORDER BY nombre')->fetchAll(PDO::FETCH_KEY_PAIR) : [];
+        $motivos = $t === 'pausa_inicio' ? db()->query("SELECT id, IF(justificante, CONCAT(nombre, ' (justificante)'), nombre) FROM motivos_pausa WHERE activo = 1 ORDER BY nombre")->fetchAll(PDO::FETCH_KEY_PAIR) : [];
         if (!$motivos) $html .= '<button class="grande ' . $t . '" name="tipo" value="' . $t . '">' . $txt[$t] . '</button>';
         if ($motivos) {
             $html .= '<p class="nota">Empezar pausa:</p><div class="pausas">';

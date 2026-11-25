@@ -75,9 +75,9 @@ if (es_post()) {
             redirigir('horarios', ['anio' => $anio + 1]);
         } elseif ($que === 'motivo') {
             $nombre = trim($_POST['nombre'] ?? '') ?: throw new DomainException('Pon un nombre.');
-            $d = [$nombre, isset($_POST['retribuida']) ? 1 : 0, isset($_POST['activo']) || empty($_POST['id']) ? 1 : 0];
-            if ($id = (int)($_POST['id'] ?? 0)) consulta(db(), 'UPDATE motivos_pausa SET nombre = ?, retribuida = ?, activo = ? WHERE id = ?', [...$d, $id]);
-            else consulta(db(), 'INSERT INTO motivos_pausa (nombre, retribuida, activo) VALUES (?, ?, ?)', $d);
+            $d = [$nombre, isset($_POST['retribuida']) ? 1 : 0, isset($_POST['activo']) || empty($_POST['id']) ? 1 : 0, isset($_POST['justificante']) ? 1 : 0];
+            if ($id = (int)($_POST['id'] ?? 0)) consulta(db(), 'UPDATE motivos_pausa SET nombre = ?, retribuida = ?, activo = ?, justificante = ? WHERE id = ?', [...$d, $id]);
+            else consulta(db(), 'INSERT INTO motivos_pausa (nombre, retribuida, activo, justificante) VALUES (?, ?, ?, ?)', $d);
             auditar(db(), (int)$yo['id'], 'motivo_pausa_guardado', $nombre);
         } elseif ($que === 'permisos_et') {
             $n = cargar_tipos_ausencia(db(), PERMISOS_ET);
@@ -209,12 +209,13 @@ foreach ($lista as $x) $existentes[normalizar($x['nombre'])] = $x; ?>
 <?php endif ?>
 
 <h2>Motivos de pausa</h2>
-<p class="nota">Retribuida = cuenta como tiempo trabajado. Si no hay ninguno activo, se ficha la pausa sin motivo.</p>
-<?php foreach ([...$motivos, ['id' => '', 'nombre' => '', 'retribuida' => 0, 'activo' => 1]] as $m): ?>
+<p class="nota">Retribuida = cuenta como tiempo trabajado. Justificante = la persona tiene 1 día para subirlo desde Fichar; si no, le llega un aviso a ella y a quien aprueba. Si no hay ninguno activo, se ficha la pausa sin motivo.</p>
+<?php foreach ([...$motivos, ['id' => '', 'nombre' => '', 'retribuida' => 0, 'activo' => 1, 'justificante' => 1]] as $m): ?>
 <form method="post" class="filtros">
   <?= csrf_campo() ?><input type="hidden" name="id" value="<?= e($m['id']) ?>">
   <label><input name="nombre" value="<?= e($m['nombre']) ?>" placeholder="Nuevo motivo" required></label>
   <label><input type="checkbox" name="retribuida" <?= $m['retribuida'] ? 'checked' : '' ?>> Retribuida</label>
+  <label><input type="checkbox" name="justificante" <?= !empty($m['justificante']) ? 'checked' : '' ?>> Pide justificante</label>
   <?php if ($m['id']): ?><label><input type="checkbox" name="activo" <?= $m['activo'] ? 'checked' : '' ?>> Activo</label><?php endif ?>
   <button name="que" value="motivo" class="<?= $m['id'] ? 'secundario' : '' ?>"><?= $m['id'] ? 'Guardar' : 'Añadir' ?></button>
 </form>

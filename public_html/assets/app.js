@@ -11,8 +11,18 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 
 // Reloj en hora de Madrid
 for (const el of document.querySelectorAll('[data-reloj]')) {
-  const pinta = () => el.textContent = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' });
-  pinta(); setInterval(pinta, 10000);
+  const seg = el.hasAttribute('data-segundos');
+  const pinta = () => el.textContent = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', ...(seg ? { second: '2-digit' } : {}), timeZone: 'Europe/Madrid' });
+  pinta(); setInterval(pinta, seg ? 1000 : 10000);
+}
+// Contador de horas trabajadas hoy, con segundero mientras se está trabajando.
+for (const el of document.querySelectorAll('[data-contador]')) {
+  const base = +el.dataset.contador, inicio = Date.now();
+  const pinta = () => {
+    const s = base + (el.hasAttribute('data-corre') ? Math.floor((Date.now() - inicio) / 1000) : 0);
+    el.textContent = `${Math.floor(s / 3600)}:${String(Math.floor(s % 3600 / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+  };
+  pinta(); if (el.hasAttribute('data-corre')) setInterval(pinta, 1000);
 }
 
 // GPS: una sola lectura al pulsar el botón (nunca seguimiento).

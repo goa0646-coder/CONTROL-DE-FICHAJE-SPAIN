@@ -21,6 +21,15 @@ if (es_post()) {
         consulta(db(), 'REPLACE INTO ajustes VALUES (?, ?)', ['convenio', json_encode($cv, JSON_UNESCAPED_UNICODE)]);
         unset($_SESSION['convenio_leido']);
         auditar(db(), (int)$yo['id'], 'convenio_aplicado', $cv['nombre']);
+    } elseif ($que === 'avisos_trab') {
+        consulta(db(), 'REPLACE INTO ajustes VALUES (?, ?)', ['avisos_trabajadores', isset($_POST['avisar']) ? 'si' : 'no']);
+        auditar(db(), (int)$yo['id'], 'avisos_trabajadores', isset($_POST['avisar']) ? 'si' : 'no');
+        aviso(isset($_POST['avisar']) ? 'Los trabajadores recibirán los avisos.' : 'Avisos a los trabajadores en pausa: no se envían correos.');
+        redirigir('admin');
+    } elseif ($que === 'anunciar') {
+        $t = trim($_POST['texto'] ?? '');
+        $t === '' ? aviso('Escribe el mensaje.', 'error') : aviso('Aviso enviado a ' . anunciar_cambios(db(), $yo, mb_substr($t, 0, 300)) . ' personas.');
+        redirigir('admin');
     } elseif ($que === 'plantillas') {
         $t = [];
         foreach (PLANTILLAS_AVISO as $k => $_) $t[$k] = mb_substr(trim(str_replace("\r", '', $_POST["plantilla_$k"] ?? '')), 0, 1500);
@@ -209,6 +218,16 @@ cabecera('Empresa y centros', $yo);
 </form>
 
 <?php $r = reglas(db()); ?>
+<form method="post" class="tarjeta">
+  <?= csrf_campo() ?>
+  <h2>Avisos a los trabajadores</h2>
+  <label><input type="checkbox" name="avisar" <?= avisos_a_trabajadores(db()) ? 'checked' : '' ?>> Enviar correos y avisos al móvil a los trabajadores por cada cambio (cuadrante, recálculos, ausencias…)</label>
+  <p class="nota">Quítalo mientras subes o cambias datos: los cambios se guardan y quedan en su campana de avisos, pero no les llega ningún correo. Cuando todo esté listo, mándales un solo aviso:</p>
+  <button name="que" value="avisos_trab" class="secundario">Guardar</button>
+  <label>Mensaje para toda la plantilla <input name="texto" value="Tu calendario está actualizado. Revísalo en INDA." maxlength="300"></label>
+  <button name="que" value="anunciar" data-confirmar="¿Enviar este aviso a todos los trabajadores?">Avisar a todos ahora</button>
+</form>
+
 <form method="post" class="tarjeta">
   <?= csrf_campo() ?>
   <h2>Mensajes de aviso por email</h2>
