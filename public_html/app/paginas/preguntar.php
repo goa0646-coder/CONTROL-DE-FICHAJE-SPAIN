@@ -40,5 +40,11 @@ cabecera('Asistente', $yo);
     <?php if ($hist): ?><button name="borrar" value="1" class="secundario" formnovalidate>Nueva conversación</button><?php endif ?>
   </form>
 </section>
-<script>for (const b of document.querySelectorAll('[data-ejemplo]')) b.onclick = () => { const i = document.querySelector('[name=pregunta]'); i.value = b.textContent; i.form.requestSubmit(); };</script>
+<p class="nota pensando" hidden>Pensando… (Gemini consulta los datos de INDA y redacta la respuesta; suele tardar entre 3 y 10 segundos)</p>
+<script>
+// Ejemplos y aviso mientras responde (el botón se desactiva para no enviar dos veces).
+const fp = document.querySelector('.preguntar-ia');
+fp.addEventListener('submit', ev => { if (ev.submitter && ev.submitter.name === 'borrar') return; document.querySelector('.pensando').hidden = false; for (const b of fp.querySelectorAll('button')) b.disabled = true; });
+for (const b of document.querySelectorAll('[data-ejemplo]')) b.addEventListener('click', () => { fp.querySelector('[name=pregunta]').value = b.textContent; fp.requestSubmit(); });
+</script>
 <?php pie();
