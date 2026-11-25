@@ -123,7 +123,7 @@ function cabecera(string $titulo, ?array $u = null): void
     $acceso = !$u && $actual !== 'quiosco';
     ?>
 <!doctype html>
-<html lang="es">
+<html lang="es" data-version="<?= e(VERSION) ?>">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">

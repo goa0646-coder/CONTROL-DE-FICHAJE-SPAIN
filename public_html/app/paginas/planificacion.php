@@ -34,15 +34,26 @@ $probar = function (array $plan, bool $publicar) use ($personas) {
 // Ausencia entre fechas (vacaciones, baja, excedencia…) y recálculo para cumplir los mínimos sin tocar al resto.
 if (es_post() && ($_POST['que'] ?? '') === 'ausencia') {
     try {
-        $u = array_values(array_filter($personas, fn($p) => $p['id'] == ($_POST['usuario'] ?? 0)))[0] ?? throw new DomainException('Elige a la persona.');
+        // Una o varias personas a la vez (p. ej. bajas o vacaciones de golpe); quien ya tenga algo esas fechas se salta y se avisa.
+        $sel = array_map('intval', (array)($_POST['usuarios'] ?? []));
+        $gente = array_values(array_filter($personas, fn($p) => in_array((int)$p['id'], $sel, true))) ?: throw new DomainException('Elige al menos una persona.');
         $d = $_POST['desde'] ?? '';
         $h = ($_POST['hasta'] ?? '') ?: $d;
         db()->beginTransaction();
-        marcar_ausencia(db(), $yo, $u, (int)($_POST['tipo'] ?? 0), $d, $h, $_POST['motivo'] ?? '');
-        $res = isset($_POST['recalcular']) ? recubrir(db(), $d, $h, (int)$yo['id']) : null;
+        $hechas = $saltadas = [];
+        foreach ($gente as $u) {
+            try {
+                marcar_ausencia(db(), $yo, $u, (int)($_POST['tipo'] ?? 0), $d, $h, $_POST['motivo'] ?? '');
+                $hechas[] = nombre($u);
+            } catch (DomainException $e) {
+                if (count($gente) === 1) throw $e;
+                $saltadas[] = $e->getMessage();
+            }
+        }
+        $res = $hechas && isset($_POST['recalcular']) ? recubrir(db(), $d, $h, (int)$yo['id']) : null;
         db()->commit();
-        $_SESSION['recalculo'] = $res ? ['persona' => nombre($u), 'desde' => $d, 'hasta' => $h, 'nuevos' => $res['nuevos'], 'faltan' => $res['faltan']] : null;
-        aviso('Ausencia de ' . nombre($u) . ' guardada' . ($res ? ': ' . count($res['nuevos']) . ' turnos nuevos para cubrir los mínimos.' : '.'));
+        $_SESSION['recalculo'] = $res ? ['persona' => implode(', ', $hechas), 'desde' => $d, 'hasta' => $h, 'nuevos' => $res['nuevos'], 'faltan' => $res['faltan']] : null;
+        aviso(count($hechas) . ' ausencias guardadas' . ($res ? ': ' . count($res['nuevos']) . ' turnos nuevos para cubrir los mínimos' : '') . '.' . ($saltadas ? ' No se han puesto: ' . implode(' ', $saltadas) : ''), $saltadas ? 'error' : 'ok');
     } catch (DomainException $e) {
         if (db()->inTransaction()) db()->rollBack();
         aviso($e->getMessage(), 'error');
@@ -259,15 +270,15 @@ $hz = huecos(db(), $personas, local(ahora(), 'Y-m-d'), date('Y-m-d', strtotime(l
 
 <form method="post" class="tarjeta">
   <?= csrf_campo() ?>
-  <h2>Ausencia entre fechas</h2>
-  <p class="nota">Vacaciones, baja, excedencia, permiso… de una persona entre dos fechas. Queda aprobada y, si lo marcas, INDA recalcula el cuadrante para cumplir los mínimos de cada turno: no toca a nadie más que a quien tiene que entrar a cubrir, con las reglas del convenio.</p>
+  <h2>Bajas, vacaciones y ausencias entre fechas</h2>
+  <p class="nota">Vacaciones, baja, excedencia, permiso… de una o varias personas entre dos fechas. Queda aprobada y, si lo marcas, INDA recalcula el cuadrante para cumplir los mínimos de cada turno: no toca a nadie más que a quien tiene que entrar a cubrir, con las reglas del convenio.</p>
   <div class="filtros">
-    <label>Persona <select name="usuario" required><option value="">Elige…</option><?php foreach ($personas as $p): ?><option value="<?= e($p['id']) ?>"><?= e(nombre($p)) ?></option><?php endforeach ?></select></label>
     <label>Tipo <select name="tipo" required><?php foreach (tipos_ausencia(db()) as $id => $t): if ($t['por_horas']) continue; ?><option value="<?= e($id) ?>"><?= e($t['nombre']) ?></option><?php endforeach ?></select></label>
     <label>Desde <input type="date" name="desde" required></label>
     <label>Hasta <input type="date" name="hasta" required></label>
     <label>Motivo <input name="motivo" maxlength="500"></label>
   </div>
+  <details open><summary>Personas (una o varias)</summary><div class="lista-personas"><?php foreach ($personas as $p): ?><label><input type="checkbox" name="usuarios[]" value="<?= e($p['id']) ?>"> <?= e(nombre($p)) ?></label><?php endforeach ?></div></details>
   <label><input type="checkbox" name="recalcular" checked> Recalcular el cuadrante para cubrir los mínimos</label>
   <button name="que" value="ausencia">Guardar ausencia</button>
 </form>
