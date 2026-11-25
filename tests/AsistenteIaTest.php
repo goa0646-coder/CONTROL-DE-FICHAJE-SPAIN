@@ -13,7 +13,7 @@ class AsistenteIaTest extends Base
         $falso = function (array $cuerpo) use (&$vistos) {
             $ultimo = end($cuerpo['contents']);
             if (isset($ultimo['parts'][0]['functionResponse'])) {
-                $vistos[] = $ultimo['parts'][0]['functionResponse']['response'];
+                $vistos[] = (array)$ultimo['parts'][0]['functionResponse']['response'];
                 return ['candidates' => [['content' => ['parts' => [['text' => 'Trabajaron el domingo: ' . count($vistos[0]['personas'])]]]]]];
             }
             $this->assertNotEmpty($cuerpo['tools'][0]['functionDeclarations']);
