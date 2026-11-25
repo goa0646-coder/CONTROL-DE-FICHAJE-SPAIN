@@ -26,7 +26,7 @@ $probar = function (array $plan, bool $publicar) use ($personas) {
         if (!isset($plan[$u['id']])) continue;
         foreach (comprobar_plan(db(), $u, min($fechas), max($fechas)) as $m) $mal[] = [nombre($u)] + array_combine([1, 2, 3, 4], $m);
     }
-    $huecos = $fechas ? huecos(db(), $personas, min($fechas), max($fechas)) : [];
+    $huecos = $fechas ? desvios(db(), $personas, min($fechas), max($fechas)) : [];
     $bloquea = (bool)array_filter($mal, fn($m) => $m[4] === 'bloqueo');
     $publicar && !$bloquea ? db()->commit() : db()->rollBack();
     return [$mal, $huecos, $bloquea];
@@ -71,7 +71,7 @@ if (es_post() && in_array($_POST['que'] ?? '', ['generar', 'publicar', 'descarta
             aviso('Elige personas y un periodo de hasta dos meses.', 'error');
             redirigir('planificacion', ['semana' => $lunes]);
         }
-        $res = planificar(db(), $gente, $d, $h, ['completar' => true]);
+        $res = planificar(db(), $gente, $d, $h); // ratio exacto: ni uno más ni uno menos por turno
         $plan = $res['plan'];
         [$mal, $huecos] = $probar($plan, false);
         // Motivo de cada turno sin cubrir (el primero que dio el generador).
@@ -184,14 +184,16 @@ cabecera('Planificación', $yo);
       <?php endforeach ?><td><?= horas($min * 60) ?></td></tr>
     <?php endforeach ?>
   </table>
-  <p class="nota">Letra del turno (pasa el ratón para ver turno y puesto). · = libre (descanso). Las vacaciones, bajas y permisos salen con su color y no cuentan como descanso. Primero se cubren los mínimos de cada turno y después se completa la jornada de cada persona (hasta sus horas), respetando bajas, vacaciones, descansos, horas semanales y un máximo de 5 días seguidos.</p>
+  <p class="nota">Letra del turno (pasa el ratón para ver turno y puesto). · = libre (descanso). Las vacaciones, bajas y permisos salen con su color y no cuentan como descanso. Cada turno lleva exactamente las personas de su ratio (ni una más ni una menos), repartiendo de forma justa y respetando bajas, vacaciones, descansos, horas semanales y un máximo de 5 días seguidos.</p>
   <?php if (!empty($b['quien'])): ?><p class="nota"><b>Quién hace cada turno con mínimo:</b> <?= e(implode(' · ', array_map(fn($hid, $q) => $hl[$hid]['nombre'] . ' → ' . $q, array_keys($b['quien']), $b['quien']))) ?>. Se decide por el departamento del turno, por quién lo ha hecho antes o por su nombre; cámbialo en Turnos o en la ficha de cada persona (departamento y puesto).</p><?php endif ?>
   <?php if ($b['huecos']):
       $por = [];
-      foreach ($b['huecos'] as $x) { $por[$x[1]]['n'] = ($por[$x[1]]['n'] ?? 0) + $x[3]; $por[$x[1]]['dias'][$x[0]] = true; } ?>
-  <div class="aviso error"><?= icono('alerta') ?><div><b>Sin cubrir:</b>
-    <ul><?php foreach ($por as $hid => $x): ?><li><b><?= e($hl[$hid]['nombre']) ?></b>: faltan <?= $x['n'] ?> en <?= count($x['dias']) ?> días<?= isset($b['motivos'][$hid]) ? ' — ' . e($b['motivos'][$hid]) : '' ?>.</li><?php endforeach ?></ul></div></div>
-  <?php else: ?><p class="aviso ok">Todas las necesidades cubiertas.</p><?php endif ?>
+      foreach ($b['huecos'] as $x) { $k = $x[3] > 0 ? 'faltan' : 'sobran'; $por[$x[1]][$k] = ($por[$x[1]][$k] ?? 0) + abs($x[3]); $por[$x[1]]['dias_' . $k][$x[0]] = true; } ?>
+  <div class="aviso error"><?= icono('alerta') ?><div><b>No cumple el ratio:</b>
+    <ul><?php foreach ($por as $hid => $x): ?><li><b><?= e($hl[$hid]['nombre']) ?></b>:
+      <?= !empty($x['faltan']) ? 'faltan ' . $x['faltan'] . ' en ' . count($x['dias_faltan']) . ' días' . (isset($b['motivos'][$hid]) ? ' — ' . e($b['motivos'][$hid]) : '') : '' ?>
+      <?= !empty($x['sobran']) ? (!empty($x['faltan']) ? ' · ' : '') . 'sobran ' . $x['sobran'] . ' en ' . count($x['dias_sobran']) . ' días (personas con ese turno fijo en su ficha que no están en la propuesta)' : '' ?>.</li><?php endforeach ?></ul></div></div>
+  <?php else: ?><p class="aviso ok">Todos los turnos con su ratio exacto.</p><?php endif ?>
   <form method="post" class="filtros"><?= csrf_campo() ?>
     <button name="que" value="publicar">Publicar y avisar</button>
     <button name="que" value="descartar" class="secundario">Descartar</button></form>

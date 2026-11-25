@@ -45,8 +45,14 @@ foreach ($personas as $p) $cals[$p['id']] = calendario_teorico(db(), $p, $desde,
 $trabajan = array_fill_keys($fechas, 0);
 foreach ($cals as $cal) foreach ($cal as $f => $c) if ($c['minutos'] > 0 && !$c['ausencia'] && !$c['festivo']) $trabajan[$f]++;
 $cortos = [];
+$hors_n = array_column(horarios(db()), 'nombre', 'id');
 // El ratio es de toda la plantilla, aunque se esté viendo un equipo o departamento.
-if ($jefe) foreach (huecos(db(), db()->query("SELECT * FROM usuarios WHERE activo = 1 AND rol <> 'inspeccion'")->fetchAll(), $desde, $hasta) as [$f, , , $faltan]) $cortos[$f] = ($cortos[$f] ?? 0) + $faltan;
+// El ratio es exacto: en rojo los días donde falta o sobra gente en algún turno.
+$desv = [];
+if ($jefe) foreach (desvios(db(), db()->query("SELECT * FROM usuarios WHERE activo = 1 AND rol <> 'inspeccion'")->fetchAll(), $desde, $hasta) as [$f, $hid, , $n]) {
+    $cortos[$f] = true;
+    $desv[$f][] = ($n > 0 ? 'faltan ' . $n : 'sobran ' . -$n) . ' en ' . ($hors_n[$hid] ?? 'turno');
+}
 $pts = puestos(db());
 $hors = horarios(db());
 $pp = puestos_por_persona(db());
@@ -88,7 +94,7 @@ cabecera('Calendario', $yo);
 <table class="calendario cuadrante">
   <tr><th class="persona"></th><?php foreach ($fechas as $f): ?><th class="<?= isset($cortos[$f]) ? 'corto' : '' ?>"><?= mb_substr(DIAS[(int)date('N', strtotime($f))], 0, 1) ?><br><?= (int)substr($f, 8) ?></th><?php endforeach ?></tr>
   <?php if ($jefe): ?>
-  <tr class="totales"><td class="persona"><small>Trabajan</small></td><?php foreach ($fechas as $f): ?><td class="<?= isset($cortos[$f]) ? 'corto' : '' ?>" title="<?= isset($cortos[$f]) ? 'Faltan ' . $cortos[$f] . ' para el mínimo' : '' ?>"><?= $trabajan[$f] ?></td><?php endforeach ?></tr>
+  <tr class="totales"><td class="persona"><small>Trabajan</small></td><?php foreach ($fechas as $f): ?><td class="<?= isset($cortos[$f]) ? 'corto' : '' ?>" title="<?= isset($desv[$f]) ? e(ucfirst(implode(' · ', $desv[$f]))) : '' ?>"><?= $trabajan[$f] ?></td><?php endforeach ?></tr>
   <?php endif ?>
   <?php foreach ($personas as $p):
       $cal = $cals[$p['id']];
@@ -126,7 +132,7 @@ cabecera('Calendario', $yo);
 </dialog>
 <p class="nota">Pulsa en el día de una persona para cambiar su turno. Se guarda al momento, con las reglas del convenio, y se le avisa.</p>
 <?php endif ?>
-<?php if ($cortos): ?><p class="aviso error">Hay <?= count($cortos) ?> días que no llegan al mínimo de personal (en rojo). Revísalos en <a href="?p=planificacion">Planificación</a> o busca sustituto.</p><?php endif ?>
+<?php if ($cortos): ?><p class="aviso error">Hay <?= count($cortos) ?> días que no cumplen el ratio (en rojo): falta o sobra gente en algún turno. Pasa el ratón por el número para ver el detalle. Revísalos en <a href="?p=planificacion">Planificación</a> o busca sustituto.</p><?php endif ?>
 <?php $con_letra = array_filter($hors, fn($h) => $h['abreviatura'] !== '' && $h['activo'] && (!$dep || !$h['departamento_id'] || $h['departamento_id'] == $dep)); ?>
 <?php if ($con_letra): ?><p class="nota leyenda-turnos">Turnos: <?php foreach ($con_letra as $h): ?><span class="letra-turno" style="background:<?= e($h['color'] ?: '#6b7280') ?>"><?= e($h['abreviatura']) ?></span> <?= e($h['nombre']) ?> <?php endforeach ?></p><?php endif ?>
 <p class="nota">D = descanso. F = festivo. Números = horas de turnos sin letra. ? = ausencia pendiente. Pasa el ratón (o mantén pulsado) para ver el detalle.</p>
