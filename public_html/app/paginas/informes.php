@@ -66,7 +66,7 @@ if (($_GET['vista'] ?? '') === 'diario') {
         $out = fopen('php://output', 'w');
         fwrite($out, "\xEF\xBB\xBF");
         fputcsv($out, ['Fecha', 'Persona', 'DNI', 'Jornada', 'Entrada', 'Salida', 'Pausas', 'Teórico', 'Trabajado', 'Diferencia'], ';');
-        foreach ($filas as $f) fputcsv($out, [date('d/m/Y', strtotime($dia)), nombre($f['persona']), $f['persona']['dni'], $f['jornada'], $hm($f['entrada']), $hm($f['salida']),
+        foreach ($filas as $f) fputcsv($out, [date('d/m/Y', strtotime($dia)), nombre($f['persona']), descifrar($f['persona']['dni']), $f['jornada'], $hm($f['entrada']), $hm($f['salida']),
             horas($f['pausas']), horas($f['teorico']), horas($f['trabajado']), horas_signo($f['diferencia'])], ';');
         exit;
     }
@@ -121,7 +121,7 @@ if (isset($_GET['csv'])) {
     $dec = fn($s) => number_format($s / 3600, 2, ',', '');
     fputcsv($out, ['Nº empleado', 'Nombre', 'DNI', 'Días trabajados', 'Horas teóricas', 'Horas trabajadas', 'Horas extra', 'Horas nocturnas', 'Horas festivo/libre', 'Diferencia', 'Jornadas abiertas', ...$tipos], ';');
     foreach ($filas as $f) {
-        fputcsv($out, [$f['persona']['num_empleado'], nombre($f['persona']), $f['persona']['dni'], $f['dias_trabajados'], $dec($f['teorico']), $dec($f['trabajado']),
+        fputcsv($out, [$f['persona']['num_empleado'], nombre($f['persona']), descifrar($f['persona']['dni']), $f['dias_trabajados'], $dec($f['teorico']), $dec($f['trabajado']),
             $dec($f['extra']), $dec($f['nocturno']), $dec($f['festivo']), $dec($f['diferencia']), $f['abiertas'], ...array_map(fn($t) => $f['ausencias'][$t] ?? 0, $tipos)], ';');
     }
     exit;

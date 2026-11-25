@@ -5,15 +5,7 @@ if (es_post()) {
         aviso($r, 'error');
         redirigir('login');
     }
-    session_regenerate_id(true);
-    $_SESSION['uid'] = $r['id'];
-    consulta(db(), 'UPDATE usuarios SET ultimo_acceso_utc = ? WHERE id = ?', [ahora(), $r['id']]);
-    if (isset($_POST['recordar']) && ($t = crear_dispositivo(db(), $r, $_SERVER['HTTP_USER_AGENT'] ?? ''))) poner_cookie_dispositivo($t);
-    auditar(db(), (int)$r['id'], 'login');
-    $volver = $_SESSION['volver'] ?? [];
-    unset($_SESSION['volver']);
-    if (preg_match('/^[a-z]+$/', $volver['p'] ?? '') && $volver['p'] !== 'login') redirigir($volver['p'], array_diff_key($volver, ['p' => 1]));
-    redirigir(inicio_de($r));
+    completar_entrada(db(), $r, isset($_POST['recordar']), 'login');
 }
 cabecera('Entrar');
 ?>

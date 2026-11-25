@@ -182,7 +182,7 @@ function interpretar_cuadrante(array $celdas, array $personas, array $turnos, ar
 function listas_cuadrante(PDO $db, array $plan = []): array
 {
     $deps = $db->query('SELECT id, nombre FROM departamentos')->fetchAll(PDO::FETCH_KEY_PAIR);
-    $personas = array_map(fn($u) => ['email' => $u['email'], 'nombre' => nombre($u), 'dni' => (string)$u['dni'], 'departamento' => normalizar($deps[$u['departamento_id']] ?? '')],
+    $personas = array_map(fn($u) => ['email' => $u['email'], 'nombre' => nombre($u), 'dni' => (string)descifrar($u['dni']), 'departamento' => normalizar($deps[$u['departamento_id']] ?? '')],
         $db->query("SELECT * FROM usuarios WHERE rol <> 'inspeccion'")->fetchAll());
     foreach ($plan['secciones']['personas']['previa']['filas'] ?? [] as $f) if ($f['estado'] !== 'error') $personas[] = ['email' => $f['email'],
         'nombre' => trim($f['nombre'] . ' ' . $f['apellidos']), 'dni' => (string)$f['dni'], 'departamento' => normalizar($f['departamento'] ?? '')];

@@ -223,6 +223,7 @@ function aplicar_importacion(PDO $db, array $plan, bool $actualizar): array
             if ($f['dni'] !== '') $c['dni'] = $f['dni'];
             if ($f['num_empleado']) $c['num_empleado'] = $f['num_empleado'];
             foreach (['telefono' => 'telefono', 'nss' => 'nss', 'nacimiento' => 'fecha_nacimiento'] as $k => $col) if (!empty($f[$k])) $c[$col] = $f[$k];
+            $c = campos_seguros($db, $c);
             if (!empty($f['alta'])) $c['alta_utc'] = a_utc($f['alta'] . ' 00:00:00'); // antigüedad real de la persona
             $antes = consulta($db, 'SELECT * FROM usuarios WHERE email = ?', [$f['email']])->fetch();
             if ($antes) {

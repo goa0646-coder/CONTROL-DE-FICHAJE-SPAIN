@@ -30,6 +30,14 @@ if (es_post() && isset($_POST['enviar_acceso'])) {
 }
 
 // El admin puede retirar una foto de perfil inadecuada.
+if (es_post() && isset($_POST['quitar_2fa'])) {
+    $id = (int)$_POST['quitar_2fa'];
+    consulta(db(), 'UPDATE usuarios SET totp_secreto = NULL WHERE id = ?', [$id]);
+    auditar(db(), (int)$yo['id'], 'dos_pasos_quitado', "usuario=$id");
+    aviso('App de verificación quitada: la volverá a dar de alta al entrar.');
+    redirigir('usuarios', ['u' => $id]);
+}
+
 if (es_post() && isset($_POST['quitar_foto'])) {
     $id = (int)$_POST['quitar_foto'];
     consulta(db(), 'UPDATE usuarios SET foto = NULL WHERE id = ?', [$id]);
@@ -104,6 +112,7 @@ if (es_post()) {
         'pausa_auto_min' => isset($p['pausa_auto']) ? 15 : 0,
         'baja_utc' => $activo ? null : ($antes['baja_utc'] ?? ahora()),
     ];
+    $campos = campos_seguros(db(), $campos);
     if ($p['clave'] !== '') $campos['password_hash'] = password_hash($p['clave'], PASSWORD_DEFAULT);
     if ($p['pin'] !== '') $campos['pin_hash'] = password_hash($p['pin'], PASSWORD_DEFAULT);
     try {
@@ -133,7 +142,7 @@ $todos = db()->query('SELECT u.*, c.nombre AS centro FROM usuarios u LEFT JOIN c
 $ver = in_array($_GET['ver'] ?? '', ['activos', 'bajas', 'todos'], true) ? $_GET['ver'] : 'activos';
 $q = normalizar($_GET['q'] ?? '');
 $lista = array_values(array_filter($todos, fn($x) => ($ver === 'todos' || ($ver === 'activos') === (bool)$x['activo'])
-    && ($q === '' || str_contains(normalizar(nombre($x) . ' ' . $x['email'] . ' ' . $x['dni']), $q))));
+    && ($q === '' || str_contains(normalizar(nombre($x) . ' ' . $x['email'] . ' ' . descifrar($x['dni'])), $q))));
 $cuantos = ['activos' => count(array_filter($todos, fn($x) => $x['activo'])), 'bajas' => count(array_filter($todos, fn($x) => !$x['activo']))];
 $centros = db()->query('SELECT id, nombre FROM centros WHERE activo = 1 ORDER BY nombre')->fetchAll(PDO::FETCH_KEY_PAIR);
 $deps = db()->query('SELECT id, nombre FROM departamentos WHERE activo = 1 ORDER BY nombre')->fetchAll(PDO::FETCH_KEY_PAIR);
@@ -151,6 +160,7 @@ cabecera($editando ? ($u['id'] ? nombre($u) : 'Nueva persona') : 'Usuarios', $yo
 <?php if (!empty($u['foto'])): ?>
 <form method="post" class="tarjeta con-avatar"><?= csrf_campo() ?><?= avatar($u, 'grande') ?> <button name="quitar_foto" value="<?= e($u['id']) ?>" class="secundario" data-confirmar="¿Retirar la foto de perfil de <?= e(nombre($u)) ?>?">Retirar foto</button></form>
 <?php endif ?>
+<?php if (!empty($u['totp_secreto'])): ?><form method="post" class="tarjeta"><?= csrf_campo() ?>Tiene dada de alta la verificación en dos pasos. <button name="quitar_2fa" value="<?= e($u['id']) ?>" class="secundario" data-confirmar="¿Quitarle la app de verificación? La volverá a dar de alta al entrar.">Quitar la app (móvil perdido)</button></form><?php endif ?>
 <?php if ($u['id']): ?>
 <form method="post" class="tarjeta filtros"><?= csrf_campo() ?>
   <span><b>Acceso a INDA</b><br><small><?= $u['ultimo_acceso_utc'] ? 'Último acceso: ' . local($u['ultimo_acceso_utc']) : 'Todavía no ha entrado nunca' ?><?= $u['acceso_enviado_utc'] ? ' · acceso enviado el ' . local($u['acceso_enviado_utc']) : '' ?></small></span>

@@ -38,7 +38,7 @@ try {
     if ($hasta < $desde || strtotime($hasta) - strtotime($desde) > 400 * 86400) $responder(400, ['error' => 'Rango no válido (máximo 400 días).']);
     $personas = array_values(array_filter(equipo_de(db(), $u), fn($p) => $p['rol'] !== 'inspeccion'));
     auditar(db(), (int)$u['id'], 'api_' . $accion, "desde=$desde hasta=$hasta");
-    $persona = fn($p) => ['id' => (int)$p['id'], 'num_empleado' => $p['num_empleado'], 'nombre' => nombre($p), 'dni' => $p['dni'], 'activo' => (bool)$p['activo']];
+    $persona = fn($p) => ['id' => (int)$p['id'], 'num_empleado' => $p['num_empleado'], 'nombre' => nombre($p), 'dni' => descifrar($p['dni']), 'activo' => (bool)$p['activo']];
     if ($accion === 'informe') {
         $responder(200, array_map(fn($f) => $persona($f['persona']) + array_intersect_key($f, array_flip(['teorico', 'trabajado', 'extra', 'nocturno', 'festivo', 'diferencia', 'dias_trabajados', 'abiertas', 'ausencias'])),
             informe(db(), $personas, $desde, $hasta)));

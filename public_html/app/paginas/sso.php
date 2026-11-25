@@ -40,8 +40,4 @@ if (!$c || $c['aud'] !== $s['cliente_id'] || ($c['nonce'] ?? '') !== $esperado['
 
 $u = consulta(db(), 'SELECT * FROM usuarios WHERE email = ?', [$email])->fetch();
 if (!$u || !acceso_vigente($u)) $fallo("No hay una cuenta activa en INDA con $email.");
-session_regenerate_id(true);
-$_SESSION['uid'] = $u['id'];
-            consulta(db(), 'UPDATE usuarios SET ultimo_acceso_utc = ? WHERE id = ?', [ahora(), $u['id']]);
-auditar(db(), (int)$u['id'], 'login_sso', $s['proveedor'] ?? 'google');
-redirigir(inicio_de($u));
+completar_entrada(db(), $u, false, 'login_sso');

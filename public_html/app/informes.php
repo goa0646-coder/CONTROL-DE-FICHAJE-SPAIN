@@ -5,7 +5,7 @@
 function contenido_mes(PDO $db, array $u, string $mes): string
 {
     $sig = (new DateTime("$mes-01"))->modify('+1 month')->format('Y-m-d');
-    $lineas = ["INDA registro de jornada", "persona={$u['id']} dni={$u['dni']} mes=$mes"];
+    $lineas = ["INDA registro de jornada", "persona={$u['id']} dni=" . descifrar($u['dni']) . " mes=$mes"];
     foreach (fichajes_de($db, (int)$u['id'], a_utc("$mes-01"), a_utc($sig)) as $f) {
         $lineas[] = implode(';', [$f['id'], $f['momento_utc'], $f['tipo'], $f['origen'], $f['anulado'] ? 'anulado' : 'valido', $f['hash']]);
     }

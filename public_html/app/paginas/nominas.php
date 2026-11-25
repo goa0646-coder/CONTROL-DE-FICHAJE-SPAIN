@@ -40,7 +40,7 @@ if (es_post()) {
     }
 }
 
-$lista = array_map(fn($p) => ['id' => (int)$p['id'], 'nombre' => nombre($p), 'dni' => $p['dni']], $personas);
+$lista = array_map(fn($p) => ['id' => (int)$p['id'], 'nombre' => nombre($p), 'dni' => descifrar($p['dni'])], $personas);
 usort($lista, fn($a, $b) => strcoll($a['nombre'], $b['nombre']));
 cabecera('Nóminas', $yo);
 ?>
