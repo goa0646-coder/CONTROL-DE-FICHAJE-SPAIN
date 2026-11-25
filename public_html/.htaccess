@@ -1,4 +1,8 @@
 Options -Indexes
+# Copias, volcados y registros nunca se sirven (app/ ya está cerrada entera con su propio .htaccess).
+<FilesMatch "\.(sql|bak|log|md|ini|sh)$">
+  Require all denied
+</FilesMatch>
 RewriteEngine On
 # La API usa la cabecera Authorization: algunos servidores no la pasan a PHP sin esto.
 RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
