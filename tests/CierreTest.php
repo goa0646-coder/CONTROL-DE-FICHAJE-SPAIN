@@ -7,7 +7,7 @@ class CierreTest extends Base
         $this->db->exec("DELETE FROM ajustes WHERE clave = 'cierre_auto_min'");
     }
 
-    public function testRecuerdaYLuegoCierraALos5Minutos(): void
+    public function testRecuerdaYCierraALos30MinutosConFinMasUno(): void
     {
         $u = $this->usuario(['horario_id' => $this->horario([1, 2, 3, 4, 5], '07:00', '15:00')]);
         $this->fichar($u, 'entrada', '2030-01-07 06:58:00');
@@ -17,11 +17,20 @@ class CierreTest extends Base
         cerrar_jornadas($this->db, a_utc('2030-01-07 15:02:00'));
         $this->assertSame(['dentro', true], [estado_actual($this->db, (int)$u['id']), $aviso('recordar_salida')], 'recordatorio');
         cerrar_jornadas($this->db, a_utc('2030-01-07 15:10:00'));
+        $this->assertSame('dentro', estado_actual($this->db, (int)$u['id']), 'hasta los 30 minutos no se cierra');
+        cerrar_jornadas($this->db, a_utc('2030-01-07 15:31:00'));
         $this->assertSame('fuera', estado_actual($this->db, (int)$u['id']));
         $f = consulta($this->db, "SELECT * FROM fichajes WHERE usuario_id = ? AND tipo = 'salida'", [$u['id']])->fetch();
-        $this->assertSame(['automatico', '15:05'], [$f['origen'], local($f['momento_utc'], 'H:i')]);
+        $this->assertSame(['automatico', '15:01'], [$f['origen'], local($f['momento_utc'], 'H:i')], 'su jornada + 1 minuto');
+        $this->assertCount(1, olvidos_fichaje($this->db, [$u], a_utc('2030-01-07 15:40:00')));
+        $admin = $this->usuario(['rol' => 'admin']);
+        $olvido = fn() => (bool)consulta($this->db, 'SELECT 1 FROM avisos WHERE usuario_id = ? AND clave = ?', [$admin['id'], "olvido:salida:{$u['id']}:2030-01-07"])->fetchColumn();
+        avisar_olvidos($this->db, a_utc('2030-01-07 15:40:00'));
+        $this->assertFalse($olvido(), 'a administración, a la hora');
+        avisar_olvidos($this->db, a_utc('2030-01-07 16:02:00'));
+        $this->assertTrue($olvido());
         $this->assertNotEmpty(consulta($this->db, "SELECT 1 FROM avisos WHERE usuario_id = ? AND clave = ?", [$u['id'], "cierre_auto:{$f['id']}"])->fetchColumn());
-        cerrar_jornadas($this->db, a_utc('2030-01-07 15:30:00'));
+        cerrar_jornadas($this->db, a_utc('2030-01-07 16:30:00'));
         $this->assertSame(1, (int)consulta($this->db, "SELECT COUNT(*) FROM fichajes WHERE usuario_id = ? AND tipo = 'salida'", [$u['id']])->fetchColumn(), 'ya cerrada');
         $this->assertNull(verificar_cadena(fichajes_de($this->db, (int)$u['id'])), 'cadena de hashes intacta');
     }
@@ -32,9 +41,9 @@ class CierreTest extends Base
         $this->fichar($u, 'entrada', '2030-01-07 22:55:00');
         cerrar_jornadas($this->db, a_utc('2030-01-08 03:00:00'));
         $this->assertSame('dentro', estado_actual($this->db, (int)$u['id']));
-        cerrar_jornadas($this->db, a_utc('2030-01-08 07:20:00'));
+        cerrar_jornadas($this->db, a_utc('2030-01-08 07:31:00'));
         $this->assertSame('fuera', estado_actual($this->db, (int)$u['id']));
-        $this->assertSame('07:05', local(consulta($this->db, "SELECT momento_utc FROM fichajes WHERE usuario_id = ? AND tipo = 'salida'", [$u['id']])->fetchColumn(), 'H:i'));
+        $this->assertSame('07:01', local(consulta($this->db, "SELECT momento_utc FROM fichajes WHERE usuario_id = ? AND tipo = 'salida'", [$u['id']])->fetchColumn(), 'H:i'));
     }
 
     public function testDesactivadoYFlexibleNoSeCierran(): void
@@ -49,6 +58,13 @@ class CierreTest extends Base
         $this->db->exec("DELETE FROM ajustes WHERE clave = 'cierre_auto_min'");
         cerrar_jornadas($this->db, a_utc('2030-01-07 16:00:00'));
         $this->assertSame('fuera', estado_actual($this->db, (int)$u['id']));
+        // Entrada: como pronto 10 minutos antes del turno; y quien no tiene que fichar no recibe cierres.
+        $v = $this->usuario(['horario_id' => $this->horario([1, 2, 3, 4, 5], '07:00', '15:00')]);
+        try { $this->fichar($v, 'entrada', '2030-01-08 06:40:00'); $this->fail('20 min antes no'); } catch (DomainException) {}
+        $this->fichar($v, 'entrada', '2030-01-08 06:52:00');
+        consulta($this->db, 'UPDATE usuarios SET sin_fichaje = 1 WHERE id = ?', [$v['id']]);
+        cerrar_jornadas($this->db, a_utc('2030-01-08 18:00:00'));
+        $this->assertSame('dentro', estado_actual($this->db, (int)$v['id']));
         $this->assertSame('dentro', estado_actual($this->db, (int)$flex['id']));
     }
 

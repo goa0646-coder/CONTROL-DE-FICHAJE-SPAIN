@@ -88,7 +88,7 @@ if (es_post()) {
         'responsable_id' => (int)$p['responsable_id'] ?: null,
         'departamento_id' => (int)($p['departamento_id'] ?? 0) ?: null, 'horario_id' => (int)($p['horario_id'] ?? 0) ?: null, 'gps_modo' => isset($gps[$p['gps_modo']]) && $p['gps_modo'] !== '' ? $p['gps_modo'] : null,
         'acceso_hasta' => $p['rol'] === 'inspeccion' ? ($p['acceso_hasta'] ?: gmdate('Y-m-d', strtotime('+30 days'))) : null,
-        'activo' => $activo,
+        'activo' => $activo, 'sin_fichaje' => isset($p['sin_fichaje']) ? 1 : 0,
         'baja_utc' => $activo ? null : ($antes['baja_utc'] ?? ahora()),
     ];
     if ($p['clave'] !== '') $campos['password_hash'] = password_hash($p['clave'], PASSWORD_DEFAULT);
@@ -176,6 +176,7 @@ cabecera($editando ? ($u['id'] ? nombre($u) : 'Nueva persona') : 'Usuarios', $yo
   </fieldset>
   <?php endif ?>
   <label>GPS al fichar <select name="gps_modo"><?= opciones($gps, $u['gps_modo'] ?? '') ?></select></label>
+  <label><input type="checkbox" name="sin_fichaje" value="1" <?= !empty($u['sin_fichaje']) ? 'checked' : '' ?>> No tiene que fichar (usa INDA para pedir cosas y ver su horario; si no ficha, su registro es su horario)</label>
   <label>Nº de empleado (quiosco) <input name="num_empleado" value="<?= e($u['num_empleado']) ?>"></label>
   <label>PIN de quiosco (4–8 cifras) <input name="pin" inputmode="numeric" autocomplete="off" placeholder="<?= $u['pin_hash'] ? 'Dejar vacío para no cambiarlo' : '' ?>"></label>
   <label>Contraseña <input type="password" name="clave" autocomplete="new-password" placeholder="<?= $u['id'] ? 'Dejar vacío para no cambiarla' : 'Mínimo 8 caracteres' ?>"></label>

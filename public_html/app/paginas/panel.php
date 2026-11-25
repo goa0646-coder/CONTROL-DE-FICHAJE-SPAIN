@@ -73,6 +73,17 @@ cabecera('Inicio', $yo);
     <p class="nota leyenda-barras"><span><i class="muestra"></i> Personas con turno</span><span><b class="muestra-linea"></b> Ratio</span><?= $faltan || $sobran ? '<span><i class="muestra roja"></i> No cumple el ratio</span>' : '' ?></p>
   </section>
 
+  <?php $olv = olvidos_fichaje(db(), $gente); ?>
+  <section class="tarjeta" id="olvidos">
+    <h2>Se olvidaron de fichar hoy (<?= count($olv) ?>)</h2>
+    <?php if (!$olv): ?><p class="nota">Nadie: todas las entradas y salidas están fichadas.</p><?php endif ?>
+    <ul class="lista-personas-panel">
+      <?php foreach ($olv as [$que, $p, $h]): ?>
+      <li><?= avatar($p) ?><span><strong><?= e(nombre($p)) ?></strong><small><?= $que === 'salida' ? "No fichó la salida: se cerró sola a las $h" : "No ha fichado la entrada (turno a las $h)" ?></small></span>
+        <a class="boton secundario" href="?p=historial&u=<?= e($p['id']) ?>">Ver registro</a></li>
+      <?php endforeach ?>
+    </ul>
+  </section>
   <section class="tarjeta" id="sin-fichar">
     <h2>Sin fichar la entrada</h2>
     <?php if (!$sin_fichar): ?><p class="nota">Todo en orden: quien tenía que entrar ya ha fichado.</p><?php endif ?>
