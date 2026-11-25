@@ -116,6 +116,12 @@ $hoy_txt = $dia['ausencia'] ? $dia['ausencia']['tipo'] : ($dia['festivo'] ? 'Fes
     </ol>
     <a href="?p=calendario">Ver calendario</a>
   </div>
+  <?php $bolsa = saldo_bolsa(db(), $u); ?>
+  <div class="tarjeta dato">
+    <span class="rotulo">Bolsa de horas</span>
+    <p class="cifra-grande" style="color:var(<?= $bolsa < 0 ? '--rojo' : '--verde' ?>)"><?= horas_signo($bolsa) ?> <small><?= $bolsa < 0 ? 'te faltan' : 'a tu favor' ?> (hasta ayer)</small></p>
+    <a href="?p=historial">Ver el detalle</a>
+  </div>
   <?php if ($vac): ?>
   <div class="tarjeta dato">
     <span class="rotulo">Vacaciones <?= local(ahora(), 'Y') ?></span>

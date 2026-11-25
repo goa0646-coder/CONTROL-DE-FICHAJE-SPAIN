@@ -591,3 +591,28 @@ button.tema:hover { filter: none; color: var(--texto); background: var(--relleno
 .aviso.justificar input[type=file] { flex: 1 1 12rem; max-width: 100%; }
 [data-contador] { font-variant-numeric: tabular-nums; }
 .tarjeta > input[type=hidden]:first-child + h2, .tarjeta > input[type=hidden] + input[type=hidden] + h2 { margin-top: 0; }
+/* Organigrama */
+.org h2 small, .org h3 small { color: var(--gris-2); font-weight: 500; margin-left: .3rem; }
+.org-ficha { display: inline-flex; align-items: center; gap: .6rem; padding: .55rem .8rem; border: 1px solid var(--linea); border-radius: var(--radio-s); background: var(--tarjeta); min-width: 14rem; }
+.org-ficha.yo { border-color: var(--acento); box-shadow: 0 0 0 3px var(--acento-suave); }
+.org-ficha span { display: flex; flex-direction: column; line-height: 1.3; min-width: 0; }
+.org-ficha small { color: var(--gris); font-size: .78rem; }
+.org-ficha .org-n { color: var(--acento); }
+.org-arbol, .org-arbol ul { list-style: none; margin: 0; padding: 0; }
+.org-arbol ul { margin-left: 1.6rem; padding-left: 1.2rem; border-left: 2px solid var(--linea); }
+.org-arbol li { position: relative; margin: .5rem 0; }
+.org-arbol ul > li::before { content: ""; position: absolute; left: -1.2rem; top: 1.45rem; width: 1rem; border-top: 2px solid var(--linea); }
+.org-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .5rem; margin-bottom: 1rem; }
+.org-lista .org-ficha { min-width: 0; }
+.org-deps { display: grid; gap: 1rem; }
+/* Encuestas */
+.encuesta fieldset { border: 1px solid var(--linea); border-radius: var(--radio-s); padding: .7rem 1rem; margin: .7rem 0; }
+.encuesta legend { font-weight: 600; padding: 0 .3rem; }
+.encuesta fieldset > label { display: inline-flex; gap: .3rem; margin-right: 1rem; }
+.escala { display: flex; gap: .8rem; flex-wrap: wrap; align-items: center; }
+.escala label { display: inline-flex; gap: .25rem; }
+.barras-res { display: grid; gap: .35rem; margin-bottom: 1rem; }
+.barras-res div { display: grid; grid-template-columns: minmax(4rem, 10rem) 1fr 2.5rem; align-items: center; gap: .6rem; font-size: .9rem; }
+.barras-res i { height: .7rem; border-radius: 99px; background: linear-gradient(90deg, var(--acento) var(--w), var(--relleno) var(--w)); }
+.barras-res b { text-align: right; }
+blockquote { margin: .4rem 0; padding: .5rem .8rem; border-left: 3px solid var(--acento-borde); background: var(--relleno); border-radius: 6px; }
