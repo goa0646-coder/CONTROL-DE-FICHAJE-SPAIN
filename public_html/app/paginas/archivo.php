@@ -4,13 +4,14 @@ $yo = requiere(...ROLES);
 if (isset($_GET['a'])) {
     $a = ausencia(db(), (int)$_GET['a']);
     $dueno = $a ? usuario(db(), (int)$a['usuario_id']) : null;
-    if (!$a || !$a['justificante'] || !puede_ver($yo, $dueno)) exit('No disponible.');
+    // Inspección ve el registro de jornada, no justificantes médicos (datos de salud).
+    if (!$a || !$a['justificante'] || $yo['rol'] === 'inspeccion' || !puede_ver($yo, $dueno)) exit('No disponible.');
     auditar(db(), (int)$yo['id'], 'ver_justificante', "ausencia={$a['id']}");
     enviar_archivo($a['justificante'], "justificante-{$a['id']}." . pathinfo($a['justificante'], PATHINFO_EXTENSION));
 }
 if (isset($_GET['jp'])) {
     $j = consulta(db(), 'SELECT * FROM justificantes_pausa WHERE fichaje_id = ?', [(int)$_GET['jp']])->fetch();
-    if (!$j || !puede_ver($yo, usuario(db(), (int)$j['usuario_id']))) exit('No disponible.');
+    if (!$j || $yo['rol'] === 'inspeccion' || !puede_ver($yo, usuario(db(), (int)$j['usuario_id']))) exit('No disponible.');
     auditar(db(), (int)$yo['id'], 'ver_justificante_pausa', "fichaje={$j['fichaje_id']}");
     enviar_archivo($j['archivo'], $j['nombre_original'] ?: 'justificante');
 }

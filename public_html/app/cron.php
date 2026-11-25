@@ -6,6 +6,7 @@ activar_registro_errores();
 require __DIR__ . '/inicio.php';
 require_once __DIR__ . '/migrar.php';
 migrar_si_hace_falta(db());
+consulta(db(), 'REPLACE INTO ajustes VALUES (?, ?)', ['cron_ultimo', ahora()]); // Diagnóstico avisa si se para
 fichajes_automaticos(db());
 cerrar_jornadas(db());
 avisar_olvidos(db());

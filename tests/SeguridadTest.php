@@ -43,4 +43,26 @@ class SeguridadTest extends Base
         $this->assertTrue(pide_dos_pasos($this->db, $admin));
         $this->assertFalse(pide_dos_pasos($this->db, $this->usuario()), 'solo administración');
     }
+
+    public function testSinClaveNoSeGuardaEncimaDeLoCifrado(): void
+    {
+        consulta($this->db, "REPLACE INTO ajustes VALUES ('cifrado_datos', 'si')");
+        $GLOBALS['CLAVE_DATOS'] = '';
+        $this->assertTrue(clave_perdida($this->db));
+        $this->expectException(DomainException::class);
+        campos_seguros($this->db, ['dni' => '', 'nss' => null, 'fecha_nacimiento' => null]);
+    }
+
+    public function testCuentaDelPropietarioProtegida(): void
+    {
+        $this->db->exec("DELETE FROM ajustes WHERE clave = 'valoraciones_admin'");
+        $a = $this->usuario(['rol' => 'admin']);
+        $b = $this->usuario(['rol' => 'admin']);
+        $this->assertFalse(protegida($this->db, $b, (int)$a['id']), 'sin propietario no hay protección');
+        activar_valoraciones($this->db, $a, true);
+        $this->assertTrue(protegida($this->db, $b, (int)$a['id']), 'otro admin no la toca');
+        $this->assertFalse(protegida($this->db, $a, (int)$a['id']), 'el titular sí');
+        $this->assertFalse(protegida($this->db, $a, (int)$b['id']));
+        $this->db->exec("DELETE FROM ajustes WHERE clave = 'valoraciones_admin'");
+    }
 }

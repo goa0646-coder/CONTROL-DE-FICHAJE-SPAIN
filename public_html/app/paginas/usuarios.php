@@ -7,7 +7,7 @@ $gps = ['' => 'Lo que diga su centro', 'no' => 'Sin GPS', 'opcional' => 'Opciona
 if (es_post() && isset($_POST['cambiar_estado'])) {
     $id = (int)$_POST['cambiar_estado'];
     $p = usuario(db(), $id);
-    if ($p && $id != $yo['id']) {
+    if ($p && $id != $yo['id'] && !protegida(db(), $yo, $id)) {
         $activar = !$p['activo'];
         consulta(db(), 'UPDATE usuarios SET activo = ?, baja_utc = ? WHERE id = ?', [(int)$activar, $activar ? null : ahora(), $id]);
         if (!$activar) cerrar_dispositivos(db(), $id);
@@ -32,6 +32,7 @@ if (es_post() && isset($_POST['enviar_acceso'])) {
 // El admin puede retirar una foto de perfil inadecuada.
 if (es_post() && isset($_POST['quitar_2fa'])) {
     $id = (int)$_POST['quitar_2fa'];
+    if (protegida(db(), $yo, $id)) redirigir('usuarios');
     consulta(db(), 'UPDATE usuarios SET totp_secreto = NULL WHERE id = ?', [$id]);
     auditar(db(), (int)$yo['id'], 'dos_pasos_quitado', "usuario=$id");
     aviso('App de verificación quitada: la volverá a dar de alta al entrar.');
@@ -82,6 +83,10 @@ if (es_post() && isset($_POST['saldos'])) {
 
 if (es_post()) {
     $id = (int)($_POST['id'] ?? 0);
+    if ($id && protegida(db(), $yo, $id)) {
+        aviso('Esta cuenta está protegida: solo la puede cambiar su titular.', 'error');
+        redirigir('usuarios');
+    }
     $p = array_map(fn($v) => is_string($v) ? trim($v) : $v, $_POST);
     $error = match (true) {
         $p['nombre'] === '' => 'El nombre es obligatorio.',
@@ -112,7 +117,14 @@ if (es_post()) {
         'pausa_auto_min' => isset($p['pausa_auto']) ? 15 : 0,
         'baja_utc' => $activo ? null : ($antes['baja_utc'] ?? ahora()),
     ];
-    $campos = campos_seguros(db(), $campos);
+    // Fichaje automático: función privada (solo el propietario la pone o la quita); para el resto se conserva lo que había.
+    if (!ve_valoraciones(db(), $yo)) $campos['fichaje_auto'] = (int)($antes['fichaje_auto'] ?? 0);
+    try {
+        $campos = campos_seguros(db(), $campos);
+    } catch (DomainException $e) {
+        aviso($e->getMessage(), 'error');
+        redirigir('usuarios', $id ? ['u' => $id] : ['nuevo' => 1]);
+    }
     if ($p['clave'] !== '') $campos['password_hash'] = password_hash($p['clave'], PASSWORD_DEFAULT);
     if ($p['pin'] !== '') $campos['pin_hash'] = password_hash($p['pin'], PASSWORD_DEFAULT);
     try {
@@ -160,7 +172,8 @@ cabecera($editando ? ($u['id'] ? nombre($u) : 'Nueva persona') : 'Usuarios', $yo
 <?php if (!empty($u['foto'])): ?>
 <form method="post" class="tarjeta con-avatar"><?= csrf_campo() ?><?= avatar($u, 'grande') ?> <button name="quitar_foto" value="<?= e($u['id']) ?>" class="secundario" data-confirmar="¿Retirar la foto de perfil de <?= e(nombre($u)) ?>?">Retirar foto</button></form>
 <?php endif ?>
-<?php if (!empty($u['totp_secreto'])): ?><form method="post" class="tarjeta"><?= csrf_campo() ?>Tiene dada de alta la verificación en dos pasos. <button name="quitar_2fa" value="<?= e($u['id']) ?>" class="secundario" data-confirmar="¿Quitarle la app de verificación? La volverá a dar de alta al entrar.">Quitar la app (móvil perdido)</button></form><?php endif ?>
+<?php if ($u['id'] && protegida(db(), $yo, (int)$u['id'])): ?><p class="aviso">Cuenta protegida: solo la puede cambiar su titular (contraseña, rol, email, baja y verificación en dos pasos).</p><?php endif ?>
+<?php if (!empty($u['totp_secreto']) && !protegida(db(), $yo, (int)$u['id'])): ?><form method="post" class="tarjeta"><?= csrf_campo() ?>Tiene dada de alta la verificación en dos pasos. <button name="quitar_2fa" value="<?= e($u['id']) ?>" class="secundario" data-confirmar="¿Quitarle la app de verificación? La volverá a dar de alta al entrar.">Quitar la app (móvil perdido)</button></form><?php endif ?>
 <?php if ($u['id']): ?>
 <form method="post" class="tarjeta filtros"><?= csrf_campo() ?>
   <span><b>Acceso a INDA</b><br><small><?= $u['ultimo_acceso_utc'] ? 'Último acceso: ' . local($u['ultimo_acceso_utc']) : 'Todavía no ha entrado nunca' ?><?= $u['acceso_enviado_utc'] ? ' · acceso enviado el ' . local($u['acceso_enviado_utc']) : '' ?></small></span>
@@ -199,7 +212,7 @@ cabecera($editando ? ($u['id'] ? nombre($u) : 'Nueva persona') : 'Usuarios', $yo
   </fieldset>
   <?php endif ?>
   <label>GPS al fichar <select name="gps_modo"><?= opciones($gps, $u['gps_modo'] ?? '') ?></select></label>
-  <label>Fichaje <select name="modo_fichaje"><?= opciones(['' => 'Normal: ficha la persona', 'sin' => 'Sin fichaje: su registro es su horario (si no ficha)', 'auto' => 'Automático: INDA ficha entrada y salida a la hora de su turno'], !empty($u['fichaje_auto']) ? 'auto' : (!empty($u['sin_fichaje']) ? 'sin' : '')) ?></select></label>
+  <label>Fichaje <select name="modo_fichaje"><?= opciones(['' => 'Normal: ficha la persona', 'sin' => 'Sin fichaje: su registro es su horario (si no ficha)'] + (ve_valoraciones(db(), $yo) ? ['auto' => 'Automático: INDA ficha entrada y salida a la hora de su turno'] : []), !empty($u['fichaje_auto']) && ve_valoraciones(db(), $yo) ? 'auto' : (!empty($u['sin_fichaje']) ? 'sin' : '')) ?></select></label>
   <label><input type="checkbox" name="pausa_auto" value="1" <?= !empty($u['pausa_auto_min']) ? 'checked' : '' ?>> Pausa automática de 15 min (no la tiene que fichar; en jornadas de más de 6 h sin pausa se apunta sola y computa como trabajo)</label>
   <label>Nº de empleado (quiosco) <input name="num_empleado" value="<?= e($u['num_empleado']) ?>"></label>
   <label>PIN de quiosco (4–8 cifras) <input name="pin" inputmode="numeric" autocomplete="off" placeholder="<?= $u['pin_hash'] ? 'Dejar vacío para no cambiarlo' : '' ?>"></label>

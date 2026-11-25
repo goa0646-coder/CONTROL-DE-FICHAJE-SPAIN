@@ -54,9 +54,19 @@ function en_claro(array $u): array
     return $u;
 }
 
+// El cifrado está activo pero no se encuentra el archivo de la clave (cambio de servidor, restauración sin él…).
+function clave_perdida(PDO $db): bool
+{
+    return ajuste($db, 'cifrado_datos') === 'si' && !clave_datos();
+}
+
 // Campos a guardar en usuarios: con el cifrado activo, dni/nss/fecha_nacimiento se guardan cifrados (y la huella del DNI).
 function campos_seguros(PDO $db, array $c): array
 {
+    // Sin la clave, guardar escribiría vacíos encima de los datos cifrados: no se guarda nada.
+    if (clave_perdida($db) && array_intersect_key($c, ['dni' => 1, 'nss' => 1, 'fecha_nacimiento' => 1])) {
+        throw new DomainException('No se guarda: el cifrado está activo y falta el archivo clave-datos-inda.key junto a config-inda.php. Vuelve a subirlo desde tu copia.');
+    }
     $on = cifrado_activo($db);
     if (array_key_exists('dni', $c)) {
         $c['dni_huella'] = $on && $c['dni'] !== '' ? huella_dni($c['dni']) : null;
@@ -81,6 +91,7 @@ function usuario_por_dni(PDO $db, string $dni): ?array
 // Activa (crea la clave si no existe y cifra todo) o desactiva (deja todo en claro). La clave no se borra nunca.
 function cambiar_cifrado(PDO $db, bool $si): int
 {
+    if (clave_perdida($db)) throw new DomainException('Falta el archivo clave-datos-inda.key: súbelo de nuevo antes de cambiar el cifrado.');
     if ($si && !clave_datos()) {
         $f = archivo_clave_datos();
         if (@file_put_contents($f, base64_encode(random_bytes(32)) . "\n") === false) throw new DomainException('No puedo crear el archivo de la clave junto a config-inda.php.');
@@ -95,6 +106,14 @@ function cambiar_cifrado(PDO $db, bool $si): int
         $n++;
     }
     return $n;
+}
+
+// La cuenta del propietario de las funciones privadas solo la toca él: nadie más cambia su contraseña, rol, email,
+// estado ni su app de dos pasos (así nadie entra como él para ver lo oculto).
+function protegida(PDO $db, array $yo, int $uid): bool
+{
+    $d = valoraciones_de($db);
+    return $d && $uid === $d && (int)$yo['id'] !== $d;
 }
 
 // --- Dos pasos (TOTP, RFC 6238: códigos de 6 cifras cada 30 s) ---
