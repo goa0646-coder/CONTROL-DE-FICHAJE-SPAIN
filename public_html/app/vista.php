@@ -26,6 +26,8 @@ const ICONOS = [
     'avisos' => '<path d="M6 16V11a6 6 0 0112 0v5l2 2H4l2-2z"/><path d="M10 20a2 2 0 004 0"/>',
     'perfil' => '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.2 4.2-6 8-6s7 1.8 8 6"/>',
     'salir' => '<path d="M14 4h4a2 2 0 012 2v12a2 2 0 01-2 2h-4M10 16l4-4-4-4M14 12H3"/>',
+    'encuestas' => '<path d="M9 5H6a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-3"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="m9 13 2 2 4-4"/>',
+    'organigrama' => '<rect x="9" y="3" width="6" height="5" rx="1"/><rect x="3" y="16" width="6" height="5" rx="1"/><rect x="15" y="16" width="6" height="5" rx="1"/><path d="M12 8v4M6 16v-4h12v4"/>',
     'cambios' => '<path d="M4 8h13l-3-3M20 16H7l3 3"/>',
     'diagnostico' => '<path d="M3 12h4l2.5-6 5 12 2.5-6h4"/>',
     'flecha' => '<path d="M9 6l6 6-6 6"/>',
@@ -55,6 +57,11 @@ function menu_de(array $u): array
     if ($r !== 'inspeccion') {
         $nc = (int)consulta(db(), "SELECT COUNT(*) FROM cambios_turno WHERE companero_id = ? AND estado = 'companero'", [$u['id']])->fetchColumn();
         $g['Personal']['cambios'] = 'Cambios de turno' . ($nc ? " ($nc)" : '');
+    }
+    if ($r !== 'inspeccion') {
+        $ne = count(pendientes_encuesta(db(), $u));
+        $g['Personal']['encuestas'] = 'Encuestas' . ($ne ? " ($ne)" : '');
+        $g['Personal']['organigrama'] = 'Organigrama';
     }
     $e = [];
     if ($r !== 'empleado') $e['equipo'] = ($r === 'responsable' ? 'Mi equipo' : 'Personas') . (($ncp = count(cambios_por_aprobar(db(), $u))) ? " ($ncp)" : '');
