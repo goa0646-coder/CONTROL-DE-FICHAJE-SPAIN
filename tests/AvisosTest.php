@@ -11,8 +11,10 @@ class AvisosTest extends Base
     {
         $jefe = $this->usuario(['rol' => 'responsable']);
         $u = $this->usuario(['horario_id' => $this->horario(), 'responsable_id' => $jefe['id']]);
-        // Lunes 2/3/2026 a las 8:30 (margen 10 min): no ha entrado.
-        revisar_avisos($this->db, a_utc('2026-03-02 08:30'));
+        // Lunes 2/3/2026: a las 8:20 aún no se avisa; a las 8:31 (30 min) sí.
+        revisar_avisos($this->db, a_utc('2026-03-02 08:20'));
+        $this->assertSame([], $this->avisos($u['id']));
+        revisar_avisos($this->db, a_utc('2026-03-02 08:31'));
         $this->assertEquals(['sin_entrada:2026-03-02'], $this->avisos($u['id']));
         revisar_avisos($this->db, a_utc('2026-03-02 08:45'));
         $this->assertCount(1, $this->avisos($u['id']), 'no se repite');

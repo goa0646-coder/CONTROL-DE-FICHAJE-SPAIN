@@ -105,15 +105,60 @@ function texto_aviso(PDO $db, string $clave, array $v): string
     return strtr(plantilla_aviso($db, $clave), array_combine(array_map(fn($k) => '{' . $k . '}', array_keys($v)), array_values($v)));
 }
 
-// Minutos tras la hora de salida para cerrar la jornada sola (0 = no se cierra). Por defecto, 5.
+// Minutos tras la hora de salida para cerrar la jornada sola (0 = no se cierra). Por defecto, 30.
 function minutos_cierre(PDO $db): int
 {
     $v = consulta($db, "SELECT valor FROM ajustes WHERE clave = 'cierre_auto_min'")->fetchColumn(); // ajuste() trata «0» como vacío
-    return $v === false ? 5 : max(0, (int)$v);
+    return $v === false ? 30 : max(0, (int)$v);
 }
 
-// Cron: al acabar el turno, recordatorio; pasados los minutos de cierre, salida automática a la hora de salida + esos minutos.
+// Cron: al acabar el turno, recordatorio; pasados los minutos de cierre (30), salida automática con la hora de fin del turno
+// + 1 minuto y correo a la persona. A administración se le avisa a la hora del fin del turno (avisar_olvidos).
 // La salida queda marcada como automática (origen) y con la hora real de registro (creado_utc), y se puede corregir.
+// Olvidos de hoy: [['salida'|'entrada', persona, hora del turno, desde (Unix)], …]. Salida: cerrada automáticamente;
+// entrada: turno empezado sin fichar. Para la pantalla principal y el aviso a administración.
+function olvidos_fichaje(PDO $db, array $personas, ?string $ahora = null): array
+{
+    $ahora ??= ahora();
+    $t = strtotime("$ahora UTC");
+    $hoy = local($ahora, 'Y-m-d');
+    $out = [];
+    $ids = array_column($personas, null, 'id');
+    foreach (consulta($db, "SELECT usuario_id, momento_utc FROM fichajes f WHERE origen = 'automatico' AND tipo = 'salida' AND momento_utc >= ? AND " . NO_ANULADO, [a_utc("$hoy 00:00:00")]) as $r) {
+        if (isset($ids[$r['usuario_id']])) $out[] = ['salida', $ids[$r['usuario_id']], local($r['momento_utc'], 'H:i'), strtotime($r['momento_utc'] . ' UTC') - 60];
+    }
+    foreach ($personas as $p) {
+        if (!empty($p['sin_fichaje'])) continue;
+        $c = calendario_teorico($db, $p, $hoy, $hoy)[$hoy];
+        if (!$c['turno'] || $c['ausencia'] || $c['flexible'] || !$c['entrada']) continue;
+        $ini = ts_local($hoy, $c['entrada']);
+        if ($t < $ini + 30 * 60) continue;
+        $fichada = consulta($db, "SELECT 1 FROM fichajes f WHERE usuario_id = ? AND tipo = 'entrada' AND momento_utc >= ? AND " . NO_ANULADO, [$p['id'], gmdate('Y-m-d H:i:s', $ini - 4 * 3600)])->fetchColumn();
+        if (!$fichada) $out[] = ['entrada', $p, substr($c['entrada'], 0, 5), $ini];
+    }
+    return $out;
+}
+
+// Cron: a la hora del inicio o del fin del turno, aviso a administración de las entradas y salidas olvidadas (una vez cada una).
+function avisar_olvidos(PDO $db, ?string $ahora = null): int
+{
+    $ahora ??= ahora();
+    $t = strtotime("$ahora UTC");
+    $hoy = local($ahora, 'Y-m-d');
+    $gente = $db->query("SELECT * FROM usuarios WHERE activo = 1 AND rol IN ('empleado','responsable','admin')")->fetchAll();
+    $admins = array_map('intval', $db->query("SELECT id FROM usuarios WHERE rol = 'admin' AND activo = 1")->fetchAll(PDO::FETCH_COLUMN));
+    $lineas = [];
+    foreach (olvidos_fichaje($db, $gente, $ahora) as [$que, $p, $hora, $desde]) {
+        if ($t < $desde + 3600) continue;
+        $txt = nombre($p) . ($que === 'salida' ? " no fichó la salida: se cerró sola a las $hora." : " no ha fichado la entrada (su turno empezaba a las $hora).");
+        $nuevo = false;
+        foreach ($admins as $a) $nuevo = notificar($db, $a, "olvido:$que:{$p['id']}:$hoy", $txt, 'panel') || $nuevo;
+        if ($nuevo) $lineas[] = $txt;
+    }
+    if ($lineas) avisar_administracion('INDA: ' . count($lineas) . ' fichajes olvidados hoy', implode("\n", $lineas) . "\n\n" . rtrim(config()['url'] ?? '', '/') . '/?p=panel');
+    return count($lineas);
+}
+
 function cerrar_jornadas(PDO $db, ?string $ahora = null): int
 {
     $margen = minutos_cierre($db);
@@ -123,7 +168,7 @@ function cerrar_jornadas(PDO $db, ?string $ahora = null): int
     $n = 0;
     $lineas = [];
     foreach ($db->query("SELECT * FROM usuarios WHERE activo = 1 AND rol IN ('empleado','responsable','admin')")->fetchAll() as $u) {
-        if (estado_actual($db, (int)$u['id']) === 'fuera') continue;
+        if (!empty($u['sin_fichaje']) || estado_actual($db, (int)$u['id']) === 'fuera') continue;
         $e = consulta($db, "SELECT id, momento_utc FROM fichajes f WHERE usuario_id = ? AND tipo = 'entrada' AND " . NO_ANULADO . ' ORDER BY momento_utc DESC, id DESC LIMIT 1', [$u['id']])->fetch();
         if (!$e) continue;
         $te = strtotime("{$e['momento_utc']} UTC");
@@ -144,7 +189,7 @@ function cerrar_jornadas(PDO $db, ?string $ahora = null): int
             continue;
         }
         $ultimo = (int)strtotime(consulta($db, 'SELECT MAX(momento_utc) FROM fichajes WHERE usuario_id = ?', [$u['id']])->fetchColumn() . ' UTC');
-        $momento = gmdate('Y-m-d H:i:s', max($fin + 60 * $margen, $ultimo + 1));
+        $momento = gmdate('Y-m-d H:i:s', max($fin + 60, $ultimo + 1)); // como mucho, su jornada + 1 minuto
         try {
             $id = registrar_fichaje($db, $u, 'salida', 'automatico', [], $momento);
         } catch (DomainException) {
@@ -153,10 +198,8 @@ function cerrar_jornadas(PDO $db, ?string $ahora = null): int
         $v['fichado'] = local($momento, 'H:i');
         notificar($db, (int)$u['id'], "cierre_auto:$id", texto_aviso($db, 'cierre_auto', $v), 'correcciones');
         auditar($db, null, 'salida_automatica', "usuario={$u['id']} fichaje=$id");
-        $lineas[] = nombre($u) . ": salida automática a las {$v['fichado']} (turno hasta las {$v['hora']}).";
         $n++;
     }
-    if ($lineas) avisar_administracion('INDA: ' . count($lineas) . ' salidas cerradas automáticamente', implode("\n", $lineas) . "\n\n" . rtrim(config()['url'] ?? '', '/') . '/?p=equipo');
     return $n;
 }
 

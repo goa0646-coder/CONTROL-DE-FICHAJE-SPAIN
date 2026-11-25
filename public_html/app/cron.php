@@ -7,6 +7,7 @@ require __DIR__ . '/inicio.php';
 require_once __DIR__ . '/migrar.php';
 migrar_si_hace_falta(db());
 cerrar_jornadas(db());
+avisar_olvidos(db());
 revisar_avisos(db());
 recordar_firmas(db());
 revisar_ratios(db());

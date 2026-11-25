@@ -39,6 +39,15 @@ function registrar_fichaje(PDO $db, array $u, string $tipo, string $origen, arra
         if (!in_array($tipo, PERMITIDOS[$estado], true)) {
             throw new DomainException('Ese fichaje no es posible ahora (estás ' . ['fuera' => 'fuera', 'dentro' => 'trabajando', 'pausa' => 'en pausa'][$estado] . ').');
         }
+        // Entrada como pronto 10 minutos antes de su turno (solo al fichar la persona; correcciones y sistema, no).
+        if ($tipo === 'entrada' && in_array($origen, ['web', 'movil', 'qr', 'quiosco', 'chat', 'api'], true) && empty($u['sin_fichaje'])) {
+            $hoy = local($ahora ?? gmdate('Y-m-d H:i:s'), 'Y-m-d');
+            $c = calendario_teorico($db, $u, $hoy, $hoy)[$hoy];
+            $t = strtotime(($ahora ?? gmdate('Y-m-d H:i:s')) . ' UTC');
+            if ($c['turno'] && !$c['flexible'] && $c['entrada'] && !$c['ausencia'] && $t < ts_local($hoy, $c['entrada']) - 600 && $t > ts_local($hoy, $c['entrada']) - 4 * 3600) {
+                throw new DomainException('Aún no puedes fichar la entrada: tu turno empieza a las ' . substr($c['entrada'], 0, 5) . ' y se puede fichar desde 10 minutos antes.');
+            }
+        }
         $f = ['usuario_id' => $u['id'], 'tipo' => $tipo, 'momento_utc' => $ahora ?? gmdate('Y-m-d H:i:s'), 'origen' => $origen,
             'centro_id' => $u['centro_id'], 'quiosco_id' => null, 'zona' => null, 'ip' => $d['ip'] ?? '', 'correccion_id' => null];
         if ($tipo === 'pausa_inicio' && !empty($d['motivo_id'])) {

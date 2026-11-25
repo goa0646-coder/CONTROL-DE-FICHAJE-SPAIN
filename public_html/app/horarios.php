@@ -89,6 +89,8 @@ function resumen(PDO $db, array $u, string $desde, string $hasta): array
     $t = ['teorico' => 0, 'trabajado' => 0, 'extra' => 0, 'nocturno' => 0, 'festivo' => 0, 'diferencia' => 0];
     foreach ($dias as $f => &$d) {
         $teo = $d['minutos'] * 60;
+        // No tiene que fichar: si ese día no fichó, su registro es su horario.
+        if (!empty($u['sin_fichaje']) && !$d['jornadas'] && $f < $hoy) $d['trabajado'] = $teo;
         $d['extra'] = max(0, $d['trabajado'] - $teo);
         $d['diferencia'] = $f < $hoy ? $d['trabajado'] - $teo : 0;
         $t['teorico'] += $teo;

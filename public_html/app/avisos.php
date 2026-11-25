@@ -88,19 +88,17 @@ function revisar_avisos(PDO $db, ?string $ahora = null): int
     $n = 0;
     $incidencias = [];
     $suma = fn(string $h, int $min) => date('H:i:s', strtotime("2000-01-01 $h") + 60 * $min);
-    foreach ($db->query("SELECT * FROM usuarios WHERE activo = 1 AND rol IN ('empleado','responsable','admin')")->fetchAll() as $u) {
+    foreach ($db->query("SELECT * FROM usuarios WHERE activo = 1 AND sin_fichaje = 0 AND rol IN ('empleado','responsable','admin')")->fetchAll() as $u) {
         $c = calendario_teorico($db, $u, $hoy, $hoy)[$hoy];
         $estado = estado_actual($db, (int)$u['id']);
         if (!$c['flexible'] && $c['entrada'] && $c['minutos'] > 0) {
             $limite = $suma($c['entrada'], $c['margen']);
+            $media = $suma($c['entrada'], 30); // entrada olvidada: aviso a la persona a los 30 minutos
             $primera = consulta($db, "SELECT MIN(momento_utc) FROM fichajes f WHERE usuario_id = ? AND tipo = 'entrada' AND momento_utc >= ? AND momento_utc <= ? AND " . NO_ANULADO,
                 [$u['id'], a_utc("$hoy 00:00:00"), $ahora])->fetchColumn();
-            if (!$primera && $estado === 'fuera' && $hora > $limite) {
+            if (!$primera && $estado === 'fuera' && $hora > $media) {
                 $v = ['nombre' => $u['nombre'], 'fecha' => local($ahora, 'd/m/Y'), 'hora' => substr($c['entrada'], 0, 5), 'turno' => $c['horario'] ?? '', 'fichado' => ''];
-                if (notificar($db, (int)$u['id'], "sin_entrada:$hoy", texto_aviso($db, 'sin_entrada', $v), 'fichar')) {
-                    $n++;
-                    $incidencias[] = nombre($u) . ': sin fichar la entrada (horario ' . substr($c['entrada'], 0, 5) . ').';
-                }
+                if (notificar($db, (int)$u['id'], "sin_entrada:$hoy", texto_aviso($db, 'sin_entrada', $v), 'fichar')) $n++; // a administración, a la hora (avisar_olvidos)
             }
             if ($primera && local($primera, 'H:i:s') > $limite) {
                 $txt = texto_aviso($db, 'retraso', ['nombre' => nombre($u), 'fecha' => local($ahora, 'd/m/Y'), 'hora' => substr($c['entrada'], 0, 5), 'turno' => $c['horario'] ?? '', 'fichado' => local($primera, 'H:i')]);
