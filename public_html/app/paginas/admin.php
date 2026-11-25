@@ -245,6 +245,7 @@ cabecera('Empresa y centros', $yo);
 <form method="post" class="tarjeta">
   <?= csrf_campo() ?>
   <h2>Seguridad de los datos</h2>
+  <?php if (clave_perdida(db())): ?><p class="aviso error">El cifrado está activo pero falta el archivo <code>clave-datos-inda.key</code> junto a config-inda.php. Súbelo desde tu copia: mientras falte, no se pueden ver ni guardar DNI, Seguridad Social ni fecha de nacimiento.</p><?php endif ?>
   <label><input type="checkbox" name="cifrado" <?= cifrado_activo(db()) ? 'checked' : '' ?>> Cifrar DNI, nº de la Seguridad Social y fecha de nacimiento en la base de datos</label>
   <p class="nota">Aunque alguien copie la base de datos, no podrá leerlos. La clave se guarda en el archivo <code>clave-datos-inda.key</code>, junto a config-inda.php (fuera de public_html). <strong>Haz copia de ese archivo</strong>: sin él, esos tres datos no se pueden recuperar. Se puede desactivar cuando quieras y todo vuelve a quedar en claro.</p>
   <label><input type="checkbox" name="dos_pasos" <?= ajuste(db(), 'dos_pasos') === 'si' ? 'checked' : '' ?>> Verificación en dos pasos para administración</label>

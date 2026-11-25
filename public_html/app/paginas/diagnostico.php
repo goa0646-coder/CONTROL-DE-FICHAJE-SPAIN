@@ -27,7 +27,8 @@ $comprobar = [
     'Correo: email de envío' => [($cc = correo_cfg())['desde'] !== '', $cc['desde'] !== '' ? (!empty($cc['smtp']['host']) ? 'SMTP ' . $cc['smtp']['host'] . ':' . $cc['smtp']['puerto'] : 'mail() del servidor') : 'Falta: Administración → Correo'],
     'Correo de administración (recibe solicitudes)' => [trim($cc['admin']) !== '', trim($cc['admin']) !== '' ? $cc['admin'] : 'Falta: Administración → Correo'],
     'Hora del servidor (Madrid)' => [true, local(ahora(), 'd/m/Y H:i:s')],
-    'Último aviso automático (cron)' => [true, ($c = db()->query("SELECT MAX(creado_utc) FROM avisos")->fetchColumn()) ? local($c) : 'ninguno todavía'],
+    'Clave del cifrado de datos' => [!clave_perdida(db()), ajuste(db(), 'cifrado_datos') === 'si' ? (clave_perdida(db()) ? 'FALTA clave-datos-inda.key junto a config-inda.php: súbela desde tu copia' : 'Cifrado activo, clave presente') : 'Cifrado desactivado'],
+    'Última ejecución del cron' => [($c = ajuste(db(), 'cron_ultimo')) && strtotime("$c UTC") > time() - 15 * 60, $c ? local($c, 'd/m/Y H:i') . (strtotime("$c UTC") > time() - 15 * 60 ? '' : ' · hace más de 15 minutos: revisa el cron de Hostinger (cada 5 minutos)') : 'nunca: el cron no está configurado'],
 ];
 // Archivos clave con su fecha: si alguno es antiguo, la subida del ZIP no se completó.
 $clave = ['index.php', 'app/vista.php', 'app/cuadrante.php', 'app/paginas/planificacion.php', 'app/paginas/calendario.php', 'assets/estilo.css', 'assets/app.js'];
