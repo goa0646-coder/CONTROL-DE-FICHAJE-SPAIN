@@ -118,6 +118,7 @@ cabecera('Calendario', $yo);
 <dialog class="elegir-turno" data-turnos="<?= e(json_encode($turnos, JSON_UNESCAPED_UNICODE)) ?>" data-csrf="<?= e($_SESSION['csrf']) ?>">
   <form method="dialog">
     <h3 data-titulo></h3>
+    <p class="nota" data-actual></p>
     <div class="opciones-turno" data-opciones></div>
     <p class="nota" data-estado></p>
     <button value="cancelar" class="secundario">Cerrar</button>

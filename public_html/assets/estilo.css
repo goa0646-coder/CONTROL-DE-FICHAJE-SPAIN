@@ -616,3 +616,7 @@ button.tema:hover { filter: none; color: var(--texto); background: var(--relleno
 .barras-res i { height: .7rem; border-radius: 99px; background: linear-gradient(90deg, var(--acento) var(--w), var(--relleno) var(--w)); }
 .barras-res b { text-align: right; }
 blockquote { margin: .4rem 0; padding: .5rem .8rem; border-left: 3px solid var(--acento-borde); background: var(--relleno); border-radius: 6px; }
+.nueva-version { position: fixed; left: 50%; bottom: calc(1rem + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 50; display: flex; align-items: center; gap: .8rem; padding: .7rem .8rem .7rem 1.1rem; border-radius: 14px; background: var(--texto); color: var(--fondo); box-shadow: var(--sombra-alta); max-width: calc(100vw - 2rem); }
+.nueva-version button { background: var(--marca); color: var(--sobre-marca); }
+@media (max-width: 760px) { .nueva-version { bottom: calc(5rem + env(safe-area-inset-bottom)); } }
+.lista-personas { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: .2rem .8rem; max-height: 16rem; overflow: auto; margin: .4rem 0; }

@@ -7,7 +7,25 @@ const menu = abierto => {
 for (const b of document.querySelectorAll('.menu-boton')) b.addEventListener('click', () => menu(!document.body.classList.contains('menu-abierto')));
 for (const v of document.querySelectorAll('[data-cerrar-menu]')) v.addEventListener('click', () => menu(false));
 addEventListener('keydown', e => { if (e.key === 'Escape') menu(false); });
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').then(r => r.update()).catch(() => {});
+
+// Versión nueva en el servidor: barra «Actualizar» (vacía la caché de la app y recarga). Se mira al abrir y al volver a la app.
+const mirarVersion = () => fetch('?p=version', { cache: 'no-store' }).then(r => r.ok ? r.text() : '').then(v => {
+  v = v.trim();
+  if (!v || v === document.documentElement.dataset.version || document.querySelector('.nueva-version')) return;
+  const b = document.createElement('div');
+  b.className = 'nueva-version';
+  b.innerHTML = '<span>Hay una versión nueva de INDA (' + v.replace(/[^\w.]/g, '') + ').</span><button type="button">Actualizar</button>';
+  b.querySelector('button').onclick = async () => {
+    try { for (const k of await caches.keys()) await caches.delete(k); } catch (e) {}
+    try { for (const r of await navigator.serviceWorker.getRegistrations()) await r.update(); } catch (e) {}
+    location.reload();
+  };
+  document.body.append(b);
+}).catch(() => {});
+mirarVersion();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) mirarVersion(); });
+setInterval(mirarVersion, 15 * 60 * 1000);
 
 // Fondo claro u oscuro: el botón alterna y se recuerda en este dispositivo.
 for (const b of document.querySelectorAll('[data-tema-boton]')) b.addEventListener('click', () => {
@@ -176,6 +194,8 @@ for (const dlg of document.querySelectorAll('dialog.elegir-turno')) {
     celda = td;
     const dep = td.dataset.d, [a, m, d] = td.dataset.f.split('-');
     dlg.querySelector('[data-titulo]').textContent = `${td.dataset.n} · ${d}/${m}/${a}`;
+    const act = dlg.querySelector('[data-actual]');
+    if (act) act.textContent = td.title ? 'Ahora: ' + td.title : '';
     const suyos = turnos.filter(t => dep && t.dep == dep), otros = turnos.filter(t => !(dep && t.dep == dep));
     const lista = l => l.map(t => boton(t.id, esc(t.letra || '·'), t.color, esc(t.nombre), t.horas)).join('');
     ops.innerHTML = boton('L', 'D', '#9ca3af', 'Descanso', '') + boton('', '↺', '#9ca3af', 'Su horario habitual', '')

@@ -64,7 +64,11 @@ function celda_turno(array $c, array $hors, bool $detalle): array
 {
     if ($c['ausencia']) {
         $ini = implode('', array_map(fn($w) => mb_strtoupper(mb_substr($w, 0, 1)), array_filter(explode(' ', $c['ausencia']['tipo']), fn($w) => mb_strlen($w) > 3 || $w === 'IT')));
-        return $detalle ? [$ini, $c['ausencia']['color'], $c['ausencia']['tipo']] : ['·', '#6b7280', 'Ausente'];
+        // Con el turno que tenía debajo: «M·V», y al pasar o pulsar «AUXILIAR MAÑANA (Vacaciones)».
+        $h = !empty($c['horario_id']) ? ($hors[$c['horario_id']] ?? null) : null;
+        $base = $h ? ($h['abreviatura'] !== '' ? $h['abreviatura'] : '') : '';
+        $titulo = ($h ? $h['nombre'] . ' ' : '') . '(' . $c['ausencia']['tipo'] . ')';
+        return $detalle ? [($base !== '' ? "$base·" : '') . $ini, $c['ausencia']['color'], $titulo] : ['·', '#6b7280', 'Ausente'];
     }
     if ($c['festivo'] && !$c['turno']) return ['F', '', $c['festivo']];
     $h = $c['horario_id'] ? ($hors[$c['horario_id']] ?? null) : null;
