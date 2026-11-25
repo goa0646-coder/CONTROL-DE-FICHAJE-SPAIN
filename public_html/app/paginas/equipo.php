@@ -5,6 +5,11 @@ if (es_post() && $yo['rol'] !== 'inspeccion') {
         $aprobar = ($_POST['decision'] ?? '') === 'aprobar';
         $id = (int)($_POST['id'] ?? 0);
         $res = $aprobar ? 'aprobada' : 'rechazada';
+        if (($_POST['que'] ?? '') === 'cambio') {
+            resolver_cambio(db(), $yo, $id, $aprobar, $_POST['comentario'] ?? '');
+            aviso($aprobar ? 'Cambio aprobado: ya está en el calendario de los dos.' : 'Cambio rechazado.');
+            redirigir('equipo');
+        }
         if (($_POST['que'] ?? '') === 'ausencia') {
             $a = resolver_ausencia(db(), $id, $yo, $aprobar, $_POST['comentario'] ?? '');
             auditar(db(), (int)$yo['id'], "ausencia_$res", "ausencia=$id");
@@ -33,6 +38,22 @@ $ausencias = $yo['rol'] === 'inspeccion' ? [] : ausencias_pendientes(db(), $yo);
 $hoy = local(ahora(), 'Y-m-d');
 cabecera($yo['rol'] === 'responsable' ? 'Mi equipo' : 'Personas', $yo);
 ?>
+<?php if ($yo['rol'] !== 'inspeccion' && ($cps = cambios_por_aprobar(db(), $yo))): ?>
+<h2>Cambios de turno por aprobar</h2>
+<?php foreach ($cps as $c): $a = usuario(db(), (int)$c['solicitante_id']); $b = usuario(db(), (int)$c['companero_id']); ?>
+<form method="post" class="tarjeta">
+  <?= csrf_campo() ?><input type="hidden" name="id" value="<?= e($c['id']) ?>"><input type="hidden" name="que" value="cambio">
+  <p><strong><?= e(nombre($a)) ?></strong> ⇄ <strong><?= e(nombre($b)) ?></strong> · aceptado por los dos</p>
+  <?php foreach (fechas_cambio($c) as $f): try { $ta = turno_del_dia(db(), $a, $f)[1]; $tb = turno_del_dia(db(), $b, $f)[1]; } catch (DomainException $ex) { $ta = $tb = $ex->getMessage(); } ?>
+  <p class="nota"><?= date('d/m/Y', strtotime($f)) ?>: <?= e($a['nombre']) ?> pasa de «<?= e($ta) ?>» a «<?= e($tb) ?>» y <?= e($b['nombre']) ?> al revés.</p>
+  <?php endforeach ?>
+  <?php if ($c['motivo'] !== ''): ?><p>Motivo: <?= e($c['motivo']) ?></p><?php endif ?>
+  <label>Comentario <input name="comentario" maxlength="500"></label>
+  <button name="decision" value="aprobar">Aprobar</button>
+  <button name="decision" value="rechazar" class="secundario">Rechazar</button>
+</form>
+<?php endforeach; endif ?>
+
 <?php if ($ausencias): ?>
 <h2>Ausencias pendientes</h2>
 <?php foreach ($ausencias as $a): $sol = solapes(db(), $a); ?>

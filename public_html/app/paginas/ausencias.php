@@ -13,6 +13,7 @@ if (es_post()) {
             $archivo = guardar_archivo($_FILES['justificante'] ?? null) ?? throw new DomainException('Elige un archivo.');
             consulta(db(), 'UPDATE ausencias SET justificante = ? WHERE id = ?', [$archivo, $id]);
             auditar(db(), (int)$u['id'], 'justificante_subido', "ausencia=$id");
+            avisar_aprobadores(db(), $u, "justif_aus:$id", nombre($u) . " ha subido el justificante de su ausencia ({$a['tipo']}) del " . date('d/m', strtotime($a['desde'])) . '.');
             aviso('Justificante añadido.');
         } else {
             $archivo = guardar_archivo($_FILES['justificante'] ?? null);

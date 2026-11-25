@@ -1,0 +1,35 @@
+<?php
+
+class CambiosTest extends Base
+{
+    public function testCambioEntreCompanerosConAprobacion(): void
+    {
+        $s = uniqid();
+        $this->db->exec("INSERT INTO puestos (nombre) VALUES ('Auxiliar $s'), ('Cocina $s')");
+        $aux = (int)$this->db->lastInsertId();
+        $m = $this->horario([1, 2, 3, 4, 5, 6, 7], '07:00', '15:00', 480);
+        $t = $this->horario([1, 2, 3, 4, 5, 6, 7], '15:00', '23:00', 480);
+        $p = function (int $puesto) { $u = $this->usuario(); $this->db->prepare('INSERT INTO usuarios_puestos VALUES (?, ?)')->execute([$u['id'], $puesto]); return $u; };
+        [$a, $b, $cocina] = [$p($aux), $p($aux), $p($aux + 1)];
+        $admin = $this->usuario(['rol' => 'admin']);
+        // A: mañana del 6 al 8. B: tarde el 6 y libre el 7 y el 8.
+        foreach (rango_fechas('2099-07-06', '2099-07-08') as $f) {
+            consulta($this->db, 'INSERT INTO planificacion (usuario_id, fecha, horario_id) VALUES (?, ?, ?)', [$a['id'], $f, $m]);
+            consulta($this->db, 'INSERT INTO planificacion (usuario_id, fecha, horario_id) VALUES (?, ?, ?)', [$b['id'], $f, $f === '2099-07-06' ? $t : null]);
+        }
+        $this->assertArrayHasKey($b['id'], companeros_cambio($this->db, $a));
+        $this->assertArrayNotHasKey($cocina['id'], companeros_cambio($this->db, $a), 'solo mismo puesto');
+        // A pide cambiar su mañana del día 8 por el libre de B.
+        $id = pedir_cambio($this->db, $a, (int)$b['id'], '2099-07-08', '', 'médico');
+        $this->assertSame(1, (int)consulta($this->db, 'SELECT COUNT(*) FROM avisos WHERE usuario_id = ? AND clave = ?', [$b['id'], "cambio:$id"])->fetchColumn());
+        try { resolver_cambio($this->db, $admin, $id, true); $this->fail('sin aceptar no se aprueba'); } catch (DomainException) {}
+        responder_cambio($this->db, $b, $id, true);
+        $this->assertCount(1, cambios_por_aprobar($this->db, $admin));
+        resolver_cambio($this->db, $admin, $id, true);
+        $this->assertNull(calendario_teorico($this->db, $a, '2099-07-08', '2099-07-08')['2099-07-08']['horario_id']);
+        $this->assertSame($m, calendario_teorico($this->db, $b, '2099-07-08', '2099-07-08')['2099-07-08']['horario_id']);
+        // El 7 no: B saldría a las 23 del 6 y entraría a las 7 (8 h de descanso). Se avisa al pedir.
+        $this->expectException(DomainException::class);
+        pedir_cambio($this->db, $b, (int)$a['id'], '2099-07-07');
+    }
+}
