@@ -32,4 +32,21 @@ class CambiosTest extends Base
         $this->expectException(DomainException::class);
         pedir_cambio($this->db, $b, (int)$a['id'], '2099-07-07');
     }
+
+    public function testSolicitudesYRecordatorio(): void
+    {
+        $admin = $this->usuario(['rol' => 'admin']);
+        $u = $this->usuario();
+        $tipo = (int)$this->db->query("SELECT id FROM tipos_ausencia WHERE nombre = 'Vacaciones'")->fetchColumn();
+        pedir_ausencia($this->db, $u, ['tipo_id' => $tipo, 'desde' => '2099-09-01', 'hasta' => '2099-09-02'], (int)$u['id']);
+        $s = solicitudes_pendientes($this->db, $admin);
+        $this->assertGreaterThanOrEqual(1, count($s['ausencias']));
+        $this->assertGreaterThanOrEqual(1, n_por_decidir($s));
+        consulta($this->db, 'DELETE FROM ajustes WHERE clave IN (?, ?)', ['recordatorio_horas', 'recordatorio_ultimo']);
+        $this->assertTrue(recordar_solicitudes($this->db, '2099-09-01 08:00:00'));
+        $this->assertFalse(recordar_solicitudes($this->db, '2099-09-01 20:00:00'), 'no antes de 24 h');
+        $this->assertTrue(recordar_solicitudes($this->db, '2099-09-02 08:30:00'));
+        consulta($this->db, 'REPLACE INTO ajustes VALUES (?, ?)', ['recordatorio_horas', 'no']);
+        $this->assertFalse(recordar_solicitudes($this->db, '2099-09-05 08:30:00'), '0 = nunca');
+    }
 }

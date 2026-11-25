@@ -24,6 +24,8 @@ $comprobar = [
     'Límite de subida' => [true, ini_get('upload_max_filesize') . ' (formulario ' . ini_get('post_max_size') . ')'],
     'Tiempo máximo por página' => [(int)ini_get('max_execution_time') === 0 || (int)ini_get('max_execution_time') >= 30, ini_get('max_execution_time') . ' s'],
     'Memoria' => [true, ini_get('memory_limit')],
+    'Correo: email de envío' => [($cc = correo_cfg())['desde'] !== '', $cc['desde'] !== '' ? (!empty($cc['smtp']['host']) ? 'SMTP ' . $cc['smtp']['host'] . ':' . $cc['smtp']['puerto'] : 'mail() del servidor') : 'Falta: Administración → Correo'],
+    'Correo de administración (recibe solicitudes)' => [trim($cc['admin']) !== '', trim($cc['admin']) !== '' ? $cc['admin'] : 'Falta: Administración → Correo'],
     'Hora del servidor (Madrid)' => [true, local(ahora(), 'd/m/Y H:i:s')],
     'Último aviso automático (cron)' => [true, ($c = db()->query("SELECT MAX(creado_utc) FROM avisos")->fetchColumn()) ? local($c) : 'ninguno todavía'],
 ];

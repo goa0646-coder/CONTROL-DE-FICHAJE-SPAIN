@@ -27,6 +27,7 @@ const ICONOS = [
     'perfil' => '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.2 4.2-6 8-6s7 1.8 8 6"/>',
     'salir' => '<path d="M14 4h4a2 2 0 012 2v12a2 2 0 01-2 2h-4M10 16l4-4-4-4M14 12H3"/>',
     'encuestas' => '<path d="M9 5H6a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-3"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="m9 13 2 2 4-4"/>',
+    'solicitudes' => '<path d="M4 4h16v12H8l-4 4z"/><path d="m9 10 2 2 4-4"/>',
     'organigrama' => '<rect x="9" y="3" width="6" height="5" rx="1"/><rect x="3" y="16" width="6" height="5" rx="1"/><rect x="15" y="16" width="6" height="5" rx="1"/><path d="M12 8v4M6 16v-4h12v4"/>',
     'cambios' => '<path d="M4 8h13l-3-3M20 16H7l3 3"/>',
     'diagnostico' => '<path d="M3 12h4l2.5-6 5 12 2.5-6h4"/>',
@@ -64,7 +65,8 @@ function menu_de(array $u): array
         $g['Personal']['organigrama'] = 'Organigrama';
     }
     $e = [];
-    if ($r !== 'empleado') $e['equipo'] = ($r === 'responsable' ? 'Mi equipo' : 'Personas') . (($ncp = count(cambios_por_aprobar(db(), $u))) ? " ($ncp)" : '');
+    if (in_array($r, ['responsable', 'admin'], true)) $e['solicitudes'] = 'Solicitudes' . (($ns = n_por_decidir(solicitudes_pendientes(db(), $u))) ? " ($ns)" : '');
+    if ($r !== 'empleado') $e['equipo'] = $r === 'responsable' ? 'Mi equipo' : 'Personas';
     if (in_array($r, ['responsable', 'admin'], true)) $e['recibidos'] = 'Recibidos' . (($nr = count(envios_recibidos(db(), $u, true))) ? " ($nr)" : '');
     if (puede($u, 'informes')) $e['informes'] = 'Informes';
     if (puede($u, 'planificar') && $r !== 'empleado') $e += ['planificacion' => 'Planificación', 'necesidades' => 'Necesidades'];
