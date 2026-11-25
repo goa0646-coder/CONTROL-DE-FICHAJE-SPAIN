@@ -40,6 +40,7 @@ require __DIR__ . '/cuadrante_excel.php';
 require __DIR__ . '/marca.php';
 require __DIR__ . '/cambios.php';
 require __DIR__ . '/encuestas.php';
+require __DIR__ . '/consultas.php';
 
 // config-inda.php vive fuera de public_html (ver INSTALAR.md).
 // config-fichaje.php se sigue aceptando para instalaciones antiguas.
