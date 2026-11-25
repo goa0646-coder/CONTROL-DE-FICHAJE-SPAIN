@@ -620,3 +620,11 @@ blockquote { margin: .4rem 0; padding: .5rem .8rem; border-left: 3px solid var(-
 .nueva-version button { background: var(--marca); color: var(--sobre-marca); }
 @media (max-width: 760px) { .nueva-version { bottom: calc(5rem + env(safe-area-inset-bottom)); } }
 .lista-personas { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: .2rem .8rem; max-height: 16rem; overflow: auto; margin: .4rem 0; }
+/* Asistente */
+.chat-ia { display: flex; flex-direction: column; gap: .7rem; }
+.msg-ia { max-width: 85%; padding: .7rem .95rem; border-radius: 14px; line-height: 1.5; }
+.msg-ia.yo { align-self: flex-end; background: var(--marca); color: var(--sobre-marca); border-bottom-right-radius: 4px; }
+.msg-ia.ia { align-self: flex-start; background: var(--relleno); border-bottom-left-radius: 4px; }
+.msg-ia details { margin-top: .4rem; } .msg-ia details small { white-space: pre-wrap; }
+.ejemplos-ia { display: flex; flex-wrap: wrap; gap: .4rem; }
+.preguntar-ia label { flex: 1 1 20rem; }
