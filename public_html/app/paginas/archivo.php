@@ -8,6 +8,12 @@ if (isset($_GET['a'])) {
     auditar(db(), (int)$yo['id'], 'ver_justificante', "ausencia={$a['id']}");
     enviar_archivo($a['justificante'], "justificante-{$a['id']}." . pathinfo($a['justificante'], PATHINFO_EXTENSION));
 }
+if (isset($_GET['jp'])) {
+    $j = consulta(db(), 'SELECT * FROM justificantes_pausa WHERE fichaje_id = ?', [(int)$_GET['jp']])->fetch();
+    if (!$j || !puede_ver($yo, usuario(db(), (int)$j['usuario_id']))) exit('No disponible.');
+    auditar(db(), (int)$yo['id'], 'ver_justificante_pausa', "fichaje={$j['fichaje_id']}");
+    enviar_archivo($j['archivo'], $j['nombre_original'] ?: 'justificante');
+}
 if (isset($_GET['c'])) {
     $c = anuncio(db(), (int)$_GET['c']);
     if (!$c || !puede_ver_anuncio(db(), $c, $yo)) exit('No disponible.');

@@ -21,12 +21,22 @@ if (es_post()) {
         auditar(db(), (int)$u['id'], 'aviso_gps_leido');
         redirigir('fichar');
     }
+    if ($id = (int)($_POST['justificar_pausa'] ?? 0)) {
+        try {
+            justificar_pausa(db(), $u, $id, fn() => [guardar_archivo($_FILES['justificante'] ?? null) ?? throw new DomainException('Elige el archivo del justificante.'), $_FILES['justificante']['name'] ?? '']);
+            aviso('Justificante subido.');
+        } catch (DomainException $e) {
+            aviso($e->getMessage(), 'error');
+        }
+        redirigir('fichar');
+    }
     try {
         $origen = $qr ? 'qr' : (preg_match('/Mobi|Android|iPhone|iPad/', $_SERVER['HTTP_USER_AGENT'] ?? '') ? 'movil' : 'web');
         [$tipo, $motivo] = explode('|', ($_POST['tipo'] ?? '') . '|');
         registrar_fichaje(db(), $u, $tipo, $origen, ['ip' => ip(), 'motivo_id' => $motivo, 'quiosco' => $qr] + $_POST);
         unset($_SESSION['qr']);
-        aviso('Fichaje registrado: ' . TIPOS[$tipo] . ' a las ' . local(ahora(), 'H:i') . '.');
+        $pide = $tipo === 'pausa_inicio' && $motivo && consulta(db(), 'SELECT justificante FROM motivos_pausa WHERE id = ?', [(int)$motivo])->fetchColumn();
+        aviso('Fichaje registrado: ' . TIPOS[$tipo] . ' a las ' . local(ahora(), 'H:i') . '.' . ($pide ? ' Esta pausa necesita justificante: súbelo aquí en 1 día como máximo.' : ''));
     } catch (DomainException $e) {
         aviso($e->getMessage(), 'error');
     }
@@ -50,8 +60,10 @@ $estado = estado_actual(db(), (int)$u['id']);
 $hoy = local(ahora(), 'Y-m-d');
 $dia = calendario_teorico(db(), $u, $hoy, $hoy)[$hoy];
 $trabajado = 0;
+$abierta = null; // jornada sin salida que empezó hace demasiado (se olvidó salir)
 foreach (jornadas(fichajes_de(db(), (int)$u['id'], a_utc("$hoy -1 day"))) as $j) {
     if (local($j['entrada'], 'Y-m-d') === $hoy || $j['salida'] === null) $trabajado += $j['trabajado'] + (!empty($j['en_curso']) ? time() - $j['en_curso'] : 0);
+    if ($j['salida'] === null && time() - strtotime($j['entrada'] . ' UTC') > (reglas(db())['jornada_max_diaria_h'] + 3) * 3600) $abierta = $j['entrada'];
 }
 $sin_leer = array_slice(anuncios_pendientes(db(), $u), 0, 3);
 $hora = (int)local(ahora(), 'G');
@@ -70,11 +82,17 @@ $hoy_txt = $dia['ausencia'] ? $dia['ausencia']['tipo'] : ($dia['festivo'] ? 'Fes
   <div class="anillo" style="--pct:<?= round($pct * 100) ?>">
     <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="54" class="pista"/><?php if ($pct > 0): ?><circle cx="60" cy="60" r="54" class="progreso" pathLength="100" stroke-dasharray="<?= round($pct * 100, 1) ?> 100"/><?php endif ?></svg>
     <div class="anillo-centro">
-      <p class="reloj" data-reloj><?= local(ahora(), 'H:i') ?></p>
+      <p class="reloj" data-reloj data-segundos><?= local(ahora(), 'H:i:s') ?></p>
       <p class="estado <?= $estado ?>"><?= ['fuera' => 'Fuera', 'dentro' => 'Trabajando', 'pausa' => 'En pausa'][$estado] ?></p>
     </div>
   </div>
-  <p class="llevas"><strong><?= horas($trabajado) ?> h</strong> trabajadas hoy<?= $teorico ? ' de ' . horas($teorico) . ' h' : '' ?></p>
+  <p class="llevas"><strong data-contador="<?= (int)$trabajado ?>"<?= $estado === 'dentro' ? ' data-corre' : '' ?>><?= sprintf('%d:%02d:%02d', intdiv((int)$trabajado, 3600), intdiv((int)$trabajado % 3600, 60), (int)$trabajado % 60) ?></strong> trabajadas hoy<?= $teorico ? ' de ' . horas($teorico) . ' h' : '' ?></p>
+  <?php if ($abierta): ?><p class="aviso error"><?= icono('alerta') ?><span>Tu jornada sigue abierta desde el <?= local($abierta, 'd/m') ?> a las <?= local($abierta, 'H:i') ?>. Si se te olvidó salir, ficha la salida y pide una <a href="?p=correcciones">corrección</a> con la hora real.</span></p><?php endif ?>
+  <?php foreach (pausas_sin_justificante(db(), (int)$u['id']) as $pj): ?>
+  <form method="post" enctype="multipart/form-data" class="aviso <?= $pj['vence_utc'] < ahora() ? 'error' : 'info' ?> justificar"><?= csrf_campo() ?>
+    <?= icono('alerta') ?><span>Pausa <b><?= e($pj['motivo']) ?></b> del <?= local($pj['momento_utc'], 'd/m H:i') ?>: sube el justificante <?= $pj['vence_utc'] < ahora() ? '<b>(fuera de plazo)</b>' : 'antes del ' . local($pj['vence_utc'], 'd/m H:i') ?>.</span>
+    <input type="file" name="justificante" accept="image/*,application/pdf" required><button name="justificar_pausa" value="<?= e($pj['id']) ?>" class="secundario">Subir</button></form>
+  <?php endforeach ?>
   <?php if ($qr): ?><p class="aviso ok"><?= icono('ok') ?><span>Fichando con QR en <?= e(centro(db(), (int)$qr['centro_id'])['nombre']) ?></span></p><?php endif ?>
   <form method="post" data-gps="<?= e($modo) ?>">
     <?= csrf_campo() ?>

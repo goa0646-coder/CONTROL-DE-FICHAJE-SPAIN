@@ -1,18 +1,35 @@
 <?php
 // Avisos dentro de INDA + email. clave evita repetir el mismo aviso.
 
-function notificar(PDO $db, int $uid, string $clave, string $texto, string $enlace = ''): bool
+function notificar(PDO $db, int $uid, string $clave, string $texto, string $enlace = '', bool $siempre = false): bool
 {
     $s = consulta($db, 'INSERT IGNORE INTO avisos (usuario_id, clave, texto, enlace, creado_utc) VALUES (?, ?, ?, ?, ?)',
         [$uid, mb_substr($clave, 0, 100), mb_substr($texto, 0, 500), $enlace, ahora()]);
     if (!$s->rowCount()) return false;
     $u = usuario($db, $uid);
+    // «Avisar a los trabajadores» desactivado (p. ej. mientras se suben datos): queda en la campana, sin correo ni móvil.
+    if (!$siempre && $u && $u['rol'] === 'empleado' && !avisos_a_trabajadores($db)) return true;
     if ($u && $u['activo']) {
         $url = rtrim(config()['url'] ?? '', '/') . ($enlace !== '' ? "/?p=$enlace" : '/');
         enviar_correo($u['email'], 'INDA: ' . mb_strimwidth($texto, 0, 70, '…'), "$texto\n\n$url");
         enviar_push($db, $uid);
     }
     return true;
+}
+
+function avisos_a_trabajadores(PDO $db): bool
+{
+    return ajuste($db, 'avisos_trabajadores') !== 'no';
+}
+
+// Un solo aviso a toda la plantilla (al terminar de subir el cuadrante, en vez de un correo por cada cambio).
+function anunciar_cambios(PDO $db, array $yo, string $texto): int
+{
+    $n = 0;
+    $clave = 'general:' . ahora();
+    foreach ($db->query("SELECT id FROM usuarios WHERE activo = 1 AND rol = 'empleado'")->fetchAll(PDO::FETCH_COLUMN) as $id) $n += (int)notificar($db, (int)$id, $clave, $texto, 'calendario', true);
+    auditar($db, (int)$yo['id'], 'aviso_general', "personas=$n");
+    return $n;
 }
 
 // Quién resuelve las solicitudes de $u: su responsable o, si no tiene, los administradores.

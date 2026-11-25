@@ -52,6 +52,23 @@ cabecera($yo['rol'] === 'responsable' ? 'Mi equipo' : 'Personas', $yo);
 </form>
 <?php endforeach; endif ?>
 
+<?php
+// Pausas que piden justificante (últimos 30 días): las que faltan y las subidas.
+$ids_equipo = array_column(array_filter(equipo_de(db(), $yo), fn($p) => $p['activo']), null, 'id');
+$sin_j = array_filter(pausas_sin_justificante(db(), null, gmdate('Y-m-d H:i:s', strtotime('-30 days'))), fn($x) => isset($ids_equipo[$x['usuario_id']]));
+$con_j = array_filter(consulta(db(), "SELECT j.*, f.momento_utc, m.nombre AS motivo FROM justificantes_pausa j JOIN fichajes f ON f.id = j.fichaje_id JOIN motivos_pausa m ON m.id = f.motivo_id
+    WHERE f.momento_utc >= ? ORDER BY f.momento_utc DESC", [gmdate('Y-m-d H:i:s', strtotime('-30 days'))])->fetchAll(), fn($x) => isset($ids_equipo[$x['usuario_id']]));
+if ($sin_j || $con_j): ?>
+<h2>Justificantes de pausas (30 días)</h2>
+<table>
+  <tr><th>Persona</th><th>Pausa</th><th>Fecha</th><th>Justificante</th></tr>
+  <?php foreach ($sin_j as $x): ?><tr><td><?= e(nombre($ids_equipo[$x['usuario_id']])) ?></td><td><?= e($x['motivo']) ?></td><td><?= local($x['momento_utc'], 'd/m H:i') ?></td>
+    <td><?= $x['vence_utc'] < ahora() ? '<span class="pildora mal">Fuera de plazo</span>' : '<span class="pildora pendiente">Pendiente</span>' ?></td></tr><?php endforeach ?>
+  <?php foreach ($con_j as $x): ?><tr><td><?= e(nombre($ids_equipo[$x['usuario_id']])) ?></td><td><?= e($x['motivo']) ?></td><td><?= local($x['momento_utc'], 'd/m H:i') ?></td>
+    <td><a href="?p=archivo&jp=<?= e($x['fichaje_id']) ?>">Ver</a> <small>(subido <?= local($x['subido_utc'], 'd/m H:i') ?>)</small></td></tr><?php endforeach ?>
+</table>
+<?php endif ?>
+
 <?php if ($pendientes): ?>
 <h2>Correcciones pendientes</h2>
 <?php foreach ($pendientes as $c): ?>

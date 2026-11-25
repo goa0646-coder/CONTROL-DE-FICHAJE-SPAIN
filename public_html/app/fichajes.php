@@ -195,3 +195,42 @@ function purgar_gps(PDO $db, ?string $ahora = null): int
     $s->execute([$ahora ?? gmdate('Y-m-d H:i:s')]);
     return $s->rowCount();
 }
+
+// Pausas con motivo que pide justificante (médico, asunto personal…) y aún sin él. $uid = null: de todo el mundo.
+// Plazo: 1 día desde el inicio de la pausa. Devuelve [id, usuario_id, momento_utc, motivo, vence_utc].
+function pausas_sin_justificante(PDO $db, ?int $uid = null, ?string $desde_utc = null): array
+{
+    return consulta($db, "SELECT f.id, f.usuario_id, f.momento_utc, m.nombre AS motivo, DATE_ADD(f.momento_utc, INTERVAL 1 DAY) AS vence_utc
+        FROM fichajes f JOIN motivos_pausa m ON m.id = f.motivo_id
+        WHERE f.tipo = 'pausa_inicio' AND m.justificante = 1 AND " . NO_ANULADO . "
+          AND NOT EXISTS (SELECT 1 FROM justificantes_pausa j WHERE j.fichaje_id = f.id)
+          AND (? IS NULL OR f.usuario_id = ?) AND f.momento_utc >= ? ORDER BY f.momento_utc",
+        [$uid, $uid, $desde_utc ?? gmdate('Y-m-d H:i:s', strtotime('-60 days'))])->fetchAll();
+}
+
+// $guardar: guarda el archivo subido y devuelve [nombre en disco, nombre original] (solo se llama si la pausa lo admite).
+function justificar_pausa(PDO $db, array $u, int $fichaje, callable $guardar): void
+{
+    $p = array_values(array_filter(pausas_sin_justificante($db, (int)$u['id'], '2000-01-01'), fn($x) => $x['id'] == $fichaje))[0] ?? throw new DomainException('Esa pausa no necesita justificante o ya lo tiene.');
+    [$nombre, $original] = $guardar();
+    consulta($db, 'INSERT INTO justificantes_pausa (fichaje_id, usuario_id, archivo, nombre_original, subido_utc) VALUES (?, ?, ?, ?, ?)',
+        [$fichaje, $u['id'], $nombre, mb_substr(basename($original), 0, 200), ahora()]);
+    auditar($db, (int)$u['id'], 'justificante_pausa', "fichaje=$fichaje");
+    avisar_aprobadores($db, $u, "justif_ok:$fichaje", nombre($u) . " ha subido el justificante de su pausa ({$p['motivo']}) del " . local($p['momento_utc'], 'd/m H:i') . '.', 'equipo');
+}
+
+// Cron: al día de la pausa sin justificante, aviso a la persona y a quien aprueba (una vez cada uno).
+function revisar_justificantes(PDO $db, ?string $ahora = null): int
+{
+    $ahora ??= ahora();
+    $n = 0;
+    foreach (pausas_sin_justificante($db) as $p) {
+        if ($p['vence_utc'] > $ahora) continue;
+        $u = usuario($db, (int)$p['usuario_id']);
+        if (!$u || !$u['activo']) continue;
+        $cuando = local($p['momento_utc'], 'd/m H:i');
+        notificar($db, (int)$u['id'], "justif:{$p['id']}", "Falta el justificante de tu pausa ({$p['motivo']}) del $cuando. Súbelo en Fichar.", 'fichar');
+        foreach (aprobadores($db, $u) as $a) $n += (int)notificar($db, $a, "justif_falta:{$p['id']}", nombre($u) . " no ha subido el justificante de su pausa ({$p['motivo']}) del $cuando.", 'equipo');
+    }
+    return $n;
+}

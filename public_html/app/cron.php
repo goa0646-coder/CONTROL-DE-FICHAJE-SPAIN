@@ -10,4 +10,5 @@ cerrar_jornadas(db());
 revisar_avisos(db());
 recordar_firmas(db());
 revisar_ratios(db());
+revisar_justificantes(db());
 if ($n = purgar_gps(db())) auditar(db(), null, 'purga_gps', "coordenadas borradas: $n");

@@ -569,3 +569,8 @@ button.pequeno, .boton.pequeno { min-height: 32px; padding: .25rem .7rem; font-s
   .p-calendario .cifras span { font-size: .66rem; line-height: 1.2; }
   .p-calendario .cifras strong { font-size: 1.05rem; }
 }
+.aviso.info { background: color-mix(in srgb, var(--marca, #2563eb) 7%, var(--tarjeta)); border-color: color-mix(in srgb, var(--marca, #2563eb) 22%, transparent); color: var(--texto); }
+.aviso.justificar { flex-wrap: wrap; align-items: center; }
+.aviso.justificar span { flex: 1 1 14rem; }
+.aviso.justificar input[type=file] { flex: 1 1 12rem; max-width: 100%; }
+[data-contador] { font-variant-numeric: tabular-nums; }
