@@ -87,6 +87,12 @@ cabecera('Importar desde Excel', $yo);
 </form>
 <?php else: ?>
 <h2><?= e($plan['archivo']) ?></h2>
+<form method="post" enctype="multipart/form-data" class="tarjeta filtros">
+  <?= csrf_campo() ?>
+  <span class="nota">¿No es el archivo bueno? Sube otro: sustituye a este en la revisión. Al importar, lo nuevo corrige lo anterior (no se duplica nada).</span>
+  <label>Otro archivo <input type="file" name="archivo" accept=".xlsx,.xls,.csv,.txt" required></label>
+  <button name="que" value="leer" class="secundario">Revisar este otro</button>
+</form>
 <div class="cifras">
   <?php foreach ($plan['secciones'] as $sec => $s): $mal = $sec === 'cuadrante' ? array_sum($s['resumen']['dudas']) + array_sum($s['resumen']['sin_persona']) : count(array_filter($s['filas'], fn($f) => !empty($f['errores']) || ($f['estado'] ?? '') === 'error')); ?>
   <div><span><?= e($titulos[$sec]) ?></span><strong><?= $sec === 'cuadrante' ? array_sum($s['resumen']['cuenta']) . ' días' : count($s['filas']) - $mal ?></strong><?= $mal ? '<span class="error">' . $mal . ' con errores</span>' : '' ?></div>
