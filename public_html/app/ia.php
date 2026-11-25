@@ -70,6 +70,7 @@ function ia_respuesta(array $r): array
 function ia_leer(string $tarea, ?array $f): array
 {
     if (!ia_activa()) throw new DomainException('Falta la clave de Gemini en config-inda.php.');
+    if (!ia_permitida(usuario_actual())) throw new DomainException('No disponible.');
     if (!$f || ($f['error'] ?? 1) !== UPLOAD_ERR_OK || $f['size'] > 15 * 1024 * 1024) throw new DomainException('Elige un PDF o una foto (máximo 15 MB).');
     $mime = (new finfo(FILEINFO_MIME_TYPE))->file($f['tmp_name']);
     if (!in_array($mime, ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'], true)) throw new DomainException('Solo PDF o fotos (JPG, PNG, WEBP, HEIC).');

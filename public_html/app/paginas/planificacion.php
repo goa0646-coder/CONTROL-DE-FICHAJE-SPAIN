@@ -91,13 +91,14 @@ if (es_post() && in_array($_POST['que'] ?? '', ['generar', 'publicar', 'descarta
             aviso('Elige personas y un periodo de hasta dos meses.', 'error');
             redirigir('planificacion', ['semana' => $lunes]);
         }
-        $res = planificar(db(), $gente, $d, $h); // ratio exacto: ni uno más ni uno menos por turno
+        $cal = isset($_POST['calidad']) && ve_valoraciones(db(), $yo) ? notas_calidad(db(), $yo, $gente) : null;
+        $res = planificar(db(), $gente, $d, $h, ['calidad' => $cal]); // ratio exacto: ni uno más ni uno menos por turno
         $plan = $res['plan'];
         [$mal, $huecos] = $probar($plan, false);
         // Motivo de cada turno sin cubrir (el primero que dio el generador).
         $motivos = [];
         foreach ($res['faltan'] as $x) $motivos[$x[1]] ??= $x[4];
-        $_SESSION['borrador'] = ['plan' => $plan, 'desde' => $d, 'hasta' => $h, 'mal' => $mal, 'huecos' => $huecos, 'motivos' => $motivos, 'quien' => $res['quien']];
+        $_SESSION['borrador'] = ['plan' => $plan, 'desde' => $d, 'hasta' => $h, 'mal' => $mal, 'huecos' => $huecos, 'motivos' => $motivos, 'quien' => $res['quien'], 'calidad' => $cal ? $res['calidad_baja'] : null];
         redirigir('planificacion', ['semana' => date('Y-m-d', strtotime('monday this week', strtotime($d)))]);
     }
     $b = $_SESSION['borrador'] ?? null;
@@ -207,6 +208,11 @@ cabecera('Planificación', $yo);
   </table>
   <p class="nota">Letra del turno (pasa el ratón para ver turno y puesto). · = libre (descanso). Las vacaciones, bajas y permisos salen con su color y no cuentan como descanso. Cada turno lleva exactamente las personas de su ratio (ni una más ni una menos), repartiendo de forma justa y respetando bajas, vacaciones, descansos, horas semanales y un máximo de 5 días seguidos.</p>
   <?php if (!empty($b['quien'])): ?><p class="nota"><b>Quién hace cada turno con mínimo:</b> <?= e(implode(' · ', array_map(fn($hid, $q) => $hl[$hid]['nombre'] . ' → ' . $q, array_keys($b['quien']), $b['quien']))) ?>. Se decide por el departamento del turno, por quién lo ha hecho antes o por su nombre; cámbialo en Turnos o en la ficha de cada persona (departamento y puesto).</p><?php endif ?>
+  <?php if (!empty($b['calidad']) && ve_valoraciones(db(), $yo)): $hl0 = horarios(db()); ?>
+  <details class="aviso"><summary>Calidad: <?= count($b['calidad']) ?> turnos no llegan a 3★ de media (no había combinación mejor)</summary>
+    <?php foreach (array_slice($b['calidad'], 0, 40) as [$f, $h, $m]): ?><p class="nota"><?= date('d/m', strtotime($f)) ?> · <?= e($hl0[$h]['nombre'] ?? '') ?> · <?= $m ?>★</p><?php endforeach ?>
+  </details>
+  <?php elseif (is_array($b['calidad'] ?? null) && ve_valoraciones(db(), $yo)): ?><p class="nota">Calidad: todos los turnos (salvo noches) llegan a 3★ de media.</p><?php endif ?>
   <?php if ($b['huecos']):
       $por = [];
       foreach ($b['huecos'] as $x) { $k = $x[3] > 0 ? 'faltan' : 'sobran'; $por[$x[1]][$k] = ($por[$x[1]][$k] ?? 0) + abs($x[3]); $por[$x[1]]['dias_' . $k][$x[0]] = true; } ?>
@@ -351,6 +357,7 @@ $dia = fn($f) => DIAS[(int)date('N', strtotime($f))] . ' ' . date('d/m', strtoti
   <details><summary>Personas (todas por defecto)</summary>
     <?php foreach ($personas as $p): ?><label><input type="checkbox" name="personas[]" value="<?= e($p['id']) ?>" checked> <?= e(nombre($p)) ?></label><?php endforeach ?>
   </details>
+  <?php if (ve_valoraciones(db(), $yo)): ?><label><input type="checkbox" name="calidad" value="1"> Equilibrar calidad (media ≥ 3★ por turno, salvo noches)</label><?php endif ?>
   <button name="que" value="generar">Generar propuesta</button>
 </form>
 

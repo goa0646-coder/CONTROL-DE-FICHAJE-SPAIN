@@ -33,6 +33,7 @@ if (es_post()) {
     } catch (DomainException $e) {
         aviso($e->getMessage(), 'error');
     }
+    if ($v = (int)($_POST['volver_u'] ?? 0)) redirigir('usuarios', ['u' => $v]);
     redirigir('documentos');
 }
 $mios = documentos_de(db(), (int)$yo['id']);

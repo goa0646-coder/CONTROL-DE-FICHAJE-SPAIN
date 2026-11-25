@@ -38,11 +38,12 @@ if (es_post() && isset($_POST['quitar_foto'])) {
     redirigir('usuarios', ['u' => $id]);
 }
 
-if (es_post() && isset($_POST['valorar'])) {
-    $id = (int)$_POST['valorar'];
+if (es_post() && (isset($_POST['valorar']) || isset($_POST['apuntar']))) {
+    $id = (int)($_POST['valorar'] ?? $_POST['apuntar']);
     try {
-        valorar(db(), $yo, $id, (int)($_POST['estrellas'] ?? 0), $_POST['nota'] ?? '');
-        aviso('Valoración guardada.');
+        if (isset($_POST['apuntar'])) apuntar(db(), $yo, $id, $_POST['tipo'] ?? '', $_POST['fecha'] ?? '', $_POST['texto'] ?? '');
+        else valorar_apartados(db(), $yo, $id, (array)($_POST['a'] ?? []), $_POST['nota'] ?? '');
+        aviso(isset($_POST['apuntar']) ? 'Apunte guardado.' : 'Valoración guardada.');
     } catch (DomainException $e) {
         aviso($e->getMessage(), 'error');
     }
@@ -198,16 +199,53 @@ cabecera($editando ? ($u['id'] ? nombre($u) : 'Nueva persona') : 'Usuarios', $yo
   <div class="pie-form"><button>Guardar</button> <a class="boton secundario" href="?p=usuarios">Cancelar</a></div>
 </form>
 
-<?php if ($u['id'] && $u['rol'] !== 'inspeccion' && ve_valoraciones(db(), $yo)): $va = valoraciones(db(), $yo, (int)$u['id']); ?>
-<form method="post" class="tarjeta">
-  <?= csrf_campo() ?>
-  <h2>Calidad <span class="estrellas"><?= estrellas($va['media']) ?></span> <small class="nota"><?= $va['media'] !== null ? $va['media'] . ' de media · ' . count($va['lista']) . ' valoraciones' : 'sin valorar' ?> · solo lo ves tú</small></h2>
-  <div class="filtros">
-    <label>Estrellas <select name="estrellas"><?= opciones([5 => '★★★★★ 5', 4 => '★★★★☆ 4', 3 => '★★★☆☆ 3', 2 => '★★☆☆☆ 2', 1 => '★☆☆☆☆ 1'], 5) ?></select></label>
+<?php if ($u['id'] && $u['rol'] !== 'inspeccion' && ve_valoraciones(db(), $yo)): $ev = evaluacion(db(), $yo, $u); $va = valoraciones(db(), $yo, (int)$u['id']); $ap = apuntes_de(db(), $yo, (int)$u['id']);
+    $sel = fn($n) => '<select name="a[' . $n . ']">' . opciones([5 => '★★★★★', 4 => '★★★★☆', 3 => '★★★☆☆', 2 => '★★☆☆☆', 1 => '★☆☆☆☆'], 3) . '</select>'; ?>
+<div class="tarjeta">
+  <h2>Evaluación <span class="estrellas"><?= estrellas($ev['final']) ?></span> <small class="nota"><?= $ev['final'] ?? 'sin datos' ?> · solo lo ves tú</small></h2>
+  <p class="nota">40 % objetiva (últimos 6 meses) + 60 % tu valoración (último año), menos 1★ por cada 2 apuntes del último año (<?= $ev['apuntes'] ?>). Las bajas, vacaciones y permisos aprobados no cuentan.</p>
+  <table>
+    <tr><th colspan="2">Objetiva <?= $ev['media_objetiva'] ?? '—' ?></th><th colspan="2">Tu valoración <?= $ev['subjetiva'] ?? '—' ?></th></tr>
+    <?php $ob = ['puntualidad' => 'Puntualidad', 'fichaje' => 'Fichaje correcto', 'confianza' => 'Confianza (faltas sin justificar, justificantes)', 'colaboracion' => 'Colaboración (cubre y cambia turnos)'];
+    $ks = array_keys($ob); $as = array_keys(APARTADOS);
+    for ($i = 0; $i < 5; $i++): ?>
+    <tr><td><?= isset($ks[$i]) ? e($ob[$ks[$i]]) : '' ?></td><td><?= isset($ks[$i]) ? estrellas($ev['objetiva'][$ks[$i]] === null ? null : (float)$ev['objetiva'][$ks[$i]]) : '' ?></td>
+      <td><?= e(APARTADOS[$as[$i]]) ?></td><td><?= estrellas($ev['apartados'][$as[$i]]) ?></td></tr>
+    <?php endfor ?>
+  </table>
+  <form method="post"><?= csrf_campo() ?>
+    <h3>Valorar ahora</h3>
+    <div class="filtros"><?php foreach (APARTADOS as $k => $n): ?><label><?= e($n) ?> <?= $sel($k) ?></label><?php endforeach ?></div>
     <label>Nota (opcional) <input name="nota" maxlength="500"></label>
-    <button name="valorar" value="<?= e($u['id']) ?>">Valorar</button>
-  </div>
+    <button name="valorar" value="<?= e($u['id']) ?>">Guardar valoración</button>
+  </form>
+  <form method="post"><?= csrf_campo() ?>
+    <h3>Apunte</h3>
+    <div class="filtros">
+      <label>Tipo <select name="tipo"><?= opciones(TIPOS_APUNTE, 'incidencia') ?></select></label>
+      <label>Fecha <input type="date" name="fecha" value="<?= e(local(ahora(), 'Y-m-d')) ?>"></label>
+      <label>Qué pasó <input name="texto" maxlength="1000" required></label>
+      <button name="apuntar" value="<?= e($u['id']) ?>">Apuntar</button>
+    </div>
+  </form>
+  <?php foreach (array_slice($ap, 0, 20) as $x): ?><p class="nota"><strong><?= e(TIPOS_APUNTE[$x['tipo']]) ?></strong> · <?= date('d/m/Y', strtotime($x['fecha'])) ?> · <?= e($x['texto']) ?></p><?php endforeach ?>
   <?php foreach (array_slice($va['lista'], 0, 10) as $x): ?><p class="nota"><?= estrellas((float)$x['estrellas']) ?> · <?= e(local($x['creado_utc'], 'd/m/Y')) ?><?= $x['nota'] !== '' ? ' · ' . e($x['nota']) : '' ?></p><?php endforeach ?>
+</div>
+<?php endif ?>
+<?php if ($u['id'] && $u['rol'] !== 'inspeccion'): $docs = consulta(db(), 'SELECT * FROM documentos WHERE usuario_id = ? AND activo = 1 ORDER BY subido_utc DESC', [$u['id']])->fetchAll(); ?>
+<form method="post" action="?p=documentos" enctype="multipart/form-data" class="tarjeta">
+  <?= csrf_campo() ?><input type="hidden" name="que" value="subir"><input type="hidden" name="para" value="personas"><input type="hidden" name="personas[]" value="<?= e($u['id']) ?>"><input type="hidden" name="volver_u" value="<?= e($u['id']) ?>">
+  <h2>Contrato y documentos</h2>
+  <?php foreach ($docs as $d): ?><p><a href="?p=archivo&d=<?= e($d['id']) ?>"><?= e($d['titulo']) ?></a> <small class="nota"><?= local($d['subido_utc'], 'd/m/Y') ?></small></p><?php endforeach ?>
+  <?php if (!$docs): ?><p class="nota">Aún no tiene documentos.</p><?php endif ?>
+  <div class="filtros">
+    <label>Título <input name="titulo" value="Contrato de trabajo" maxlength="150"></label>
+    <label>Archivo <input type="file" name="archivo" required></label>
+    <label><input type="checkbox" name="firma"> Que lo firme</label>
+    <label><input type="checkbox" name="por_email"> Avisarle por email</label>
+    <button>Subir</button>
+  </div>
+  <p class="nota">Lo ve la persona en «Documentos» y cualquier administrador.</p>
 </form>
 <?php endif ?>
 <?php if ($u['id'] && $u['rol'] !== 'inspeccion'):
