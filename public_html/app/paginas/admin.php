@@ -26,6 +26,22 @@ if (es_post()) {
         auditar(db(), (int)$yo['id'], 'avisos_trabajadores', isset($_POST['avisar']) ? 'si' : 'no');
         aviso(isset($_POST['avisar']) ? 'Los trabajadores recibirán los avisos.' : 'Avisos a los trabajadores en pausa: no se envían correos.');
         redirigir('admin');
+    } elseif ($que === 'seguridad') {
+        try {
+            $c = isset($_POST['cifrado']);
+            if ($c !== cifrado_activo(db())) {
+                $n = cambiar_cifrado(db(), $c);
+                auditar(db(), (int)$yo['id'], 'cifrado_datos', ($c ? 'activado' : 'desactivado') . " fichas=$n");
+            }
+            if (isset($_POST['dos_pasos']) !== (ajuste(db(), 'dos_pasos') === 'si')) {
+                cambiar_dos_pasos(db(), isset($_POST['dos_pasos']));
+                auditar(db(), (int)$yo['id'], 'dos_pasos', isset($_POST['dos_pasos']) ? 'activado' : 'desactivado');
+            }
+            aviso('Seguridad guardada.');
+        } catch (DomainException $e) {
+            aviso($e->getMessage(), 'error');
+        }
+        redirigir('admin');
     } elseif ($que === 'pausa_si' || $que === 'pausa_no') {
         $si = $que === 'pausa_si';
         $n = consulta(db(), "UPDATE usuarios SET pausa_auto_min = ? WHERE activo = 1 AND rol <> 'inspeccion'", [$si ? 15 : 0])->rowCount();
@@ -226,6 +242,16 @@ cabecera('Empresa y centros', $yo);
 </form>
 
 <?php $r = reglas(db()); $con = (int)db()->query("SELECT COUNT(*) FROM usuarios WHERE activo = 1 AND rol <> 'inspeccion' AND pausa_auto_min > 0")->fetchColumn(); ?>
+<form method="post" class="tarjeta">
+  <?= csrf_campo() ?>
+  <h2>Seguridad de los datos</h2>
+  <label><input type="checkbox" name="cifrado" <?= cifrado_activo(db()) ? 'checked' : '' ?>> Cifrar DNI, nº de la Seguridad Social y fecha de nacimiento en la base de datos</label>
+  <p class="nota">Aunque alguien copie la base de datos, no podrá leerlos. La clave se guarda en el archivo <code>clave-datos-inda.key</code>, junto a config-inda.php (fuera de public_html). <strong>Haz copia de ese archivo</strong>: sin él, esos tres datos no se pueden recuperar. Se puede desactivar cuando quieras y todo vuelve a quedar en claro.</p>
+  <label><input type="checkbox" name="dos_pasos" <?= ajuste(db(), 'dos_pasos') === 'si' ? 'checked' : '' ?>> Verificación en dos pasos para administración</label>
+  <p class="nota">Al entrar, cada administrador escribe además un código de su móvil (Google Authenticator, Microsoft Authenticator…). La primera vez INDA le enseña cómo darla de alta. Si alguien pierde el móvil, otro administrador se la quita desde su ficha. Emergencia: <code>'sin_dos_pasos' => true</code> en config-inda.php la desactiva.<?= !empty(config()['sin_dos_pasos']) ? ' <strong>Ahora está desactivada por config-inda.php.</strong>' : '' ?></p>
+  <button name="que" value="seguridad" class="secundario">Guardar</button>
+</form>
+
 <form method="post" class="tarjeta">
   <?= csrf_campo() ?>
   <h2>Pausa automática de 15 minutos</h2>

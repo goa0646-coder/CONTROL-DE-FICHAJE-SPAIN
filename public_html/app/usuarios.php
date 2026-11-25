@@ -4,7 +4,7 @@ function usuario(PDO $db, int $id): ?array
 {
     $s = $db->prepare('SELECT * FROM usuarios WHERE id = ?');
     $s->execute([$id]);
-    return $s->fetch() ?: null;
+    return ($u = $s->fetch()) ? en_claro($u) : null;
 }
 
 function centro(PDO $db, int $id): ?array

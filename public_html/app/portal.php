@@ -34,7 +34,7 @@ function firmar_documento(PDO $db, array $u, int $id, string $clave): string
 // ¿De quién es esta nómina? Primero por DNI (exacto) y, si no, por nombre completo (mismas palabras, en cualquier orden).
 function emparejar_nomina(array $d, array $personas): ?array
 {
-    if ($d['dni'] !== '') foreach ($personas as $p) if (strtoupper($p['dni']) === $d['dni']) return ['uid' => (int)$p['id'], 'por' => 'dni'];
+    if ($d['dni'] !== '') foreach ($personas as $p) if (strtoupper((string)descifrar($p['dni'])) === $d['dni']) return ['uid' => (int)$p['id'], 'por' => 'dni'];
     $palabras = fn($s) => array_filter(explode(' ', preg_replace('/[^\p{L}\p{N}]+/u', ' ', normalizar($s))), fn($w) => strlen($w) > 2); // «NÚÑEZ, JOSÉ» también vale
     $leido = $palabras($d['nombre']);
     if (!$leido) return null;

@@ -194,7 +194,7 @@ function aplicar_libro(PDO $db, array $yo, array $plan, bool $actualizar): array
         [$n, $mal] = [0, 0];
         foreach ($ok('ausencias') as $f) {
             $u = ($f['email'] ?? '') !== '' ? consulta($db, 'SELECT * FROM usuarios WHERE email = ?', [mb_strtolower($f['email'])])->fetch()
-                : consulta($db, 'SELECT * FROM usuarios WHERE dni = ?', [strtoupper(preg_replace('/[^0-9A-Za-z]/', '', $f['dni']))])->fetch();
+                : usuario_por_dni($db, $f['dni']);
             $desde = fecha_iso($f['desde']);
             $hasta = fecha_iso($f['hasta'] ?? '') ?: $desde;
             $tid = $tipos[normalizar($f['tipo'])] ?? null;
@@ -284,7 +284,7 @@ function hojas_actuales(PDO $db): array
         ['Tipos de ausencia que existen ahora: ' . implode(', ', array_column(tipos_ausencia($db), 'nombre'))],
     ]];
     $h['Personas'] = [['Nombre', 'Apellidos', 'Email', 'DNI', 'Teléfono', 'Nº Seguridad Social', 'Fecha de nacimiento', 'Nº de empleado', 'Centro', 'Departamento', 'Puesto', 'Horario', 'Responsable', 'Rol', 'Usuario suspendido']];
-    foreach ($todos as $u) $h['Personas'][] = [$u['nombre'], $u['apellidos'], $u['email'], $u['dni'], $u['telefono'] ?? '', $u['nss'] ?? '',
+    foreach (array_map('en_claro', $todos) as $u) $h['Personas'][] = [$u['nombre'], $u['apellidos'], $u['email'], $u['dni'], $u['telefono'] ?? '', $u['nss'] ?? '',
         !empty($u['fecha_nacimiento']) ? date('d/m/Y', strtotime($u['fecha_nacimiento'])) : '', $u['num_empleado'] ?? '', $centros[$u['centro_id']] ?? '', $deps[$u['departamento_id']] ?? '',
         $pts[($pp[$u['id']] ?? [0])[0]] ?? '', $hors[$u['horario_id']]['nombre'] ?? '', isset($por_id[$u['responsable_id']]) ? nombre($por_id[$u['responsable_id']]) : '', $roles[$u['rol']] ?? 'Empleado', $u['activo'] ? 'No' : 'Si'];
     $h['Turnos'] = [['Nombre', 'Letra', 'Color', 'Entrada', 'Salida', 'Horas', 'Departamento']];
