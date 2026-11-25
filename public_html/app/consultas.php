@@ -163,11 +163,14 @@ function preguntar_ia(PDO $db, array $yo, string $pregunta, array $historial = [
             $txt = trim(implode("\n", array_filter(array_column($partes, 'text'))));
             return [$txt !== '' ? $txt : 'No he podido responder. Prueba a preguntarlo de otra forma.', $hechas];
         }
+        // Al leer el JSON, {} se convierte en [] y Gemini rechaza «args: []»: se devuelve como objeto vacío.
+        foreach ($partes as &$pt) if (isset($pt['functionCall']) && empty($pt['functionCall']['args'])) $pt['functionCall']['args'] = new stdClass();
+        unset($pt);
         $contenidos[] = ['role' => 'model', 'parts' => $partes];
         $resp = [];
         foreach ($llamadas as $c) {
             $hechas[] = $c['name'] . ' ' . json_encode($c['args'] ?? [], JSON_UNESCAPED_UNICODE);
-            $resp[] = ['functionResponse' => ['name' => $c['name'], 'response' => ejecutar_consulta($db, $yo, $c['name'], (array)($c['args'] ?? []))]];
+            $resp[] = ['functionResponse' => ['name' => $c['name'], 'response' => (object)ejecutar_consulta($db, $yo, $c['name'], (array)($c['args'] ?? []))]];
         }
         $contenidos[] = ['role' => 'user', 'parts' => $resp];
     }

@@ -13,7 +13,7 @@ class AsistenteIaTest extends Base
         $falso = function (array $cuerpo) use (&$vistos) {
             $ultimo = end($cuerpo['contents']);
             if (isset($ultimo['parts'][0]['functionResponse'])) {
-                $vistos[] = $ultimo['parts'][0]['functionResponse']['response'];
+                $vistos[] = (array)$ultimo['parts'][0]['functionResponse']['response'];
                 return ['candidates' => [['content' => ['parts' => [['text' => 'Trabajaron el domingo: ' . count($vistos[0]['personas'])]]]]]];
             }
             $this->assertNotEmpty($cuerpo['tools'][0]['functionDeclarations']);
@@ -30,5 +30,20 @@ class AsistenteIaTest extends Base
         $x = ejecutar_consulta($this->db, $admin, 'horas_trabajadas', ['desde' => '2026-10-04', 'hasta' => '2026-10-04', 'persona' => $u['apellidos']]);
         $this->assertStringNotContainsString('@', json_encode($x));
         $this->assertArrayHasKey('cambios_propuestos', ejecutar_consulta($this->db, $admin, 'propuesta_cubrir', ['desde' => '2099-10-05', 'hasta' => '2099-10-06']));
+    }
+
+    public function testConsultaSinParametrosVaComoObjeto(): void
+    {
+        $admin = $this->usuario(['rol' => 'admin']);
+        $cuerpos = [];
+        $falso = function (array $c) use (&$cuerpos) {
+            $cuerpos[] = json_encode($c);
+            return count($cuerpos) === 1 ? ['candidates' => [['content' => ['parts' => [['functionCall' => ['name' => 'trabajando_ahora', 'args' => []]]]]]]]
+                : ['candidates' => [['content' => ['parts' => [['text' => 'Nadie.']]]]]];
+        };
+        [$r] = preguntar_ia($this->db, $admin, '¿Quién trabaja ahora?', [], $falso);
+        $this->assertSame('Nadie.', $r);
+        $this->assertStringContainsString('"args":{}', $cuerpos[1]);
+        $this->assertStringNotContainsString('"args":[]', $cuerpos[1]);
     }
 }
