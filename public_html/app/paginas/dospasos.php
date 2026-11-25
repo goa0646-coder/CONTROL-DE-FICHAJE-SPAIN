@@ -36,16 +36,19 @@ cabecera('Verificación en dos pasos');
   <?php if ($nuevo): ?>
   <h2>Activa la verificación en dos pasos</h2>
   <ol>
-    <li>Instala en tu móvil una app de autenticación (Google Authenticator, Microsoft Authenticator…).</li>
-    <li>Desde el móvil, pulsa <a href="<?= e($enlace) ?>">este enlace</a>, o en la app elige «Introducir clave» y escribe: <strong><code><?= e(trim(chunk_split($secreto, 4, ' '))) ?></code></strong></li>
-    <li>Escribe aquí el código de 6 cifras que te muestra.</li>
+    <li>Instala en tu móvil Google Authenticator (o Microsoft Authenticator).</li>
+    <li>En la app pulsa <strong>+</strong> → <strong>Escanear código QR</strong> y apunta a este código:</li>
   </ol>
+  <div class="qr" data-qr="<?= e($enlace) ?>"></div>
+  <p class="nota">¿Estás entrando desde el mismo móvil? Pulsa <a href="<?= e($enlace) ?>">este enlace</a>, o en la app elige «Introducir clave de configuración» y escribe: <strong><code><?= e(trim(chunk_split($secreto, 4, ' '))) ?></code></strong></p>
+  <ol start="3"><li>Escribe aquí el código de 6 cifras que te muestra la app.</li></ol>
   <?php else: ?>
   <h2>Código de verificación</h2>
   <p class="nota">Abre tu app de autenticación y escribe el código de INDA.</p>
   <?php endif ?>
   <label>Código <input name="codigo" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" maxlength="7" required autofocus></label>
   <button>Entrar</button>
-  <p class="nota">¿Has perdido el móvil? Otro administrador puede quitarte la app desde tu ficha.</p>
+  <p class="nota">Marca «Mantener la sesión abierta» al entrar y en este dispositivo no te lo volverá a pedir. ¿Has perdido el móvil? Otro administrador puede quitarte la app desde tu ficha.</p>
 </form>
+<?php if ($nuevo): ?><script src="assets/qrcode.js"></script><?php endif ?>
 <?php pie();
