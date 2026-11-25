@@ -53,7 +53,7 @@ if (es_post() && ($_POST['que'] ?? '') === 'ausencia') {
         $res = $hechas && isset($_POST['recalcular']) ? recubrir(db(), $d, $h, (int)$yo['id']) : null;
         db()->commit();
         $_SESSION['recalculo'] = $res ? ['persona' => implode(', ', $hechas), 'desde' => $d, 'hasta' => $h, 'nuevos' => $res['nuevos'], 'faltan' => $res['faltan']] : null;
-        aviso(count($hechas) . ' ausencias guardadas' . ($res ? ': ' . count($res['nuevos']) . ' turnos nuevos para cubrir los mínimos' : '') . '.' . ($saltadas ? ' No se han puesto: ' . implode(' ', $saltadas) : ''), $saltadas ? 'error' : 'ok');
+        aviso(count($hechas) . ' ausencias guardadas' . ($res ? ': ' . count($res['nuevos']) . ' turnos nuevos para cumplir los ratios' : '') . '.' . ($saltadas ? ' No se han puesto: ' . implode(' ', $saltadas) : ''), $saltadas ? 'error' : 'ok');
     } catch (DomainException $e) {
         if (db()->inTransaction()) db()->rollBack();
         aviso($e->getMessage(), 'error');

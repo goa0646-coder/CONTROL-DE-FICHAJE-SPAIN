@@ -55,6 +55,7 @@ function ejecutar_consulta(PDO $db, array $yo, string $nombre, array $a): array
                         if ($tarde > 10) $out[] = [$f, $p, 'entró ' . (int)$tarde . ' min tarde (' . local($x['entrada'], 'H:i') . ' y su turno era a las ' . substr($x['horario_entrada'], 0, 5) . ')'];
                     }
                     if ($x['abierta'] && $f < $hoy) $out[] = [$f, $p, 'no fichó la salida'];
+                    if ($x['pausa_obligatoria'] && $x['entrada'] && !$x['abierta'] && $x['pausas'] < $x['pausa_obligatoria']) $out[] = [$f, $p, 'hizo ' . $h($x['pausas']) . ' h de pausa y su turno pide ' . $h($x['pausa_obligatoria']) . ' h de comida'];
                     if ($x['entrada'] && !$x['teorico'] && !$x['ausencia']) $out[] = [$f, $p, 'trabajó ' . $h($x['trabajado']) . ' h sin turno ese día'];
                 }
                 foreach (consulta($db, "SELECT usuario_id, momento_utc FROM fichajes WHERE origen = 'automatico' AND tipo = 'salida' AND momento_utc BETWEEN ? AND ?", [a_utc("$desde 00:00:00"), a_utc(date('Y-m-d', strtotime("$hasta +1 day")) . ' 00:00:00')]) as $r) {
