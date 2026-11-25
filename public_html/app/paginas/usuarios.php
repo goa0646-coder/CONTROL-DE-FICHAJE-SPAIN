@@ -17,6 +17,18 @@ if (es_post() && isset($_POST['cambiar_estado'])) {
     redirigir('usuarios', array_intersect_key($_GET, ['ver' => 1, 'q' => 1]));
 }
 
+// Enviar por email el acceso (elegir contraseña) o un enlace para cambiarla; o el acceso a todos los que no han entrado nunca.
+if (es_post() && isset($_POST['enviar_acceso'])) {
+    $ids = $_POST['enviar_acceso'] === 'pendientes'
+        ? db()->query("SELECT id FROM usuarios WHERE activo = 1 AND ultimo_acceso_utc IS NULL AND rol <> 'inspeccion'")->fetchAll(PDO::FETCH_COLUMN)
+        : [(int)$_POST['enviar_acceso']];
+    $n = 0;
+    foreach ($ids as $id) if (($p = usuario(db(), (int)$id)) && $p['activo'] && $p['email']) $n += (int)enviar_bienvenida(db(), $p, isset($_POST['cambio']));
+    auditar(db(), (int)$yo['id'], 'acceso_enviado', 'personas=' . count($ids) . " enviados=$n");
+    aviso($n ? "Enviado a $n " . ($n === 1 ? 'persona' : 'personas') . '. El enlace vale 7 días.' : 'No se ha podido enviar: revisa Administración → Correo y Diagnóstico.', $n ? 'ok' : 'error');
+    redirigir('usuarios', count($ids) === 1 && $_POST['enviar_acceso'] !== 'pendientes' ? ['u' => (int)$ids[0]] : []);
+}
+
 // El admin puede retirar una foto de perfil inadecuada.
 if (es_post() && isset($_POST['quitar_foto'])) {
     $id = (int)$_POST['quitar_foto'];
@@ -126,6 +138,14 @@ cabecera($editando ? ($u['id'] ? nombre($u) : 'Nueva persona') : 'Usuarios', $yo
 <?php if (!empty($u['foto'])): ?>
 <form method="post" class="tarjeta con-avatar"><?= csrf_campo() ?><?= avatar($u, 'grande') ?> <button name="quitar_foto" value="<?= e($u['id']) ?>" class="secundario" data-confirmar="¿Retirar la foto de perfil de <?= e(nombre($u)) ?>?">Retirar foto</button></form>
 <?php endif ?>
+<?php if ($u['id']): ?>
+<form method="post" class="tarjeta filtros"><?= csrf_campo() ?>
+  <span><b>Acceso a INDA</b><br><small><?= $u['ultimo_acceso_utc'] ? 'Último acceso: ' . local($u['ultimo_acceso_utc']) : 'Todavía no ha entrado nunca' ?><?= $u['acceso_enviado_utc'] ? ' · acceso enviado el ' . local($u['acceso_enviado_utc']) : '' ?></small></span>
+  <button name="enviar_acceso" value="<?= e($u['id']) ?>" class="secundario pequeno">Enviar acceso por email</button>
+  <button name="enviar_acceso" value="<?= e($u['id']) ?>" class="secundario pequeno" onclick="this.form.insertAdjacentHTML('beforeend','<input type=hidden name=cambio value=1>')">Enviar enlace para cambiar contraseña</button>
+  <a class="boton secundario pequeno" href="?p=historial&u=<?= e($u['id']) ?>">Ver sus fichajes</a>
+</form>
+<?php endif ?>
 <form method="post" class="tarjeta ficha-persona">
   <?= csrf_campo() ?><input type="hidden" name="id" value="<?= e($u['id']) ?>">
   <h2><?= $u['id'] ? 'Datos de ' . e(nombre($u)) : 'Datos de la nueva persona' ?></h2>
@@ -191,13 +211,15 @@ cabecera($editando ? ($u['id'] ? nombre($u) : 'Nueva persona') : 'Usuarios', $yo
     <label><input type="search" name="q" value="<?= e($_GET['q'] ?? '') ?>" placeholder="Buscar por nombre, email o DNI" aria-label="Buscar"></label>
     <label><select name="ver" onchange="this.form.submit()" aria-label="Mostrar"><?= opciones(['activos' => "Activos ({$cuantos['activos']})", 'bajas' => "De baja ({$cuantos['bajas']})", 'todos' => 'Todos'], $ver) ?></select></label>
   </form>
-  <span class="botones-derecha"><a class="boton secundario" href="?p=importar">Importar desde Excel</a> <a class="boton" href="?p=usuarios&nuevo=1">+ Nueva persona</a></span>
+  <span class="botones-derecha"><?php $sin = (int)db()->query("SELECT COUNT(*) FROM usuarios WHERE activo = 1 AND ultimo_acceso_utc IS NULL AND rol <> 'inspeccion'")->fetchColumn(); if ($sin): ?><form method="post" style="display:inline"><?= csrf_campo() ?><button name="enviar_acceso" value="pendientes" class="secundario" data-confirmar="¿Enviar el email de acceso a las <?= $sin ?> personas que no han entrado nunca?">Enviar acceso a quien no ha entrado (<?= $sin ?>)</button></form><?php endif ?>
+    <a class="boton secundario" href="?p=importar">Importar desde Excel</a> <a class="boton" href="?p=usuarios&nuevo=1">+ Nueva persona</a></span>
 </div>
 <table>
-  <tr><th>Nombre</th><th>Rol</th><th>Centro</th><th>Email</th><th>Estado</th><th></th></tr>
+  <tr><th>Nombre</th><th>Rol</th><th>Centro</th><th>Email</th><th>Último acceso</th><th>Estado</th><th></th></tr>
   <?php foreach ($lista as $x): ?>
   <tr class="<?= $x['activo'] ? '' : 'anulado' ?>">
-    <td><span class="con-avatar"><?= avatar($x, 'mini') ?> <?= e(nombre($x)) ?></span></td><td><?= $roles[$x['rol']] ?></td><td><?= e($x['centro'] ?? '') ?></td><td><?= e($x['email']) ?></td>
+    <td><a class="con-avatar" href="?p=usuarios&u=<?= e($x['id']) ?>"><?= avatar($x, 'mini') ?> <?= e(nombre($x)) ?></a></td><td><?= $roles[$x['rol']] ?></td><td><?= e($x['centro'] ?? '') ?></td><td><?= e($x['email']) ?></td>
+    <td><small><?= !empty($x['ultimo_acceso_utc']) ? local($x['ultimo_acceso_utc'], 'd/m/Y H:i') : '<span class="error">Nunca</span>' ?></small></td>
     <td><span class="estado <?= $x['activo'] ? 'dentro' : 'fuera' ?>"><?= $x['activo'] ? 'Activo' : 'De baja' ?></span></td>
     <td class="acciones"><a href="?p=usuarios&u=<?= e($x['id']) ?>">Editar</a>
       <?php if ($x['id'] != $yo['id']): ?>

@@ -7,6 +7,7 @@ if (es_post()) {
     }
     session_regenerate_id(true);
     $_SESSION['uid'] = $r['id'];
+    consulta(db(), 'UPDATE usuarios SET ultimo_acceso_utc = ? WHERE id = ?', [ahora(), $r['id']]);
     if (isset($_POST['recordar']) && ($t = crear_dispositivo(db(), $r, $_SERVER['HTTP_USER_AGENT'] ?? ''))) poner_cookie_dispositivo($t);
     auditar(db(), (int)$r['id'], 'login');
     $volver = $_SESSION['volver'] ?? [];

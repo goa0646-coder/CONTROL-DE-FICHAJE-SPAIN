@@ -100,7 +100,7 @@ cabecera('Calendario', $yo);
       $cal = $cals[$p['id']];
       $detalle = $jefe || $p['id'] == $yo['id'];
       $mes_min = array_sum(array_map(fn($c) => $c['ausencia'] || $c['festivo'] ? 0 : $c['minutos'], $cal)); ?>
-  <tr><td class="persona"><span class="con-avatar"><?= avatar($p, 'mini') ?> <span class="quien-cal"><?= e(nombre($p)) ?>
+  <tr><td class="persona"><span class="con-avatar"><?= avatar($p, 'mini') ?> <span class="quien-cal"><?= $yo['rol'] === 'admin' ? '<a href="?p=usuarios&u=' . e($p['id']) . '" title="Abrir su ficha">' . e(nombre($p)) . '</a>' : e(nombre($p)) ?>
     <?php if ($jefe): ?><small><?= horas($mes_min * 60) ?> h<?= ($pp[$p['id']] ?? []) ? ' · ' . e(implode(', ', array_intersect_key($pts, array_flip($pp[$p['id']])))) : '' ?></small><?php endif ?></span></span></td>
     <?php foreach ($cal as $f => $c):
         $clase = ($f === $hoy ? 'hoy ' : '') . (!$c['laborable'] || $c['festivo'] ? 'libre ' : '');

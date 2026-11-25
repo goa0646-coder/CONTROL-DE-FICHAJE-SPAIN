@@ -9,6 +9,7 @@ if (es_post()) {
             auditar(db(), (int)$yo['id'], 'documento_firmado', 'documento=' . (int)$_POST['id'] . " hash=$h");
             aviso('Documento firmado.');
         } elseif ($que === 'subir' && $gestor) {
+            if (!isset($_POST['por_email'])) sin_correo(true);
             $titulo = trim($_POST['titulo'] ?? '') ?: throw new DomainException('Pon un título.');
             $para = $_POST['para'] ?? '';
             $uids = $para === 'todos' && $yo['rol'] === 'admin' ? [null] : array_map('intval', (array)($_POST['personas'] ?? []));
@@ -64,6 +65,7 @@ cabecera('Documentos', $yo);
   <select name="personas[]" multiple size="6"><?php foreach ($gente as $p): ?><option value="<?= e($p['id']) ?>"><?= e(nombre($p)) ?></option><?php endforeach ?></select>
   <?php if ($yo['rol'] === 'admin'): ?><label><input type="radio" name="para" value="todos"> A toda la plantilla</label><?php endif ?>
   <label><input type="checkbox" name="firma"> Pedir firma (leído y conforme)</label>
+  <label><input type="checkbox" name="por_email" value="1" checked> Avisar también por email</label>
   <button name="que" value="subir">Enviar</button>
 </form>
 <h2>Enviados</h2>

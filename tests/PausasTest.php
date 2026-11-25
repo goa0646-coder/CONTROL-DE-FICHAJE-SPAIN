@@ -40,4 +40,16 @@ class PausasTest extends Base
         consulta($this->db, 'REPLACE INTO ajustes VALUES (?, ?)', ['avisos_trabajadores', 'si']);
         $this->assertTrue(avisos_a_trabajadores($this->db));
     }
+
+    public function testEnvioSinEmailYAccesos(): void
+    {
+        $u = $this->usuario();
+        sin_correo(true);
+        $this->assertTrue(notificar($this->db, (int)$u['id'], 'x:' . uniqid(), 'Algo'), 'queda en la campana');
+        sin_correo(false);
+        $this->assertFalse(sin_correo());
+        $this->assertNull(usuario($this->db, (int)$u['id'])['ultimo_acceso_utc']);
+        enviar_bienvenida($this->db, $u, true);
+        $this->assertNotNull(usuario($this->db, (int)$u['id'])['acceso_enviado_utc']);
+    }
 }
