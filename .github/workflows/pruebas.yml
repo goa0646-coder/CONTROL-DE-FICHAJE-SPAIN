@@ -23,3 +23,31 @@ jobs:
       - run: vendor/bin/phpunit
         env:
           BD_HOST: 127.0.0.1
+
+  # Subida automática a Hostinger por FTP al cambiar master, solo si las pruebas pasan.
+  # Datos en GitHub → Settings → Secrets and variables → Actions: FTP_SERVIDOR, FTP_USUARIO, FTP_CLAVE
+  # (y FTP_CARPETA si no es «public_html/»). Sin esos datos no se sube nada. Nunca se suben config-inda.php ni datos.
+  subir:
+    needs: phpunit
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    env:
+      FTP_SERVIDOR: ${{ secrets.FTP_SERVIDOR }}
+    steps:
+      - name: ¿Hay datos de FTP?
+        id: hay
+        run: echo "si=$([ -n "$FTP_SERVIDOR" ] && echo 1 || echo 0)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        if: steps.hay.outputs.si == '1'
+      - uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        if: steps.hay.outputs.si == '1'
+        with:
+          server: ${{ secrets.FTP_SERVIDOR }}
+          username: ${{ secrets.FTP_USUARIO }}
+          password: ${{ secrets.FTP_CLAVE }}
+          local-dir: ./public_html/
+          server-dir: ${{ secrets.FTP_CARPETA || 'public_html/' }}
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/.DS_Store
