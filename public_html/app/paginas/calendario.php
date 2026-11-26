@@ -58,6 +58,7 @@ $hors = horarios(db());
 $pp = puestos_por_persona(db());
 cabecera('Calendario', $yo);
 ?>
+<?php if ($jefe): ?>
 <form class="filtros navegar-mes">
   <input type="hidden" name="p" value="calendario">
   <span class="mes-flechas"><a class="boton secundario" href="?p=calendario&mes=<?= $ant ?>&dep=<?= $dep ?>" aria-label="Mes anterior">‹</a>
@@ -67,6 +68,7 @@ cabecera('Calendario', $yo);
   <?php if ($jefe && $deps): ?><label><select name="dep"><?= opciones(['' => 'Todos los departamentos'] + $deps, $dep) ?></select></label><?php endif ?>
   <?php if ($jefe && $deps): ?><button>Ver</button><?php endif ?>
 </form>
+<?php endif ?>
 <?php if (!$jefe):
     $mio = $cals[$yo['id']];
     $trabajo = array_filter($mio, fn($c) => $c['turno'] > 0 && !$c['ausencia']);
@@ -78,18 +80,8 @@ cabecera('Calendario', $yo);
   <div><span>Vacaciones y permisos</span><strong><?= count($aus) ?></strong></div>
 </div>
 <?php endif ?>
-<?php if (!$jefe): $c0 = $cals[$yo['id']]; $hueco = (int)date('N', strtotime($desde)) - 1; ?>
-<div class="mes-personal">
-  <?php foreach (['L', 'M', 'X', 'J', 'V', 'S', 'D'] as $d): ?><span class="cab"><?= $d ?></span><?php endforeach ?>
-  <?php for ($i = 0; $i < $hueco; $i++): ?><span class="vacio"></span><?php endfor ?>
-  <?php foreach ($c0 as $f => $c): [$txt, $fondo, $titulo] = celda_turno($c, $hors, true); $pend = !$c['ausencia'] && isset($pendientes[$yo['id']][$f]); ?>
-  <div class="dia<?= $f === $hoy ? ' hoy' : '' ?><?= $fondo ? ' con-turno' : '' ?><?= $txt === 'D' ? ' libre' : '' ?>" style="<?= $fondo ? '--c:' . e($fondo) : '' ?>" title="<?= e($pend ? 'Ausencia pendiente de aprobar' : $titulo) ?>">
-    <span class="num"><?= (int)substr($f, 8) ?></span>
-    <b><?= e($pend ? '?' : ($txt === '' ? '' : $txt)) ?></b>
-    <small><?= $c['turno'] && !$c['ausencia'] && $c['entrada'] && !$c['flexible'] ? substr($c['entrada'], 0, 5) . '–' . substr((string)$c['salida'], 0, 5) : ($c['ausencia'] ? e($c['ausencia']['tipo']) : ($c['festivo'] ? e($c['festivo']) : '')) ?></small>
-  </div>
-  <?php endforeach ?>
-</div>
+<?php if (!$jefe): ?>
+<?= mes_trabajador(db(), $yo, $mes, 'calendario') ?>
 <?php else: ?>
 <table class="calendario cuadrante">
   <tr><th class="persona"></th><?php foreach ($fechas as $f): ?><th class="<?= isset($cortos[$f]) ? 'corto' : '' ?>"><?= mb_substr(DIAS[(int)date('N', strtotime($f))], 0, 1) ?><br><?= (int)substr($f, 8) ?></th><?php endforeach ?></tr>
@@ -133,7 +125,8 @@ cabecera('Calendario', $yo);
 <p class="nota">Pulsa en el día de una persona para cambiar su turno. Se guarda al momento, con las reglas del convenio, y se le avisa.</p>
 <?php endif ?>
 <?php if ($cortos): ?><p class="aviso error">Hay <?= count($cortos) ?> días que no cumplen el ratio (en rojo): falta o sobra gente en algún turno. Pasa el ratón por el número para ver el detalle. Revísalos en <a href="?p=planificacion">Planificación</a> o busca sustituto.</p><?php endif ?>
-<?php $con_letra = array_filter($hors, fn($h) => $h['abreviatura'] !== '' && $h['activo'] && (!$dep || !$h['departamento_id'] || $h['departamento_id'] == $dep)); ?>
+<?php $usados = []; foreach ($cals as $cal) foreach ($cal as $c) if (!$c['ausencia'] && !empty($c['horario_id']) && $c['turno']) $usados[$c['horario_id']] = true;
+$con_letra = $jefe ? array_filter($hors, fn($h) => $h['abreviatura'] !== '' && isset($usados[$h['id']])) : []; ?>
 <?php if ($con_letra): ?><p class="nota leyenda-turnos">Turnos: <?php foreach ($con_letra as $h): ?><span class="letra-turno" style="background:<?= e($h['color'] ?: '#6b7280') ?>"><?= e($h['abreviatura']) ?></span> <?= e($h['nombre']) ?> <?php endforeach ?></p><?php endif ?>
 <p class="nota">D = descanso. F = festivo. Números = horas de turnos sin letra. ? = ausencia pendiente. Pasa el ratón (o mantén pulsado) para ver el detalle.</p>
 <?php if ($jefe): ?>
