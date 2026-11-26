@@ -238,3 +238,21 @@ function opciones(array $lista, mixed $actual): string
     }
     return $html;
 }
+
+// Caja «Instalar INDA» (fichar y entrar). Android: botón del sistema. iPhone no deja instalar con un botón: se enseña cómo.
+function caja_instalar(): string
+{
+    $compartir = '<svg viewBox="0 0 24 24" width="18" height="18" aria-label="Compartir" style="vertical-align:-3px"><path d="M12 3v12M8 7l4-4 4 4M6 11H5v10h14V11h-1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    return '<div class="tarjeta centro" data-instalar hidden>
+  <p><strong>Pon INDA en tu pantalla de inicio</strong> y ficha con un toque, como una app.</p>
+  <button type="button" data-instalar-boton>Instalar en el teléfono</button>
+  <div data-ios hidden>
+    <ol style="text-align:left">
+      <li>Pulsa el botón <strong>Compartir</strong> ' . $compartir . ' (abajo en Safari).</li>
+      <li>Baja y elige <strong>«Añadir a pantalla de inicio»</strong>.</li>
+      <li>Pulsa <strong>Añadir</strong>. Ya tienes el icono de INDA.</li>
+    </ol>
+    <p class="nota">¿No ves esa opción? Abre el enlace en <strong>Safari</strong> (si lo abriste desde WhatsApp o el correo, pulsa «Abrir en Safari»).</p>
+  </div>
+</div>';
+}

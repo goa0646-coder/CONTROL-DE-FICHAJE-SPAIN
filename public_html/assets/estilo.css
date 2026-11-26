@@ -628,3 +628,4 @@ blockquote { margin: .4rem 0; padding: .5rem .8rem; border-left: 3px solid var(-
 .msg-ia details { margin-top: .4rem; } .msg-ia details small { white-space: pre-wrap; }
 .ejemplos-ia { display: flex; flex-wrap: wrap; gap: .4rem; }
 .preguntar-ia label { flex: 1 1 20rem; }
+[hidden] { display: none !important; }

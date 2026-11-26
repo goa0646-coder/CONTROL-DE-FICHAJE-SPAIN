@@ -18,6 +18,7 @@ cabecera('Entrar');
   <button>Entrar</button>
   <p><a href="?p=recuperar">¿Has olvidado la contraseña?</a></p>
 </form>
+<?= caja_instalar() ?>
 <?php if (!empty(config()['sso']['cliente_id'])): ?>
 <p class="centro"><a class="boton secundario" href="?p=sso">Entrar con <?= (config()['sso']['proveedor'] ?? '') === 'microsoft' ? 'Microsoft' : 'Google' ?></a></p>
 <?php endif ?>
