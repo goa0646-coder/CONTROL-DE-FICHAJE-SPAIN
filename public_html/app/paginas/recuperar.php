@@ -41,10 +41,9 @@ if (es_post()) {
         $t = bin2hex(random_bytes(32));
         db()->prepare('UPDATE usuarios SET reset_hash = ?, reset_expira_utc = ? WHERE id = ?')
             ->execute([hash('sha256', $t), gmdate('Y-m-d H:i:s', time() + 3600), $id]);
-        $c = config();
-        mail($email, 'INDA: cambiar tu contraseña',
-            "Para elegir una contraseña nueva entra aquí (válido 1 hora):\n{$c['url']}/?p=recuperar&t=$t\n\nSi no lo has pedido tú, ignora este correo.",
-            "From: {$c['correo_desde']}\r\nContent-Type: text/plain; charset=utf-8");
+        // Por el mismo buzón SMTP que el resto de avisos (antes iba por mail() del servidor y muchas veces no llegaba).
+        enviar_correo($email, 'INDA: cambiar tu contraseña',
+            "Para elegir una contraseña nueva entra aquí (válido 1 hora):\n" . rtrim(config()['url'] ?? '', '/') . "/?p=recuperar&t=$t\n\nSi no lo has pedido tú, ignora este correo.");
     }
     aviso('Si el email existe, te hemos enviado un enlace.');
     redirigir('login');
