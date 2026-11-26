@@ -7,6 +7,20 @@ if (isset($_GET['cal'])) {
     $c = array_values(array_filter(companeros_cambio(db(), $u), fn($x) => $x['id'] == (int)$_GET['cal']))[0] ?? null;
     exit($c ? '<h3>Turnos de ' . e(nombre($c)) . '</h3>' . mes_trabajador(db(), $c, $mes, '', false, false) : '');
 }
+// Vista previa del cambio (mañana por tarde o noche, o un turno por un libre).
+if (isset($_GET['previa'])) {
+    try {
+        $filas = previa_cambio(db(), $u, (int)($_GET['companero'] ?? 0), [(string)($_GET['fecha'] ?? ''), (string)($_GET['devuelve'] ?? '')]);
+        $h = '';
+        foreach ($filas as [$f, $mio, $suyo, $o]) {
+            $h .= '<li><b>' . date('d/m', strtotime($f)) . '</b>: ' . ($mio === $suyo ? 'los dos tenéis ' . e($mio) . ' (nada que cambiar)'
+                : 'tú ' . e($mio) . ' → <b>' . e($suyo) . '</b> · ' . e($o['nombre']) . ' ' . e($suyo) . ' → <b>' . e($mio) . '</b>') . '</li>';
+        }
+        exit($h ? '<p class="nota">Así quedaría:</p><ul>' . $h . '</ul>' : '');
+    } catch (DomainException $e) {
+        exit('<p class="nota error">' . e($e->getMessage()) . '</p>');
+    }
+}
 if (es_post()) {
     try {
         if ($id = (int)($_POST['responder'] ?? 0)) {
@@ -46,7 +60,7 @@ cabecera('Cambios de turno', $u);
   <p class="filtros"><span class="nota">Al tocar un día del calendario se rellena:</span>
     <label><input type="radio" name="rellenar" value="fecha" checked> Día del cambio</label>
     <label><input type="radio" name="rellenar" value="devuelve"> Día que me devuelve</label></p>
-  <p class="nota">Elige el compañero y el día que quieres cambiar: tú haces su turno y él el tuyo. Si te devuelve el favor otro día, ponlo en «Día que me devuelve». Primero lo acepta tu compañero y después lo aprueba la empresa. Se comprueban los descansos y las horas de los dos.</p>
+  <p class="nota">Elige el compañero y el día: tú haces su turno y él el tuyo (una mañana por una tarde o una noche, o al revés; o tu turno por su libre). Si te devuelve el favor otro día, ponlo en «Día que me devuelve». Primero lo acepta tu compañero y después lo aprueba la empresa. Se comprueban los descansos y las horas de los dos.</p>
   <?php if (!$comp): ?><p class="aviso error"><?= icono('alerta') ?><span>No hay compañeros de tu mismo puesto con los que cambiar. Pide a la empresa que revise tu puesto en tu ficha.</span></p><?php else: ?>
   <div class="filtros">
     <label>Compañero <select name="companero" required><option value="">Elige…</option><?php foreach ($comp as $c): ?><option value="<?= e($c['id']) ?>"><?= e(nombre($c)) ?></option><?php endforeach ?></select></label>
@@ -54,6 +68,7 @@ cabecera('Cambios de turno', $u);
     <label>Día del cambio <input type="date" name="fecha" min="<?= $hoy ?>"<?= $lim ? ' max="' . $lim . '"' : '' ?> required></label>
     <label>Día que me devuelve (opcional) <input type="date" name="devuelve" min="<?= $hoy ?>"<?= $lim ? ' max="' . $lim . '"' : '' ?>></label>
   </div>
+  <div data-previa-cambio></div>
   <div data-cal-companero></div>
   <label>Motivo <input name="motivo" maxlength="500" placeholder="Opcional"></label>
   <label><input type="checkbox" name="voluntario"> Lo acepto por mi propia voluntad aunque incumpla el convenio (descansos, horas…)</label>

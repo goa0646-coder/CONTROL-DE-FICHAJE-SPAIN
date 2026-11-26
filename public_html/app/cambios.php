@@ -65,6 +65,17 @@ function aplicar_cambio(PDO $db, array $a, array $b, array $fechas, bool $guarda
     }
 }
 
+// Cómo quedaría el cambio, día a día: [[fecha, mi turno, su turno]] (antes; después se intercambian). Lanza si no se puede.
+function previa_cambio(PDO $db, array $u, int $companero, array $fechas): array
+{
+    $o = companeros_cambio($db, $u)[$companero] ?? throw new DomainException('Elige un compañero de tu mismo puesto.');
+    $out = [];
+    foreach (array_unique(array_filter($fechas, fn($f) => preg_match('/^\d{4}-\d{2}-\d{2}$/', $f))) as $f) {
+        $out[] = [$f, turno_del_dia($db, $u, $f)[1], turno_del_dia($db, $o, $f)[1], $o];
+    }
+    return $out;
+}
+
 function fechas_cambio(array $c): array
 {
     return array_values(array_unique(array_filter([$c['fecha'], $c['fecha_devuelve'] ?? null])));

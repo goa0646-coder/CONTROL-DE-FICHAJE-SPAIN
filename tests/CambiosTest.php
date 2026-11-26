@@ -74,4 +74,26 @@ class CambiosTest extends Base
         $this->assertSame($m, calendario_teorico($this->db, $b, '2099-07-07', '2099-07-07')['2099-07-07']['horario_id']);
         $this->assertSame(1, (int)consulta($this->db, "SELECT COUNT(*) FROM auditoria WHERE accion = 'cambio_aprobado' AND detalle LIKE ?", ["cambio=$id voluntario%"])->fetchColumn());
     }
+
+    public function testMananaPorTardeElMismoDiaConVistaPrevia(): void
+    {
+        $s = uniqid();
+        $this->db->exec("INSERT INTO puestos (nombre) VALUES ('Gero $s')");
+        $pu = (int)$this->db->lastInsertId();
+        $m = $this->horario([1, 2, 3, 4, 5, 6, 7], '07:00', '15:00', 480);
+        $t = $this->horario([1, 2, 3, 4, 5, 6, 7], '15:00', '23:00', 480);
+        $p = function () use ($pu) { $u = $this->usuario(); $this->db->prepare('INSERT INTO usuarios_puestos VALUES (?, ?)')->execute([$u['id'], $pu]); return $u; };
+        [$a, $b] = [$p(), $p()];
+        $admin = $this->usuario(['rol' => 'admin']);
+        consulta($this->db, 'INSERT INTO planificacion (usuario_id, fecha, horario_id) VALUES (?, ?, ?), (?, ?, ?)', [$a['id'], '2099-09-10', $m, $b['id'], '2099-09-10', $t]);
+        [[$f, $mio, $suyo]] = previa_cambio($this->db, $a, (int)$b['id'], ['2099-09-10', '']);
+        $this->assertSame('2099-09-10', $f);
+        $this->assertStringContainsString('07:00', $mio);
+        $this->assertStringContainsString('15:00', $suyo);
+        $id = pedir_cambio($this->db, $a, (int)$b['id'], '2099-09-10');
+        responder_cambio($this->db, $b, $id, true);
+        resolver_cambio($this->db, $admin, $id, true);
+        $ver = fn($u) => calendario_teorico($this->db, $u, '2099-09-10', '2099-09-10')['2099-09-10']['horario_id'];
+        $this->assertSame([$t, $m], [$ver($a), $ver($b)], 'A hace la tarde y B la mañana');
+    }
 }
