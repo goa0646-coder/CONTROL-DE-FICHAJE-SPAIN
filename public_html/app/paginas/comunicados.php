@@ -6,6 +6,11 @@ if (es_post()) {
     try {
         $que = $_POST['que'] ?? '';
         $c = isset($_POST['id']) ? anuncio(db(), (int)$_POST['id']) : null;
+        if ($que === 'recibir' && $c) {
+            recibir_anuncio(db(), $c, $yo, $_POST);
+            aviso('Recepción firmada. Ya puedes leer el comunicado; al terminar, firma la lectura y aceptación.');
+            redirigir('comunicados', ['id' => $c['id']]);
+        }
         if ($que === 'firmar' && $c) {
             firmar_anuncio(db(), $c, $yo, $_POST);
             aviso('Firmado. Tienes el certificado en este anuncio y en Documentos.');
@@ -103,7 +108,7 @@ cabecera('Anuncios', $yo);
     <a href="?p=comunicados<?= $ver === 'enviados' ? '&ver=enviados' : '' ?>&id=<?= e($c['id']) ?>" class="item<?= $abierto && $abierto['id'] == $c['id'] ? ' activo' : '' ?><?= $ver === 'recibidos' && !$c['leido_utc'] ? ' nuevo' : '' ?>">
       <strong><?= e($c['titulo']) ?></strong>
       <small><?= e(trim($c['autor'] . ' ' . $c['autor_apellidos'])) ?> · <?= $fecha($c['creado_utc']) ?></small>
-      <span class="resumen"><?= e(mb_strimwidth($c['texto'], 0, 110, '…')) ?></span>
+      <span class="resumen"><?= contenido_visible(db(), $c, $yo) ? e(mb_strimwidth($c['texto'], 0, 110, '…')) : 'Firma requerida: firma la recepción para verlo' ?></span>
       <?php if ($ver === 'enviados'): [$l, $t] = $cuentas[$c['id']]; ?>
       <span class="pildora<?= $l >= $t ? ' ok' : '' ?>">Leído <?= $l ?>/<?= $t ?></span>
       <?php else: ?><span class="pildora<?= $c['leido_utc'] ? ' ok' : ' pendiente' ?>"><?= $c['leido_utc'] ? 'Leído' : 'Pendiente de leer' ?></span><?php endif ?>
@@ -118,26 +123,38 @@ cabecera('Anuncios', $yo);
     <a class="volver" href="?p=comunicados<?= $ver === 'enviados' ? '&ver=enviados' : '' ?>">‹ Anuncios</a>
     <h2><?= e($abierto['titulo']) ?></h2>
     <p class="nota"><?= e(trim($abierto['autor'] . ' ' . $abierto['autor_apellidos'])) ?> · <?= local($abierto['creado_utc']) ?></p>
-    <div class="texto-anuncio"><?= nl2br(e($abierto['texto'])) ?></div>
+    <?php $visible = contenido_visible(db(), $abierto, $yo); ?>
+    <?php if ($visible): ?><div class="texto-anuncio"><?= nl2br(e($abierto['texto'])) ?></div><?php endif ?>
     <?php if ($autor): $dest = array_filter(array_map(fn($id) => usuario(db(), $id), destinatarios_anuncio(db(), $abierto)));
         $nombres = array_map('nombre', $dest); ?>
     <details class="para"><summary>Para <?= count($nombres) ?> destinatarios: <?= e(mb_strimwidth(implode(', ', $nombres), 0, 110, '…')) ?> <span>Ver todos</span></summary>
       <p class="nota"><?= e(implode(', ', $nombres)) ?></p></details>
     <?php endif ?>
-    <?php if ($adj = adjuntos_anuncio(db(), $abierto)): ?><p class="adjuntos"><?php foreach ($adj as $a): ?><a class="adjunto" href="?p=archivo&c=<?= e($abierto['id']) ?>&adj=<?= e($a['id']) ?>"><?= icono('documentos') ?> <?= e($a['nombre_original']) ?></a> <?php endforeach ?></p><?php endif ?>
+    <?php if ($visible && ($adj = adjuntos_anuncio(db(), $abierto))): ?><p class="adjuntos"><?php foreach ($adj as $a): ?><a class="adjunto" href="?p=archivo&c=<?= e($abierto['id']) ?>&adj=<?= e($a['id']) ?>"><?= icono('documentos') ?> <?= e($a['nombre_original']) ?></a> <?php endforeach ?></p><?php endif ?>
     <?php if ($para_mi && !empty($abierto['firma_requerida'])): $ac = acuse_firma(db(), (int)$abierto['id'], (int)$yo['id']); ?>
       <?php if ($ac): ?><p class="aviso ok">Firmado el <?= local($ac['firmado_utc']) ?>. <a href="?p=archivo&d=<?= e($ac['documento_id']) ?>">Descargar certificado (PDF)</a></p>
       <?php else: ?>
+      <?php $rec = recepcion_firma(db(), (int)$abierto['id'], (int)$yo['id']); ?>
       <form method="post" class="firma-anuncio" data-firma-anuncio>
         <?= csrf_campo() ?><input type="hidden" name="id" value="<?= e($abierto['id']) ?>"><input type="hidden" name="firma"><input type="hidden" name="lat"><input type="hidden" name="lng"><input type="hidden" name="precision">
-        <h3>Firma requerida</h3>
+        <?php if (!$rec): ?>
+        <h3>Paso 1 de 2 · Firma la recepción</h3>
+        <p class="nota">Este comunicado requiere firma. Primero confirma que lo has recibido; después podrás leerlo y firmar la lectura.</p>
         <label>Tu DNI / NIE / pasaporte <input name="dni" required autocomplete="off" maxlength="20"></label>
+        <?php else: ?>
+        <h3>Paso 2 de 2 · Firma la lectura y aceptación</h3>
+        <p class="nota">Recepción firmada el <?= local($rec['recibido_utc']) ?>. Lee el comunicado y sus adjuntos y firma de nuevo.</p>
+        <?php endif ?>
         <p class="nota">Firma con el dedo (o el ratón) en el recuadro:</p>
         <canvas width="600" height="200" style="width:100%;max-width:600px;height:auto;border:1px dashed var(--borde,#999);border-radius:12px;background:#fff;touch-action:none"></canvas>
         <p><button type="button" class="secundario" data-borrar-firma>Borrar firma</button></p>
+        <?php if (!$rec): ?>
+        <label><input type="checkbox" name="recibido" value="1" required> He recibido este comunicado</label>
+        <?php else: ?>
         <label><input type="checkbox" name="acepto" value="1" required> He leído, comprendo y acepto los términos del presente comunicado</label>
+        <?php endif ?>
         <p class="nota" data-geo-estado>Si das permiso, se añadirá la ubicación aproximada de tu dispositivo al certificado.</p>
-        <button name="que" value="firmar">Firmar y enviar</button>
+        <button name="que" value="<?= $rec ? 'firmar' : 'recibir' ?>"><?= $rec ? 'Firmar lectura y aceptación' : 'Firmar la recepción y ver el comunicado' ?></button>
       </form>
       <?php endif ?>
     <?php elseif ($para_mi): ?>

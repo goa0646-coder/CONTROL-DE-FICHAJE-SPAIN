@@ -17,7 +17,7 @@ if (isset($_GET['jp'])) {
 }
 if (isset($_GET['c'])) {
     $c = anuncio(db(), (int)$_GET['c']);
-    if (!$c || !puede_ver_anuncio(db(), $c, $yo)) exit('No disponible.');
+    if (!$c || !puede_ver_anuncio(db(), $c, $yo) || !contenido_visible(db(), $c, $yo)) exit('No disponible.');
     foreach (adjuntos_anuncio(db(), $c) as $a) if ($a['id'] == (int)($_GET['adj'] ?? 0)) enviar_archivo($a['archivo'], $a['nombre_original']);
     exit('No disponible.');
 }

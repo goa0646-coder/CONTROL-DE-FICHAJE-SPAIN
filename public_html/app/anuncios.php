@@ -259,26 +259,75 @@ function firma_pendiente(PDO $db, array $u): ?int
     return null;
 }
 
-// $d: dni, acepto, firma (data:image/jpeg;base64,…), lat, lng, precision. Devuelve el id del documento con el certificado.
+function recepcion_firma(PDO $db, int $cid, int $uid): ?array
+{
+    return consulta($db, 'SELECT * FROM recepciones_firma WHERE comunicado_id = ? AND usuario_id = ?', [$cid, $uid])->fetch() ?: null;
+}
+
+// ¿Puede $u ver el texto y los adjuntos? En los de firma requerida, quien lo recibe solo tras firmar la recepción.
+function contenido_visible(PDO $db, array $c, array $u): bool
+{
+    if (empty($c['firma_requerida']) || $c['autor_id'] == $u['id'] || $u['rol'] === 'admin') return true;
+    return (bool)recepcion_firma($db, (int)$c['id'], (int)$u['id']);
+}
+
+// Firma dibujada (data:image/jpeg;base64,…) → bytes JPEG, o error.
+function firma_jpeg(string $v): string
+{
+    $jpeg = preg_match('#^data:image/jpeg;base64,([A-Za-z0-9+/=]+)$#', $v, $m) ? base64_decode($m[1], true) : false;
+    $tam = $jpeg ? getimagesizefromstring($jpeg) : false;
+    if (!$jpeg || !$tam || $tam['mime'] !== 'image/jpeg' || strlen($jpeg) > 600 * 1024) throw new DomainException('Firma con el dedo en el recuadro antes de enviar.');
+    return $jpeg;
+}
+
+// Evidencias del momento: [hora, ip, navegador, sesión, lat, lng, precisión].
+function evidencias(array $d): array
+{
+    $geo = is_numeric($d['lat'] ?? null) && is_numeric($d['lng'] ?? null) && abs((float)$d['lat']) <= 90 && abs((float)$d['lng']) <= 180
+        ? [round((float)$d['lat'], 6), round((float)$d['lng'], 6), max(0, (int)($d['precision'] ?? 0))] : [null, null, null];
+    return [ahora(), ip(), mb_substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 300), hash('sha256', session_id() ?: 'cli'), ...$geo];
+}
+
+// Paso 1: firma de recepción con DNI, sin haber visto el contenido. $d: dni, recibido, firma, lat, lng, precision.
+function recibir_anuncio(PDO $db, array $c, array $u, array $d): void
+{
+    if (empty($c['firma_requerida']) || !es_destinatario($db, $c, $u)) throw new DomainException('Este anuncio no necesita tu firma.');
+    if (recepcion_firma($db, (int)$c['id'], (int)$u['id'])) return;
+    if (empty($d['recibido'])) throw new DomainException('Marca la casilla «He recibido este comunicado».');
+    $dni = strtoupper(preg_replace('/[^0-9A-Za-z]/', '', (string)($d['dni'] ?? '')));
+    $mio = strtoupper(preg_replace('/[^0-9A-Za-z]/', '', (string)($u['dni'] ?? '')));
+    if ($mio !== '' ? !hash_equals($mio, $dni) : !preg_match('/^[0-9A-Z]{5,20}$/', $dni)) throw new DomainException('El documento no coincide con el de tu ficha.');
+    $jpeg = firma_jpeg((string)($d['firma'] ?? ''));
+    $archivo = bin2hex(random_bytes(16)) . '.jpg';
+    if (file_put_contents(carpeta_archivos() . "/$archivo", $jpeg) === false) throw new DomainException('No se pudo guardar la firma. Inténtalo de nuevo.');
+    [$t, $ip, $ag, $se, $la, $ln, $pr] = evidencias($d);
+    consulta($db, 'INSERT IGNORE INTO recepciones_firma (comunicado_id, usuario_id, recibido_utc, dni, ip, agente, sesion, lat, lng, precision_m, firma_archivo, hash_firma) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [$c['id'], $u['id'], $t, cifrado_activo($db) ? cifrar($dni) : $dni, $ip, $ag, $se, $la, $ln, $pr, $archivo, hash('sha256', $jpeg)]);
+    auditar($db, (int)$u['id'], 'comunicado_recibido', "comunicado={$c['id']}");
+}
+
+// Paso 2: firma de lectura y aceptación (tras ver el contenido) y certificado PDF con las dos firmas.
+// $d: acepto, firma, lat, lng, precision. Devuelve el id del documento con el certificado.
 function firmar_anuncio(PDO $db, array $c, array $u, array $d): int
 {
     if (empty($c['firma_requerida']) || !es_destinatario($db, $c, $u)) throw new DomainException('Este anuncio no necesita tu firma.');
     if ($ya = acuse_firma($db, (int)$c['id'], (int)$u['id'])) return (int)$ya['documento_id'];
+    $rec = recepcion_firma($db, (int)$c['id'], (int)$u['id']) ?? throw new DomainException('Primero firma la recepción del comunicado.');
     if (empty($d['acepto'])) throw new DomainException('Marca la casilla «He leído, comprendo y acepto».');
-    $dni = strtoupper(preg_replace('/[^0-9A-Za-z]/', '', (string)($d['dni'] ?? '')));
-    $mio = strtoupper(preg_replace('/[^0-9A-Za-z]/', '', (string)($u['dni'] ?? '')));
-    if ($mio !== '' ? !hash_equals($mio, $dni) : !preg_match('/^[0-9A-Z]{5,20}$/', $dni)) throw new DomainException('El documento no coincide con el de tu ficha.');
-    $jpeg = preg_match('#^data:image/jpeg;base64,([A-Za-z0-9+/=]+)$#', (string)($d['firma'] ?? ''), $m) ? base64_decode($m[1], true) : false;
-    $tam = $jpeg ? getimagesizefromstring($jpeg) : false;
-    if (!$jpeg || !$tam || $tam['mime'] !== 'image/jpeg' || strlen($jpeg) > 600 * 1024) throw new DomainException('Firma con el dedo en el recuadro antes de enviar.');
-    $geo = is_numeric($d['lat'] ?? null) && is_numeric($d['lng'] ?? null) && abs((float)$d['lat']) <= 90 && abs((float)$d['lng']) <= 180
-        ? [round((float)$d['lat'], 6), round((float)$d['lng'], 6), max(0, (int)($d['precision'] ?? 0))] : [null, null, null];
-    $ahora = ahora();
-    $ip = ip();
-    $agente = mb_substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 300);
-    $sesion = hash('sha256', session_id() ?: 'cli');
+    $jpeg = firma_jpeg((string)($d['firma'] ?? ''));
+    $jpeg_rec = (string)@file_get_contents(carpeta_archivos() . '/' . basename($rec['firma_archivo']));
+    [$ahora, $ip, $agente, $sesion, $la, $ln, $pr] = evidencias($d);
+    $dni = (string)descifrar($rec['dni']);
     $hash_texto = hash('sha256', $c['titulo'] . "\n\n" . $c['texto']);
     $hash_firma = hash('sha256', $jpeg);
+    $geo = fn($a, $b, $p) => $a !== null ? "$a, $b (precisión aprox. $p m, con permiso de la persona)" : 'no facilitada';
+    $paso = fn(string $t, string $utc, string $i, string $ag, $a, $b, $p, string $h) => [
+        ['t' => $t, 's' => 11, 'b' => true],
+        ['t' => 'Fecha y hora (UTC): ' . $utc . ' · Madrid: ' . local($utc, 'd/m/Y H:i:s'), 's' => 9],
+        ['t' => 'Dirección IP: ' . ($i ?: 'no disponible') . ' · Ubicación del dispositivo: ' . $geo($a, $b, $p), 's' => 9],
+        ['t' => 'Dispositivo / navegador: ' . ($ag ?: 'no disponible'), 's' => 9],
+        ['t' => 'Huella SHA-256 de la firma: ' . $h, 's' => 8],
+    ];
     $bloques = [
         ['t' => 'CERTIFICADO DE ACUSE DE RECIBO Y FIRMA', 's' => 15, 'b' => true],
         ['t' => (function_exists('nombre_empresa') ? nombre_empresa() : '') ?: 'INDA', 's' => 10],
@@ -287,20 +336,14 @@ function firmar_anuncio(PDO $db, array $c, array $u, array $d): int
         ['t' => 'Publicado el ' . local($c['creado_utc'], 'd/m/Y H:i') . ' (hora de Madrid)', 's' => 9],
         ['t' => $c['texto'], 's' => 10],
         ['t' => 'Huella SHA-256 del texto: ' . $hash_texto, 's' => 8],
-        ['t' => 'Firmante', 's' => 12, 'b' => true],
-        ['t' => nombre($u) . ' · Documento: ' . $dni, 's' => 10],
-        ['t' => 'Declaración aceptada: «He leído, comprendo y acepto los términos del presente comunicado».', 's' => 10],
-        ['img' => true],
-        ['t' => 'Evidencias', 's' => 12, 'b' => true],
-        ['t' => 'Fecha y hora (UTC): ' . $ahora . ' · Madrid: ' . local($ahora, 'd/m/Y H:i:s'), 's' => 9],
-        ['t' => 'Dirección IP: ' . ($ip ?: 'no disponible'), 's' => 9],
-        ['t' => 'Dispositivo / navegador: ' . ($agente ?: 'no disponible'), 's' => 9],
-        ['t' => 'Ubicación del dispositivo: ' . ($geo[0] !== null ? "$geo[0], $geo[1] (precisión aprox. $geo[2] m, con permiso de la persona)" : 'no facilitada'), 's' => 9],
-        ['t' => 'Cuenta: ' . $u['id'] . ' · ' . $u['email'] . ' · Sesión (huella): ' . substr($sesion, 0, 16), 's' => 9],
-        ['t' => 'Huella SHA-256 de la firma: ' . $hash_firma, 's' => 8],
-        ['t' => 'Firma electrónica simple (Reglamento UE 910/2014, eIDAS). Este certificado se guarda con su huella SHA-256 en INDA para acreditar que no se ha modificado después de la firma.', 's' => 8],
+        ['t' => 'Firmante: ' . nombre($u) . ' · Documento: ' . $dni . ' · Cuenta ' . $u['id'] . ' (' . $u['email'] . ')', 's' => 10, 'b' => true],
+        ...$paso('1. Recepción: «He recibido este comunicado» (firmada antes de ver su contenido)', $rec['recibido_utc'], $rec['ip'], $rec['agente'], $rec['lat'], $rec['lng'], $rec['precision_m'], $rec['hash_firma']),
+        ['img' => 0],
+        ...$paso('2. Lectura y aceptación: «He leído, comprendo y acepto los términos del presente comunicado»', $ahora, $ip, $agente, $la, $ln, $pr, $hash_firma),
+        ['img' => 1],
+        ['t' => 'Sesión (huella): ' . substr($sesion, 0, 16) . '. Firma electrónica simple (Reglamento UE 910/2014, eIDAS). Este certificado se guarda con su huella SHA-256 en INDA para acreditar que no se ha modificado después de la firma.', 's' => 8],
     ];
-    $pdf = pdf_documento($bloques, $jpeg);
+    $pdf = pdf_documento($bloques, [$jpeg_rec, $jpeg]);
     $archivo = bin2hex(random_bytes(16)) . '.pdf';
     if (file_put_contents(carpeta_archivos() . "/$archivo", $pdf) === false) throw new DomainException('No se pudo guardar el certificado. Inténtalo de nuevo.');
     $db->beginTransaction();
@@ -309,7 +352,7 @@ function firmar_anuncio(PDO $db, array $c, array $u, array $d): int
             [$u['id'], mb_substr('Acuse firmado · ' . $c['titulo'], 0, 150), $archivo, "acuse-{$c['id']}-{$u['id']}.pdf", $u['id'], $ahora]);
         $doc = (int)$db->lastInsertId();
         consulta($db, 'INSERT INTO acuses_firma (comunicado_id, usuario_id, firmado_utc, dni, ip, agente, sesion, lat, lng, precision_m, hash_texto, hash_firma, documento_id, hash_pdf) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [$c['id'], $u['id'], $ahora, cifrado_activo($db) ? cifrar($dni) : $dni, $ip, $agente, $sesion, $geo[0], $geo[1], $geo[2], $hash_texto, $hash_firma, $doc, hash('sha256', $pdf)]);
+            [$c['id'], $u['id'], $ahora, $rec['dni'], $ip, $agente, $sesion, $la, $ln, $pr, $hash_texto, $hash_firma, $doc, hash('sha256', $pdf)]);
         consulta($db, 'INSERT IGNORE INTO comunicados_leidos (comunicado_id, usuario_id, leido_utc, ip) VALUES (?, ?, ?, ?)', [$c['id'], $u['id'], $ahora, $ip]);
         $db->commit();
     } catch (Throwable $e) {
