@@ -4,7 +4,7 @@ declare(strict_types=1);
 date_default_timezone_set('UTC');
 const ZONA = 'Europe/Madrid';
 // Versión que se ve abajo en el menú: sirve para comprobar que el servidor tiene la última subida.
-const VERSION = '2026.11.26f';
+const VERSION = '2026.11.26g';
 
 // Dirección de un archivo de assets con su fecha: así el navegador y el móvil no usan uno viejo de su caché.
 function asset(string $ruta): string
@@ -212,6 +212,15 @@ function requiere(string ...$roles): array
     if (!in_array($u['rol'], $roles, true)) {
         http_response_code(403);
         exit('No tienes permiso para ver esta página.');
+    }
+    // Mantenimiento: administración trabaja con INDA cerrado a la plantilla (si se deja, solo pueden fichar).
+    if (in_array($u['rol'], ['empleado', 'responsable'], true) && ($m = ajuste(db(), 'mantenimiento')) && $m !== 'no'
+        && !($m === 'fichar' && in_array($_GET['p'] ?? '', ['fichar', 'salir', 'logo', 'version'], true)) && ($_GET['p'] ?? '') !== 'salir') {
+        if ($m === 'fichar' && ($_GET['p'] ?? '') !== 'fichar') redirigir('fichar');
+        http_response_code(503);
+        header('Retry-After: 1800');
+        exit('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>INDA</title><body style="font-family:system-ui;max-width:32rem;margin:15vh auto;padding:1rem;text-align:center">'
+            . '<h1>INDA está en mantenimiento</h1><p>Administración está haciendo cambios. Vuelve a entrar en un rato.</p><p><a href="?p=salir">Salir</a></p></body>');
     }
     // Comunicado con firma requerida sin firmar: no se sigue hasta firmarlo (fichar nunca se bloquea: es el registro legal).
     if (in_array($u['rol'], ['empleado', 'responsable'], true) && !in_array($_GET['p'] ?? '', ['comunicados', 'fichar', 'salir', 'archivo', 'foto', 'logo', 'version'], true)
