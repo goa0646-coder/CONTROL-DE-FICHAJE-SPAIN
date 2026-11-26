@@ -254,6 +254,7 @@ function mes_trabajador(PDO $db, array $u, string $mes, string $pagina, bool $cl
     $hors = horarios($db);
     $hoy = local(ahora(), 'Y-m-d');
     $cal = calendario_teorico($db, $u, $desde, $hasta);
+    $lim = limite_vision($db, function_exists('usuario_actual') ? usuario_actual() : null);
     $pend = [];
     if ($detalle) foreach (consulta($db, "SELECT desde, hasta FROM ausencias WHERE usuario_id = ? AND estado = 'pendiente' AND desde <= ? AND hasta >= ?", [$u['id'], $hasta, $desde]) as $a) {
         foreach (rango_fechas(max($desde, $a['desde']), min($hasta, $a['hasta'])) as $f) $pend[$f] = true;
@@ -268,6 +269,12 @@ function mes_trabajador(PDO $db, array $u, string $mes, string $pagina, bool $cl
     $h .= str_repeat('<span class="vacio"></span>', (int)date('N', strtotime($desde)) - 1);
     $usados = [];
     foreach ($cal as $f => $c) {
+        // Más allá del límite de visión: el día existe (se puede pedir una ausencia) pero sin turno.
+        if ($lim && $f > $lim) {
+            $toca = $clic && $pagina === 'ausencias';
+            $h .= '<div class="dia oculto' . ($toca ? ' tocable' : '') . '" title="Aún no publicado"' . ($toca ? ' data-fecha="' . $f . '" role="button" tabindex="0"' : '') . '><span class="num">' . (int)substr($f, 8) . '</span><b></b><small>Aún no publicado</small></div>';
+            continue;
+        }
         [$txt, $fondo, $titulo] = celda_turno($c, $hors, $detalle);
         if (!$c['ausencia'] && !empty($c['horario_id']) && $c['turno']) $usados[$c['horario_id']] = true;
         $p = !$c['ausencia'] && isset($pend[$f]);
@@ -290,4 +297,14 @@ function leyenda_turnos(array $hors, array $ids): string
     $h = '<p class="nota leyenda-turnos">';
     foreach ($l as $x) $h .= '<span class="letra-turno" style="background:' . e($x['color'] ?: '#6b7280') . '">' . e($x['abreviatura']) . '</span> ' . e($x['nombre']) . ' ';
     return $h . '<span class="letra-turno descanso">D</span> Descanso · F Festivo</p>';
+}
+
+const VISION_DIAS = [0 => 'Sin límite', 30 => '30 días', 60 => '60 días', 120 => '120 días', 365 => '365 días'];
+
+// Último día que un empleado puede ver de su planificación (o null si no hay límite o no es empleado).
+function limite_vision(PDO $db, ?array $quien): ?string
+{
+    $n = (int)ajuste($db, 'vision_dias');
+    if (!$n || !$quien || $quien['rol'] !== 'empleado') return null;
+    return date('Y-m-d', strtotime(local(ahora(), 'Y-m-d') . " +$n days"));
 }

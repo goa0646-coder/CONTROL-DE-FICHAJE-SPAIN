@@ -70,7 +70,8 @@ cabecera('Calendario', $yo);
 </form>
 <?php endif ?>
 <?php if (!$jefe):
-    $mio = $cals[$yo['id']];
+    $lim = limite_vision(db(), $yo);
+    $mio = array_filter($cals[$yo['id']], fn($f) => !$lim || $f <= $lim, ARRAY_FILTER_USE_KEY);
     $trabajo = array_filter($mio, fn($c) => $c['turno'] > 0 && !$c['ausencia']);
     $aus = array_filter($mio, fn($c) => $c['ausencia'] && $c['ausencia']['minutos'] === null); ?>
 <div class="cifras">

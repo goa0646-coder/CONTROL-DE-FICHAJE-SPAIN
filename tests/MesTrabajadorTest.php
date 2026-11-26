@@ -22,4 +22,15 @@ class MesTrabajadorTest extends Base
         $this->assertStringContainsString('No disponible', $comp);
         $this->assertStringNotContainsString('data-fecha', $comp);
     }
+
+    public function testLimiteDeVisionSoloParaEmpleados(): void
+    {
+        $e = $this->usuario();
+        $r = $this->usuario(['rol' => 'responsable']);
+        consulta($this->db, "REPLACE INTO ajustes VALUES ('vision_dias', '30')");
+        $this->assertSame(date('Y-m-d', strtotime(local(ahora(), 'Y-m-d') . ' +30 days')), limite_vision($this->db, $e));
+        $this->assertNull(limite_vision($this->db, $r), 'responsables lo ven todo');
+        consulta($this->db, "REPLACE INTO ajustes VALUES ('vision_dias', '0')");
+        $this->assertNull(limite_vision($this->db, $e), 'sin límite');
+    }
 }

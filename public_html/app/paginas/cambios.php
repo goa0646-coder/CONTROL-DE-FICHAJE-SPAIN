@@ -17,6 +17,8 @@ if (es_post()) {
             cancelar_cambio(db(), $u, $id);
             aviso('Cambio cancelado.');
         } else {
+            $lim = limite_vision(db(), $u);
+            if ($lim && max((string)($_POST['fecha'] ?? ''), (string)($_POST['devuelve'] ?? '')) > $lim) throw new DomainException('Solo puedes proponer cambios hasta el ' . date('d/m/Y', strtotime($lim)) . '.');
             pedir_cambio(db(), $u, (int)($_POST['companero'] ?? 0), $_POST['fecha'] ?? '', $_POST['devuelve'] ?? '', $_POST['motivo'] ?? '');
             aviso('Propuesta enviada. Cuando tu compañero la acepte, la aprobará la empresa.');
         }
@@ -48,8 +50,9 @@ cabecera('Cambios de turno', $u);
   <?php if (!$comp): ?><p class="aviso error"><?= icono('alerta') ?><span>No hay compañeros de tu mismo puesto con los que cambiar. Pide a la empresa que revise tu puesto en tu ficha.</span></p><?php else: ?>
   <div class="filtros">
     <label>Compañero <select name="companero" required><option value="">Elige…</option><?php foreach ($comp as $c): ?><option value="<?= e($c['id']) ?>"><?= e(nombre($c)) ?></option><?php endforeach ?></select></label>
-    <label>Día del cambio <input type="date" name="fecha" min="<?= $hoy ?>" required></label>
-    <label>Día que me devuelve (opcional) <input type="date" name="devuelve" min="<?= $hoy ?>"></label>
+    <?php $lim = limite_vision(db(), $u); ?>
+    <label>Día del cambio <input type="date" name="fecha" min="<?= $hoy ?>"<?= $lim ? ' max="' . $lim . '"' : '' ?> required></label>
+    <label>Día que me devuelve (opcional) <input type="date" name="devuelve" min="<?= $hoy ?>"<?= $lim ? ' max="' . $lim . '"' : '' ?>></label>
   </div>
   <div data-cal-companero></div>
   <label>Motivo <input name="motivo" maxlength="500" placeholder="Opcional"></label>

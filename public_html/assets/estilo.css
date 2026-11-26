@@ -634,3 +634,4 @@ blockquote { margin: .4rem 0; padding: .5rem .8rem; border-left: 3px solid var(-
 .mes-personal .dia.tocable:hover, .mes-personal .dia.tocable:focus { outline: 2px solid var(--azul, #1f78bc); outline-offset: 1px; }
 .mes-personal .dia.elegido { outline: 3px solid var(--azul, #1f78bc); outline-offset: 1px; }
 .mes-personal .dia.en-rango { box-shadow: inset 0 0 0 999px rgba(31, 120, 188, .18); }
+.mes-personal .dia.oculto { background: repeating-linear-gradient(45deg, var(--relleno), var(--relleno) 6px, transparent 6px, transparent 12px); }
