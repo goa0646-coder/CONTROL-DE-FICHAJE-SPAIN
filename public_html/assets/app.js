@@ -224,7 +224,7 @@ for (const dlg of document.querySelectorAll('dialog.elegir-turno')) {
 }
 
 // Firma requerida en anuncios: trazo con el dedo o el ratón; se envía como JPEG con fondo blanco y, si hay permiso, la ubicación.
-for (const f of document.querySelectorAll('[data-firma]')) {
+for (const f of document.querySelectorAll('[data-firma-anuncio]')) {
   const cv = f.querySelector('canvas'), cx = cv.getContext('2d');
   let pinta = false, trazos = 0;
   const limpiar = () => { cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height); trazos = 0; };

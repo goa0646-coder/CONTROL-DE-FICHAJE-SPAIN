@@ -128,7 +128,7 @@ cabecera('Anuncios', $yo);
     <?php if ($para_mi && !empty($abierto['firma_requerida'])): $ac = acuse_firma(db(), (int)$abierto['id'], (int)$yo['id']); ?>
       <?php if ($ac): ?><p class="aviso ok">Firmado el <?= local($ac['firmado_utc']) ?>. <a href="?p=archivo&d=<?= e($ac['documento_id']) ?>">Descargar certificado (PDF)</a></p>
       <?php else: ?>
-      <form method="post" class="firma-anuncio" data-firma>
+      <form method="post" class="firma-anuncio" data-firma-anuncio>
         <?= csrf_campo() ?><input type="hidden" name="id" value="<?= e($abierto['id']) ?>"><input type="hidden" name="firma"><input type="hidden" name="lat"><input type="hidden" name="lng"><input type="hidden" name="precision">
         <h3>Firma requerida</h3>
         <label>Tu DNI / NIE / pasaporte <input name="dni" required autocomplete="off" maxlength="20"></label>
