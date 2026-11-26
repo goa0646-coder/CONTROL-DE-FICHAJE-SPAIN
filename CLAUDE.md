@@ -20,3 +20,4 @@
 - Usa `superpowers:verification-before-completion` antes de decir que algo funciona o de entregar un ZIP.
 - Usa `superpowers:systematic-debugging` ante cualquier fallo.
 - Usa `superpowers:brainstorming` solo para funciones nuevas grandes.
+- Si una tarea es sencilla, avisa de que se puede cambiar a Sonnet (`/model`) para gastar menos; el ahorro real se ve en `/usage`.
