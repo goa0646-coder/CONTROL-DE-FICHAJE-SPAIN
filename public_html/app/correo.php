@@ -34,7 +34,9 @@ function enviar_correo(string $para, string $asunto, string $texto): bool
             return false;
         }
     }
-    return @mail($para, '=?UTF-8?B?' . base64_encode($asunto) . '?=', $texto, "From: INDA <{$c['desde']}>\r\nContent-Type: text/plain; charset=utf-8");
+    $ok = @mail($para, '=?UTF-8?B?' . base64_encode($asunto) . '?=', $texto, "From: INDA <{$c['desde']}>\r\nContent-Type: text/plain; charset=utf-8");
+    if (!$ok && function_exists('registrar_error')) registrar_error('Correo no enviado: el servidor no aceptó mail(). Configura el SMTP en Empresa → Correo.', __FILE__, __LINE__);
+    return $ok;
 }
 
 // Correo a administración (uno o varios emails separados por comas).
