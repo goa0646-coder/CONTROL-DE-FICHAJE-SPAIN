@@ -22,6 +22,20 @@ class UsuariosTest extends Base
         $this->assertSame('Demasiados intentos. Espera 15 minutos.', login($this->db, $u['email'], 'secreto123'));
     }
 
+    public function testLoginBloqueaPorConexionTrasTreintaFallosEnVariasCuentas(): void
+    {
+        $antes = $_SERVER['REMOTE_ADDR'] ?? null;
+        $_SERVER['REMOTE_ADDR'] = '10.9.' . random_int(0, 255) . '.' . random_int(1, 254);
+        try {
+            for ($i = 0; $i < 30; $i++) login($this->db, "nadie$i-" . uniqid() . '@x.es', 'mal');
+            $u = $this->usuario();
+            $this->assertSame('Demasiados intentos. Espera 15 minutos.', login($this->db, $u['email'], 'secreto123'));
+        } finally {
+            consulta($this->db, 'DELETE FROM intentos_login WHERE clave = ?', ['ip:' . ip()]);
+            $_SERVER['REMOTE_ADDR'] = $antes;
+        }
+    }
+
     public function testInspeccionCaducada(): void
     {
         $u = $this->usuario(['rol' => 'inspeccion']);

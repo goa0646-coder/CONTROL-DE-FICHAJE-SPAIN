@@ -4,7 +4,7 @@ declare(strict_types=1);
 date_default_timezone_set('UTC');
 const ZONA = 'Europe/Madrid';
 // Versión que se ve abajo en el menú: sirve para comprobar que el servidor tiene la última subida.
-const VERSION = '2026.11.27b';
+const VERSION = '2026.11.27c';
 
 // Dirección de un archivo de assets con su fecha: así el navegador y el móvil no usan uno viejo de su caché.
 function asset(string $ruta): string
@@ -126,11 +126,11 @@ function auditar(PDO $db, ?int $uid, string $accion, string $detalle = ''): void
 
 // --- Bloqueo tras 5 fallos en 15 minutos (login y PIN de quiosco) ---
 
-function bloqueado(PDO $db, string $clave): bool
+function bloqueado(PDO $db, string $clave, int $max = 5): bool
 {
     $s = $db->prepare('SELECT COUNT(*) FROM intentos_login WHERE clave = ? AND momento_utc > ?');
     $s->execute([$clave, gmdate('Y-m-d H:i:s', time() - 900)]);
-    return $s->fetchColumn() >= 5;
+    return $s->fetchColumn() >= $max;
 }
 
 function fallo(PDO $db, string $clave): void

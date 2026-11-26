@@ -11,13 +11,15 @@ if ($nuevo) $_SESSION['totp_nuevo'] ??= base32(random_bytes(20));
 $secreto = $nuevo ? $_SESSION['totp_nuevo'] : $u['totp_secreto'];
 if (es_post()) {
     $_SESSION['dos_pasos_fallos'] = ($_SESSION['dos_pasos_fallos'] ?? 0) + 1;
-    if ($_SESSION['dos_pasos_fallos'] > 5) {
+    // También por cuenta: volver a entrar con la contraseña no da 5 intentos nuevos sin fin.
+    if ($_SESSION['dos_pasos_fallos'] > 5 || bloqueado(db(), 'totp:' . $u['id'], 10)) {
         unset($_SESSION['dos_pasos'], $_SESSION['dos_pasos_fallos']);
         auditar(db(), (int)$u['id'], 'dos_pasos_bloqueado');
         aviso('Demasiados códigos incorrectos. Vuelve a entrar.', 'error');
         redirigir('login');
     }
     if (!totp_valido($secreto, (string)($_POST['codigo'] ?? ''))) {
+        fallo(db(), 'totp:' . $u['id']);
         aviso('Código incorrecto. Mira la app y escribe el de ahora.', 'error');
         redirigir('dospasos');
     }

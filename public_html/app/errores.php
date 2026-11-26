@@ -57,6 +57,9 @@ function pagina_error(string $codigo, string $mensaje, string $donde): void
 
 function activar_registro_errores(): void
 {
+    // Nunca enseñar avisos de PHP (rutas, consultas) en pantalla aunque el hosting lo tenga activado: van al registro.
+    ini_set('display_errors', '0');
+    ini_set('log_errors', '1');
     set_exception_handler(function (Throwable $e) {
         $c = registrar_error(get_class($e) . ': ' . $e->getMessage(), $e->getFile(), $e->getLine(), $e->getTraceAsString());
         pagina_error($c, $e->getMessage(), basename($e->getFile()) . ':' . $e->getLine());
