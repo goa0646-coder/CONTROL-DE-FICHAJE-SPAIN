@@ -25,7 +25,9 @@ if (es_post() && isset($_POST['enviar_acceso'])) {
     $n = 0;
     foreach ($ids as $id) if (($p = usuario(db(), (int)$id)) && $p['activo'] && $p['email']) $n += (int)enviar_bienvenida(db(), $p, isset($_POST['cambio']));
     auditar(db(), (int)$yo['id'], 'acceso_enviado', 'personas=' . count($ids) . " enviados=$n");
-    aviso($n ? "Enviado a $n " . ($n === 1 ? 'persona' : 'personas') . '. El enlace vale 7 días.' : 'No se ha podido enviar: revisa Administración → Correo y Diagnóstico.', $n ? 'ok' : 'error');
+    $fallo = correo_error();
+    aviso(($n ? "Enviado a $n " . ($n === 1 ? 'persona' : 'personas') . '. El enlace vale 7 días.' : 'No se ha podido enviar.')
+        . ($fallo !== '' ? ' Motivo del último fallo: ' . $fallo : ''), $n && $fallo === '' ? 'ok' : 'error');
     redirigir('usuarios', count($ids) === 1 && $_POST['enviar_acceso'] !== 'pendientes' ? ['u' => (int)$ids[0]] : []);
 }
 

@@ -16,10 +16,19 @@ function correo_cfg(): array
     return ['desde' => ($bd['desde'] ?? '') ?: ($c['correo_desde'] ?? ''), 'smtp' => $smtp, 'admin' => $bd['admin'] ?? ''];
 }
 
+// Motivo del último correo que no se pudo enviar (para enseñarlo en pantalla en vez de un mensaje genérico).
+function correo_error(?string $m = null): string
+{
+    static $ultimo = '';
+    if ($m !== null) $ultimo = $m;
+    return $ultimo;
+}
+
 function enviar_correo(string $para, string $asunto, string $texto): bool
 {
     $c = correo_cfg();
     if ($c['desde'] === '' || $para === '') {
+        correo_error($c['desde'] === '' ? 'falta el «Email de envío» en Empresa → Correo.' : 'la persona no tiene email.');
         if ($para !== '' && function_exists('registrar_error')) registrar_error('Correo sin enviar: falta el «Email de envío» en Administración → Correo', __FILE__, __LINE__);
         return false;
     }
@@ -29,12 +38,14 @@ function enviar_correo(string $para, string $asunto, string $texto): bool
             return true;
         } catch (RuntimeException $e) {
             error_log('INDA correo: ' . $e->getMessage());
+            correo_error($e->getMessage());
             // Se ve en Administración → Diagnóstico (sin el destinatario).
             if (function_exists('registrar_error')) registrar_error('Correo no enviado (SMTP): ' . $e->getMessage(), __FILE__, __LINE__);
             return false;
         }
     }
     $ok = @mail($para, '=?UTF-8?B?' . base64_encode($asunto) . '?=', $texto, "From: INDA <{$c['desde']}>\r\nContent-Type: text/plain; charset=utf-8");
+    if (!$ok) correo_error('el servidor no aceptó el correo (sin SMTP configurado en Empresa → Correo).');
     if (!$ok && function_exists('registrar_error')) registrar_error('Correo no enviado: el servidor no aceptó mail(). Configura el SMTP en Empresa → Correo.', __FILE__, __LINE__);
     return $ok;
 }
