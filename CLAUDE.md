@@ -17,3 +17,6 @@
 - Ejecuta `/security-review` antes de cada ZIP y corrige lo grave.
 - Al final de cada respuesta, indica en una línea qué skills usaste.
 - No revises lo ya hecho salvo que `/security-review` encuentre algo.
+- Usa `superpowers:verification-before-completion` antes de decir que algo funciona o de entregar un ZIP.
+- Usa `superpowers:systematic-debugging` ante cualquier fallo.
+- Usa `superpowers:brainstorming` solo para funciones nuevas grandes.
