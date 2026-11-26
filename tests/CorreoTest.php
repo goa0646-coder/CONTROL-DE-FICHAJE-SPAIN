@@ -51,4 +51,14 @@ class CorreoTest extends Base
         $this->assertSame(0, avisar_administracion('a', 'b'), 'sin remitente configurado no se envía nada');
         $this->db->exec("DELETE FROM ajustes WHERE clave = 'correo'");
     }
+
+    public function testElFalloDeEnvioGuardaElMotivoParaEnsenarlo(): void
+    {
+        consulta($this->db, 'REPLACE INTO ajustes VALUES (?, ?)', ['correo', json_encode(['desde' => 'no-responde@x.es', 'smtp' => ['host' => '127.0.0.1', 'puerto' => 1]])]);
+        $this->assertFalse(enviar_correo('ana@x.es', 'a', 'b'));
+        $this->assertStringContainsString('No se puede conectar con 127.0.0.1:1', correo_error());
+        consulta($this->db, 'REPLACE INTO ajustes VALUES (?, ?)', ['correo', json_encode(['desde' => ''])]);
+        $this->assertFalse(enviar_correo('ana@x.es', 'a', 'b'));
+        $this->assertStringContainsString('Email de envío', correo_error());
+    }
 }
