@@ -10,3 +10,10 @@
 - **ZIP limpio para public_html**: `bin/empaquetar.sh` → `dist/inda.zip` (contenido de `public_html` + `config.ejemplo.php`, sin tests, vendor, .git ni docs) y `dist/inda.sql`.
 - **Hosting**: Hostinger compartido, PHP 8 + MySQL, sin Node, con cron. Sin frameworks ni dependencias en producción.
 - **Respuestas cortas y en español.**
+
+## Forma de trabajar
+
+- Usa `/ponytail` en cada tarea de código nueva.
+- Ejecuta `/security-review` antes de cada ZIP y corrige lo grave.
+- Al final de cada respuesta, indica en una línea qué skills usaste.
+- No revises lo ya hecho salvo que `/security-review` encuentre algo.
