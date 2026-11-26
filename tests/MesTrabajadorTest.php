@@ -33,4 +33,19 @@ class MesTrabajadorTest extends Base
         consulta($this->db, "REPLACE INTO ajustes VALUES ('vision_dias', '0')");
         $this->assertNull(limite_vision($this->db, $e), 'sin límite');
     }
+
+    public function testBorrarCuadranteEntreFechasSoloDeEsasPersonasYDesdeHoy(): void
+    {
+        $m = $this->horario([1, 2, 3, 4, 5], '07:00', '15:00');
+        $a = $this->usuario();
+        $b = $this->usuario();
+        foreach ([$a, $b] as $u) foreach (['2099-05-01', '2099-05-02', '2099-05-10'] as $f)
+            consulta($this->db, 'INSERT INTO planificacion (usuario_id, fecha, horario_id) VALUES (?, ?, ?)', [$u['id'], $f, $m]);
+        $this->assertSame(2, borrar_cuadrante($this->db, [$a['id']], '2099-05-01', '2099-05-05'));
+        $n = fn($u) => (int)consulta($this->db, 'SELECT COUNT(*) FROM planificacion WHERE usuario_id = ?', [$u['id']])->fetchColumn();
+        $this->assertSame(1, $n($a));
+        $this->assertSame(3, $n($b), 'a quien no se elige no se le toca');
+        $this->expectException(DomainException::class);
+        borrar_cuadrante($this->db, [$a['id']], '2020-01-01', '2099-05-31');
+    }
 }

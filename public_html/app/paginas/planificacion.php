@@ -52,6 +52,19 @@ if (es_post() && ($_POST['que'] ?? '') === 'reubicar') {
     redirigir('planificacion', ['semana' => $lunes]);
 }
 
+if (es_post() && ($_POST['que'] ?? '') === 'borrar') {
+    try {
+        $sel = array_values(array_intersect(array_map('intval', (array)($_POST['personas'] ?? [])), $ids));
+        $n = borrar_cuadrante(db(), $sel, $_POST['desde'] ?? '', $_POST['hasta'] ?? '');
+        foreach ($sel as $uid) notificar(db(), $uid, 'horario:' . ahora() . ":$uid", 'Tu horario ha cambiado. Revísalo en el calendario.', 'calendario');
+        auditar(db(), (int)$yo['id'], 'planificacion', "borrar {$_POST['desde']}..{$_POST['hasta']} personas=" . implode(',', $sel) . " dias=$n");
+        aviso("Borrados $n días del cuadrante. Esas personas vuelven a su horario habitual en esas fechas.");
+    } catch (DomainException $e) {
+        aviso($e->getMessage(), 'error');
+    }
+    redirigir('planificacion', ['semana' => $lunes]);
+}
+
 if (es_post() && ($_POST['que'] ?? '') === 'ausencia') {
     try {
         // Una o varias personas a la vez (p. ej. bajas o vacaciones de golpe); quien ya tenga algo esas fechas se salta y se avisa.
@@ -379,5 +392,19 @@ $dia = fn($f) => DIAS[(int)date('N', strtotime($f))] . ' ' . date('d/m', strtoti
   </div>
   <label><input type="checkbox" name="escalonar"> Escalonar: cada persona empieza la secuencia un día después que la anterior</label>
   <button name="que" value="rotacion">Aplicar y avisar</button>
+</form>
+
+<form method="post" class="tarjeta">
+  <?= csrf_campo() ?>
+  <h2>Borrar cuadrante entre fechas</h2>
+  <p class="nota">Quita los turnos puestos en esas fechas y cada persona vuelve a su horario habitual. Solo desde hoy en adelante; los fichajes y las ausencias no se tocan. Queda en la auditoría y se avisa a cada persona.</p>
+  <div class="filtros">
+    <label>Desde <input type="date" name="desde" required min="<?= e(local(ahora(), 'Y-m-d')) ?>"></label>
+    <label>Hasta <input type="date" name="hasta" required min="<?= e(local(ahora(), 'Y-m-d')) ?>"></label>
+  </div>
+  <details><summary>Personas (todas por defecto)</summary>
+    <?php foreach ($personas as $p): ?><label><input type="checkbox" name="personas[]" value="<?= e($p['id']) ?>" checked> <?= e(nombre($p)) ?></label><?php endforeach ?>
+  </details>
+  <button name="que" value="borrar" class="secundario" data-confirmar="¿Borrar el cuadrante de esas fechas? Las personas vuelven a su horario habitual.">Borrar cuadrante</button>
 </form>
 <?php pie();

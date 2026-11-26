@@ -299,6 +299,16 @@ function leyenda_turnos(array $hors, array $ids): string
     return $h . '<span class="letra-turno descanso">D</span> Descanso · F Festivo</p>';
 }
 
+// Borra el cuadrante de esas personas entre dos fechas (desde hoy en adelante): vuelven a su horario habitual. Devuelve cuántos días se han quitado.
+function borrar_cuadrante(PDO $db, array $uids, string $desde, string $hasta): int
+{
+    $f = '/^\d{4}-\d{2}-\d{2}$/';
+    if (!preg_match($f, $desde) || !preg_match($f, $hasta) || $hasta < $desde) throw new DomainException('Fechas no válidas.');
+    if ($desde < local(ahora(), 'Y-m-d')) throw new DomainException('Solo se puede borrar desde hoy en adelante: lo pasado se queda como estaba.');
+    $uids = array_values(array_unique(array_map('intval', $uids))) ?: throw new DomainException('Elige al menos una persona.');
+    return consulta($db, 'DELETE FROM planificacion WHERE fecha BETWEEN ? AND ? AND usuario_id IN (' . implode(',', array_fill(0, count($uids), '?')) . ')', [$desde, $hasta, ...$uids])->rowCount();
+}
+
 const VISION_DIAS = [0 => 'Sin límite', 30 => '30 días', 60 => '60 días', 120 => '120 días', 365 => '365 días'];
 
 // Último día que un empleado puede ver de su planificación (o null si no hay límite o no es empleado).
