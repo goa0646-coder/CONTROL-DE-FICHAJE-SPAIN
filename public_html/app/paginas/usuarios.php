@@ -30,6 +30,18 @@ if (es_post() && isset($_POST['enviar_acceso'])) {
 }
 
 // El admin puede retirar una foto de perfil inadecuada.
+if (es_post() && isset($_POST['contrato'])) {
+    $id = (int)$_POST['contrato'];
+    try {
+        if (!usuario(db(), $id)) throw new DomainException('Persona no encontrada.');
+        guardar_contrato(db(), $yo, $id, $_POST, (int)($_POST['contrato_id'] ?? 0) ?: null);
+        aviso('Contrato guardado.');
+    } catch (DomainException $e) {
+        aviso($e->getMessage(), 'error');
+    }
+    redirigir('usuarios', ['u' => $id, 'tab' => 'contratos']);
+}
+
 if (es_post() && isset($_POST['quitar_2fa'])) {
     $id = (int)$_POST['quitar_2fa'];
     if (protegida(db(), $yo, $id)) redirigir('usuarios');
@@ -169,6 +181,43 @@ cabecera($editando ? ($u['id'] ? nombre($u) : 'Nueva persona') : 'Usuarios', $yo
 ?>
 <?php if ($editando): ?>
 <p class="volver-arriba"><a href="?p=usuarios"><?= icono('flecha') ?> Volver a la plantilla</a></p>
+<?php if ($u['id']): $tab = ($_GET['tab'] ?? '') === 'contratos' ? 'contratos' : 'datos'; ?>
+<nav class="segmentos"><a href="?p=usuarios&u=<?= e($u['id']) ?>" class="<?= $tab === 'datos' ? 'activo' : '' ?>">Datos personales</a><a href="?p=usuarios&u=<?= e($u['id']) ?>&tab=contratos" class="<?= $tab === 'contratos' ? 'activo' : '' ?>">Contratos</a></nav>
+<?php if ($tab === 'contratos'): $cs = contratos_de(db(), (int)$u['id']); $ed = null; foreach ($cs as $c) if ($c['id'] == ($_GET['c'] ?? 0)) $ed = $c;
+    $ed ??= ['id' => '', 'tipo' => '', 'categoria' => '', 'jornada' => '', 'inicio' => '', 'fin' => '', 'convenio' => $cs[0]['convenio'] ?? '', 'notas' => '', 'anulado' => 0]; ?>
+<div class="tarjeta">
+  <h2>Contratos de <?= e(nombre($u)) ?></h2>
+  <?php if (!$cs): ?><p class="nota">Aún no tiene contratos. Añádelo abajo o impórtalos desde Excel (hoja «Contratos»).</p><?php endif ?>
+  <table>
+    <tr><th>Estado</th><th>Modalidad</th><th>Categoría</th><th>Jornada</th><th>Inicio</th><th>Fin</th><th>Convenio</th><th></th></tr>
+    <?php foreach ($cs as $c): $est = estado_contrato($c); ?>
+    <tr class="<?= $c['anulado'] ? 'anulado' : '' ?>"><td><span class="estado <?= $est === 'Activo' ? 'dentro' : 'fuera' ?>"><?= $est ?></span></td><td><?= e($c['tipo'] ?: '—') ?></td><td><?= e($c['categoria'] ?: '—') ?></td><td><?= e($c['jornada'] ?: '—') ?></td>
+      <td><?= date('d/m/Y', strtotime($c['inicio'])) ?></td><td><?= $c['fin'] ? date('d/m/Y', strtotime($c['fin'])) : 'Indefinido / abierto' ?></td><td><?= e($c['convenio'] ?: '—') ?><?= $c['notas'] !== '' ? '<br><small class="nota">' . e($c['notas']) . '</small>' : '' ?></td>
+      <td><a href="?p=usuarios&u=<?= e($u['id']) ?>&tab=contratos&c=<?= e($c['id']) ?>#contrato">Editar</a></td></tr>
+    <?php endforeach ?>
+  </table>
+</div>
+<form method="post" class="tarjeta" id="contrato">
+  <?= csrf_campo() ?><input type="hidden" name="contrato_id" value="<?= e($ed['id']) ?>">
+  <h3><?= $ed['id'] ? 'Editar contrato' : 'Añadir contrato' ?></h3>
+  <div class="filtros">
+    <label>Modalidad <input name="tipo" value="<?= e($ed['tipo']) ?>" list="modalidades" maxlength="80" placeholder="Indefinido"></label>
+    <label>Categoría <input name="categoria" value="<?= e($ed['categoria']) ?>" maxlength="100" placeholder="Auxiliar / Gerocultor"></label>
+    <label>Jornada <input name="jornada" value="<?= e($ed['jornada']) ?>" maxlength="60" placeholder="Completa / Parcial 30 h"></label>
+  </div>
+  <div class="filtros">
+    <label>Inicio <input type="date" name="inicio" value="<?= e($ed['inicio']) ?>" required></label>
+    <label>Fin (vacío = indefinido) <input type="date" name="fin" value="<?= e($ed['fin'] ?? '') ?>"></label>
+    <label>Convenio <input name="convenio" value="<?= e($ed['convenio']) ?>" maxlength="200"></label>
+  </div>
+  <label>Notas <input name="notas" value="<?= e($ed['notas']) ?>" maxlength="500"></label>
+  <?php if ($ed['id']): ?><label><input type="checkbox" name="anulado" value="1" <?= $ed['anulado'] ? 'checked' : '' ?>> Anulado (metido por error; no se borra)</label><?php endif ?>
+  <datalist id="modalidades"><option>Indefinido</option><option>Indefinido fijo discontinuo</option><option>Temporal por circunstancias de la producción</option><option>Temporal por sustitución</option><option>Formativo</option></datalist>
+  <button name="contrato" value="<?= e($u['id']) ?>"><?= $ed['id'] ? 'Guardar cambios' : 'Añadir contrato' ?></button>
+  <?php if ($ed['id']): ?><a class="boton secundario" href="?p=usuarios&u=<?= e($u['id']) ?>&tab=contratos">Cancelar</a><?php endif ?>
+</form>
+<?php pie(); return; endif ?>
+<?php endif ?>
 <?php if (!empty($u['foto'])): ?>
 <form method="post" class="tarjeta con-avatar"><?= csrf_campo() ?><?= avatar($u, 'grande') ?> <button name="quitar_foto" value="<?= e($u['id']) ?>" class="secundario" data-confirmar="¿Retirar la foto de perfil de <?= e(nombre($u)) ?>?">Retirar foto</button></form>
 <?php endif ?>

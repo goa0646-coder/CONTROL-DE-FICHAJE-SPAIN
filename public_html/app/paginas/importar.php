@@ -33,7 +33,7 @@ if (es_post()) {
             $enviados = 0;
             if (isset($_POST['bienvenida'])) foreach ($res['_nuevos'] ?? [] as $uid) $enviados += enviar_bienvenida(db(), usuario(db(), $uid));
             unset($res['_nuevos']);
-            $nombres = ['cuadrante' => 'Cuadrante', 'departamentos' => 'Departamentos', 'puestos' => 'Puestos', 'turnos' => 'Turnos', 'personas' => 'Personas', 'ratios' => 'Ratios', 'festivos' => 'Festivos', 'ausencias' => 'Ausencias'];
+            $nombres = ['cuadrante' => 'Cuadrante', 'departamentos' => 'Departamentos', 'puestos' => 'Puestos', 'turnos' => 'Turnos', 'personas' => 'Personas', 'ratios' => 'Ratios', 'festivos' => 'Festivos', 'ausencias' => 'Ausencias', 'contratos' => 'Contratos'];
             aviso('Importado. ' . implode(' · ', array_map(fn($k, $v) => ($nombres[$k] ?? $k) . ": $v", array_keys($res), $res)) . '.'
                 . (isset($_POST['bienvenida']) && $enviados ? " Emails de bienvenida: $enviados." : ''));
             redirigir('importar');
@@ -46,7 +46,7 @@ if (es_post()) {
     redirigir('importar');
 }
 $plan = $_SESSION['importacion'] ?? null;
-$titulos = ['personas' => 'Personas', 'turnos' => 'Turnos', 'ratios' => 'Ratios (mínimos por turno)', 'festivos' => 'Festivos', 'ausencias' => 'Ausencias (vacaciones, bajas, permisos)', 'departamentos' => 'Departamentos', 'puestos' => 'Puestos', 'cuadrante' => 'Cuadrante (turnos día a día)'];
+$titulos = ['personas' => 'Personas', 'turnos' => 'Turnos', 'ratios' => 'Ratios (mínimos por turno)', 'festivos' => 'Festivos', 'ausencias' => 'Ausencias (vacaciones, bajas, permisos)', 'departamentos' => 'Departamentos', 'puestos' => 'Puestos', 'contratos' => 'Contratos', 'cuadrante' => 'Cuadrante (turnos día a día)'];
 $ultimo = json_decode(ajuste(db(), 'informe_importacion') ?? '', true);
 // Tabla del informe: [sección, hoja, fila, persona, día, valor, motivo].
 $tabla_informe = function (array $filas, string $csv) { ?>

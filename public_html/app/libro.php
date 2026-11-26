@@ -11,6 +11,7 @@ const HOJAS = [
     'festivos' => 'festivos', 'calendario laboral' => 'festivos',
     'ausencias' => 'ausencias', 'vacaciones' => 'ausencias', 'bajas' => 'ausencias', 'permisos' => 'ausencias',
     'departamentos' => 'departamentos', 'puestos' => 'puestos', 'cargos' => 'puestos',
+    'contratos' => 'contratos',
 ];
 
 // Cabeceras de cada sección (normalizadas) → campo.
@@ -26,6 +27,10 @@ const CABECERAS = [
         'tipo' => 'tipo', 'motivo' => 'tipo', 'desde' => 'desde', 'fecha inicio' => 'desde', 'inicio' => 'desde', 'hasta' => 'hasta', 'fecha fin' => 'hasta', 'fin' => 'hasta',
         'hora desde' => 'hora_desde', 'hora hasta' => 'hora_hasta', 'estado' => 'estado', 'comentario' => 'comentario', 'observaciones' => 'comentario'],
     'departamentos' => ['nombre' => 'nombre', 'departamento' => 'nombre'],
+    'contratos' => ['email' => 'email', 'e-mail' => 'email', 'correo' => 'email', 'dni' => 'dni', 'dni/nie' => 'dni', 'persona' => 'persona', 'trabajador' => 'persona', 'nombre' => 'persona',
+        'modalidad' => 'tipo', 'tipo' => 'tipo', 'tipo de contrato' => 'tipo', 'categoria' => 'categoria', 'puesto' => 'categoria', 'puesto/categoria' => 'categoria', 'jornada' => 'jornada',
+        'inicio' => 'inicio', 'fecha de inicio' => 'inicio', 'fecha inicio' => 'inicio', 'fin' => 'fin', 'fecha de fin' => 'fin', 'fecha fin' => 'fin',
+        'convenio' => 'convenio', 'convenio colectivo' => 'convenio', 'convenio colectivo registrado' => 'convenio', 'notas' => 'notas', 'observaciones' => 'notas'],
     'puestos' => ['nombre' => 'nombre', 'puesto' => 'nombre', 'cargo' => 'nombre'],
 ];
 
@@ -83,14 +88,14 @@ function preparar_libro(PDO $db, array $libro): array
         }
         try {
             $plan['secciones'][$sec] = $sec === 'personas' ? ['filas' => filas_importables($hoja)[0]]
-                : ['filas' => filas_seccion($hoja, CABECERAS[$sec], $sec === 'ausencias' ? 'tipo' : (in_array($sec, ['festivos'], true) ? 'fecha' : ($sec === 'ratios' ? 'turno' : 'nombre')))];
+                : ['filas' => filas_seccion($hoja, CABECERAS[$sec], $sec === 'ausencias' ? 'tipo' : ($sec === 'contratos' ? 'inicio' : (in_array($sec, ['festivos'], true) ? 'fecha' : ($sec === 'ratios' ? 'turno' : 'nombre'))))];
             $plan['hojas'][$sec] = $nombre;
         } catch (DomainException $e) {
             $plan['secciones'][$sec] = ['filas' => [], 'error' => "Hoja «{$nombre}»: " . $e->getMessage()];
         }
     }
     if ($cuadrantes) $plan['secciones']['cuadrante'] = ['filas' => [], 'celdas' => leer_cuadrantes($cuadrantes)];
-    if (!$plan['secciones']) throw new DomainException('No reconozco ninguna hoja. Llámalas Personas, Turnos, Ratios, Festivos, Ausencias, Departamentos o Puestos (descarga la plantilla).');
+    if (!$plan['secciones']) throw new DomainException('No reconozco ninguna hoja. Llámalas Personas, Turnos, Ratios, Festivos, Ausencias, Departamentos, Puestos o Contratos (descarga la plantilla).');
     // Nombres que existirán tras importar (en la BD o en el propio libro), para avisar antes de lo que no cuadra.
     $existen = fn(string $sql, array $extra) => array_merge(array_map('normalizar', $db->query($sql)->fetchAll(PDO::FETCH_COLUMN)), array_map('normalizar', $extra));
     $turnos = $existen('SELECT nombre FROM horarios', array_column($plan['secciones']['turnos']['filas'] ?? [], 'nombre'));
@@ -109,6 +114,12 @@ function preparar_libro(PDO $db, array $libro): array
                 if (!array_key_exists(normalizar($f['dia'] ?? ''), DIAS_RATIO)) $e[] = 'día no válido (Todos, Lunes…Domingo)';
             } elseif ($sec === 'festivos') {
                 if (!fecha_iso($f['fecha'] ?? '')) $e[] = 'fecha no válida';
+            } elseif ($sec === 'contratos') {
+                if (!fecha_iso($f['inicio'] ?? '')) $e[] = 'fecha de inicio no válida';
+                $fin = trim(preg_replace('/\(.*\)|\*/', '', (string)($f['fin'] ?? '')));
+                if ($fin !== '' && !fecha_iso($fin)) $e[] = 'fecha de fin no válida (vacía = indefinido)';
+                if (($f['email'] ?? '') === '' && ($f['dni'] ?? '') === '' && ($f['persona'] ?? '') === '') $e[] = 'pon el email, el DNI o el nombre de la persona';
+                elseif (($f['email'] ?? '') !== '' && !in_array(normalizar($f['email']), $emails, true)) $e[] = 'no hay nadie con ese email';
             } elseif ($sec === 'ausencias') {
                 if (!fecha_iso($f['desde'] ?? '')) $e[] = 'fecha de inicio no válida';
                 if (($f['hasta'] ?? '') !== '' && !fecha_iso($f['hasta'])) $e[] = 'fecha de fin no válida';
@@ -209,6 +220,27 @@ function aplicar_libro(PDO $db, array $yo, array $plan, bool $actualizar): array
         }
         $res['ausencias'] = "$n nuevas" . ($mal ? ", $mal no encontradas" : '');
     }
+    if (isset($s['contratos'])) {
+        [$n, $a, $mal] = [0, 0, 0];
+        $nombres = [];
+        foreach ($db->query('SELECT * FROM usuarios') as $x) $nombres[normalizar(nombre($x))] = $x;
+        foreach ($ok('contratos') as $f) {
+            $u = ($f['email'] ?? '') !== '' ? consulta($db, 'SELECT * FROM usuarios WHERE email = ?', [mb_strtolower($f['email'])])->fetch()
+                : (($f['dni'] ?? '') !== '' ? usuario_por_dni($db, $f['dni']) : ($nombres[normalizar(preg_replace('/\*/', '', $f['persona']))] ?? null));
+            if (!$u) { $mal++; continue; }
+            $f['fin'] = trim(preg_replace('/\(.*\)|\*/', '', (string)($f['fin'] ?? '')));
+            $f['categoria'] = trim(preg_replace('/\*/', '', (string)($f['categoria'] ?? '')));
+            // El mismo contrato (persona + inicio) se actualiza: volver a importar corrige, no duplica.
+            $id = consulta($db, 'SELECT id FROM contratos WHERE usuario_id = ? AND inicio = ? AND anulado = 0', [$u['id'], fecha_iso($f['inicio'])])->fetchColumn();
+            try {
+                guardar_contrato($db, $yo, (int)$u['id'], $f, $id ? (int)$id : null);
+                $id ? $a++ : $n++;
+            } catch (DomainException) {
+                $mal++;
+            }
+        }
+        $res['contratos'] = "$n nuevos, $a actualizados" . ($mal ? ", $mal no encontrados" : '');
+    }
     $convenio = [];
     if (!empty($s['cuadrante']['celdas'])) {
         $r = interpretar_cuadrante($s['cuadrante']['celdas'], ...listas_cuadrante($db));
@@ -227,7 +259,7 @@ function aplicar_libro(PDO $db, array $yo, array $plan, bool $actualizar): array
 // Todo lo que no se puede importar, fila a fila: [sección, hoja, fila, persona, día, valor, motivo].
 function informe_libro(array $plan): array
 {
-    $nombres = ['personas' => 'Personas', 'turnos' => 'Turnos', 'ratios' => 'Ratios', 'festivos' => 'Festivos', 'ausencias' => 'Ausencias', 'departamentos' => 'Departamentos', 'puestos' => 'Puestos'];
+    $nombres = ['personas' => 'Personas', 'turnos' => 'Turnos', 'ratios' => 'Ratios', 'festivos' => 'Festivos', 'ausencias' => 'Ausencias', 'departamentos' => 'Departamentos', 'puestos' => 'Puestos', 'contratos' => 'Contratos'];
     $out = [];
     foreach ($plan['secciones'] as $sec => $s) {
         if (!empty($s['error'])) $out[] = [$nombres[$sec] ?? 'Cuadrante', $plan['hojas'][$sec] ?? '', '', '', '', '', $s['error']];
