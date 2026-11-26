@@ -6,7 +6,13 @@ if (es_post()) {
     try {
         $que = $_POST['que'] ?? '';
         $c = isset($_POST['id']) ? anuncio(db(), (int)$_POST['id']) : null;
+        if ($que === 'firmar' && $c) {
+            firmar_anuncio(db(), $c, $yo, $_POST);
+            aviso('Firmado. Tienes el certificado en este anuncio y en Documentos.');
+            redirigir('comunicados', ['id' => $c['id']]);
+        }
         if ($que === 'leido' && $c) {
+            if (!empty($c['firma_requerida'])) throw new DomainException('Este anuncio hay que firmarlo.');
             confirmar_lectura(db(), $c, $yo);
             aviso('Lectura confirmada. Gracias.');
             redirigir('comunicados', ['id' => $c['id']]);
@@ -19,7 +25,7 @@ if (es_post()) {
         if ($que === 'publicar' && $puede) {
             $uids = resolver_destinatarios(db(), $yo, (array)($_POST['para'] ?? []));
             if (!isset($_POST['por_email'])) sin_correo(true);
-            $id = crear_anuncio(db(), $yo, $_POST['titulo'] ?? '', $_POST['texto'] ?? '', $uids, guardar_varios($_FILES['adjuntos'] ?? null));
+            $id = crear_anuncio(db(), $yo, $_POST['titulo'] ?? '', $_POST['texto'] ?? '', $uids, guardar_varios($_FILES['adjuntos'] ?? null), isset($_POST['firma_requerida']));
             aviso('Anuncio enviado a ' . count($uids) . (count($uids) === 1 ? ' persona' : ' personas') . (isset($_POST['por_email']) ? '. Les llega aviso en INDA y por email.' : '. Les llega aviso en INDA (sin email).'));
             redirigir('comunicados', ['ver' => 'enviados', 'id' => $id]);
         }
@@ -86,6 +92,7 @@ cabecera('Anuncios', $yo);
   </fieldset>
   <p class="nota">Cada persona recibe un aviso en INDA y un email, y debe pulsar «Confirmo que lo he leído». Verás quién lo ha leído, cuándo y desde qué IP.</p>
   <label><input type="checkbox" name="por_email" value="1" checked> Avisar también por email</label>
+  <label><input type="checkbox" name="firma_requerida" value="1"> <strong>Firma requerida</strong>: cada persona debe poner su DNI, firmar con el dedo y aceptar; se genera un certificado PDF para ambas partes. Hasta firmarlo no puede usar el resto de INDA (salvo fichar)</label>
   <button name="que" value="publicar">Enviar anuncio</button> <a class="boton secundario" href="?p=comunicados&ver=enviados">Cancelar</a>
 </form>
 <?php else: ?>
@@ -118,7 +125,22 @@ cabecera('Anuncios', $yo);
       <p class="nota"><?= e(implode(', ', $nombres)) ?></p></details>
     <?php endif ?>
     <?php if ($adj = adjuntos_anuncio(db(), $abierto)): ?><p class="adjuntos"><?php foreach ($adj as $a): ?><a class="adjunto" href="?p=archivo&c=<?= e($abierto['id']) ?>&adj=<?= e($a['id']) ?>"><?= icono('documentos') ?> <?= e($a['nombre_original']) ?></a> <?php endforeach ?></p><?php endif ?>
-    <?php if ($para_mi): ?>
+    <?php if ($para_mi && !empty($abierto['firma_requerida'])): $ac = acuse_firma(db(), (int)$abierto['id'], (int)$yo['id']); ?>
+      <?php if ($ac): ?><p class="aviso ok">Firmado el <?= local($ac['firmado_utc']) ?>. <a href="?p=archivo&d=<?= e($ac['documento_id']) ?>">Descargar certificado (PDF)</a></p>
+      <?php else: ?>
+      <form method="post" class="firma-anuncio" data-firma-anuncio>
+        <?= csrf_campo() ?><input type="hidden" name="id" value="<?= e($abierto['id']) ?>"><input type="hidden" name="firma"><input type="hidden" name="lat"><input type="hidden" name="lng"><input type="hidden" name="precision">
+        <h3>Firma requerida</h3>
+        <label>Tu DNI / NIE / pasaporte <input name="dni" required autocomplete="off" maxlength="20"></label>
+        <p class="nota">Firma con el dedo (o el ratón) en el recuadro:</p>
+        <canvas width="600" height="200" style="width:100%;max-width:600px;height:auto;border:1px dashed var(--borde,#999);border-radius:12px;background:#fff;touch-action:none"></canvas>
+        <p><button type="button" class="secundario" data-borrar-firma>Borrar firma</button></p>
+        <label><input type="checkbox" name="acepto" value="1" required> He leído, comprendo y acepto los términos del presente comunicado</label>
+        <p class="nota" data-geo-estado>Si das permiso, se añadirá la ubicación aproximada de tu dispositivo al certificado.</p>
+        <button name="que" value="firmar">Firmar y enviar</button>
+      </form>
+      <?php endif ?>
+    <?php elseif ($para_mi): ?>
       <?php if ($mio): ?><p class="aviso ok">Confirmaste la lectura el <?= local($mio['leido_utc']) ?>.</p>
       <?php else: ?><form method="post"><?= csrf_campo() ?><input type="hidden" name="id" value="<?= e($abierto['id']) ?>"><button name="que" value="leido">Confirmo que lo he leído</button></form><?php endif ?>
     <?php endif ?>
@@ -138,8 +160,9 @@ cabecera('Anuncios', $yo);
       <?php endif ?>
       <?php if ($r['leidos']): ?>
       <h4>Leído (<?= count($r['leidos']) ?>)</h4>
-      <table><tr><th>Persona</th><th>Confirmado</th><th>IP</th></tr>
-        <?php foreach ($r['leidos'] as $l): ?><tr><td><span class="con-avatar"><?= avatar($l['usuario'], 'mini') ?> <?= e(nombre($l['usuario'])) ?></span></td><td><?= local($l['leido_utc']) ?></td><td><?= e($l['ip'] ?: '—') ?></td></tr><?php endforeach ?>
+      <?php $firm = !empty($abierto['firma_requerida']); ?>
+      <table><tr><th>Persona</th><th><?= $firm ? 'Firmado' : 'Confirmado' ?></th><th>IP</th><?= $firm ? '<th>Certificado</th>' : '' ?></tr>
+        <?php foreach ($r['leidos'] as $l): $ac = $firm ? acuse_firma(db(), (int)$abierto['id'], (int)$l['usuario']['id']) : null; ?><tr><td><span class="con-avatar"><?= avatar($l['usuario'], 'mini') ?> <?= e(nombre($l['usuario'])) ?></span></td><td><?= local($ac['firmado_utc'] ?? $l['leido_utc']) ?></td><td><?= e($l['ip'] ?: '—') ?></td><?= $firm ? '<td>' . ($ac ? '<a href="?p=archivo&d=' . e($ac['documento_id']) . '">PDF</a>' : '—') . '</td>' : '' ?></tr><?php endforeach ?>
       </table>
       <?php endif ?>
     </div>

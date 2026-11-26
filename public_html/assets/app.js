@@ -222,3 +222,26 @@ for (const dlg of document.querySelectorAll('dialog.elegir-turno')) {
     } catch (e) { estado.textContent = e.message; }
   });
 }
+
+// Firma requerida en anuncios: trazo con el dedo o el ratón; se envía como JPEG con fondo blanco y, si hay permiso, la ubicación.
+for (const f of document.querySelectorAll('[data-firma-anuncio]')) {
+  const cv = f.querySelector('canvas'), cx = cv.getContext('2d');
+  let pinta = false, trazos = 0;
+  const limpiar = () => { cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height); trazos = 0; };
+  limpiar();
+  cx.lineWidth = 3; cx.lineCap = 'round'; cx.strokeStyle = '#111';
+  const punto = ev => { const r = cv.getBoundingClientRect(); return [(ev.clientX - r.left) * cv.width / r.width, (ev.clientY - r.top) * cv.height / r.height]; };
+  cv.addEventListener('pointerdown', ev => { pinta = true; cv.setPointerCapture(ev.pointerId); cx.beginPath(); cx.moveTo(...punto(ev)); });
+  cv.addEventListener('pointermove', ev => { if (!pinta) return; cx.lineTo(...punto(ev)); cx.stroke(); trazos++; });
+  addEventListener('pointerup', () => { pinta = false; });
+  f.querySelector('[data-borrar-firma]').onclick = limpiar;
+  const geo = f.querySelector('[data-geo-estado]');
+  if (navigator.geolocation) navigator.geolocation.getCurrentPosition(p => {
+    f.lat.value = p.coords.latitude; f.lng.value = p.coords.longitude; f.precision.value = Math.round(p.coords.accuracy);
+    geo.textContent = 'Se añadirá la ubicación aproximada de tu dispositivo al certificado.';
+  }, () => { geo.textContent = 'Sin permiso de ubicación: el certificado se generará sin ella.'; }, { timeout: 10000, maximumAge: 60000 });
+  f.addEventListener('submit', ev => {
+    if (trazos < 5) { ev.preventDefault(); alert('Firma con el dedo en el recuadro antes de enviar.'); return; }
+    f.firma.value = cv.toDataURL('image/jpeg', 0.85);
+  });
+}
