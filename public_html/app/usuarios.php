@@ -108,12 +108,14 @@ function cerrar_dispositivos(PDO $db, int $uid, string $salvo = ''): void
 function login(PDO $db, string $email, string $clave): array|string
 {
     $email = mb_strtolower(trim($email));
-    if (bloqueado($db, $email)) return 'Demasiados intentos. Espera 15 minutos.';
+    // Por cuenta (5) y por conexión (30: en la residencia muchos comparten la misma wifi), contra pruebas de contraseñas en muchas cuentas.
+    if (bloqueado($db, $email) || bloqueado($db, 'ip:' . ip(), 30)) return 'Demasiados intentos. Espera 15 minutos.';
     $s = $db->prepare('SELECT * FROM usuarios WHERE email = ?');
     $s->execute([$email]);
     $u = $s->fetch();
     if (!$u || !password_verify($clave, $u['password_hash'])) {
         fallo($db, $email);
+        fallo($db, 'ip:' . ip());
         return 'Email o contraseña incorrectos.';
     }
     if (!acceso_vigente($u)) return 'Tu acceso no está activo.';
