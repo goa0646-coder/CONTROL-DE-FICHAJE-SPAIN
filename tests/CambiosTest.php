@@ -49,4 +49,29 @@ class CambiosTest extends Base
         consulta($this->db, 'REPLACE INTO ajustes VALUES (?, ?)', ['recordatorio_horas', 'no']);
         $this->assertFalse(recordar_solicitudes($this->db, '2099-09-05 08:30:00'), '0 = nunca');
     }
+
+    public function testCambioQueIncumpleSoloSiLosDosLoAceptanPorSuVoluntad(): void
+    {
+        $s = uniqid();
+        $this->db->exec("INSERT INTO puestos (nombre) VALUES ('Enfermería $s')");
+        $pu = (int)$this->db->lastInsertId();
+        $m = $this->horario([1, 2, 3, 4, 5, 6, 7], '07:00', '15:00', 480);
+        $t = $this->horario([1, 2, 3, 4, 5, 6, 7], '15:00', '23:00', 480);
+        $p = function () use ($pu) { $u = $this->usuario(); $this->db->prepare('INSERT INTO usuarios_puestos VALUES (?, ?)')->execute([$u['id'], $pu]); return $u; };
+        [$a, $b] = [$p(), $p()];
+        $admin = $this->usuario(['rol' => 'admin']);
+        foreach (rango_fechas('2099-07-06', '2099-07-08') as $f) {
+            consulta($this->db, 'INSERT INTO planificacion (usuario_id, fecha, horario_id) VALUES (?, ?, ?)', [$a['id'], $f, $m]);
+            consulta($this->db, 'INSERT INTO planificacion (usuario_id, fecha, horario_id) VALUES (?, ?, ?)', [$b['id'], $f, $f === '2099-07-06' ? $t : null]);
+        }
+        // B sale a las 23 del 6 y entraría a las 7 del 7: sin el tick no se puede.
+        try { pedir_cambio($this->db, $b, (int)$a['id'], '2099-07-07'); $this->fail('sin tick no'); } catch (DomainException $e) { $this->assertStringContainsString('propia voluntad', $e->getMessage()); }
+        $id = pedir_cambio($this->db, $b, (int)$a['id'], '2099-07-07', '', '', true);
+        $this->assertNotSame('', cambio($this->db, $id)['incumple']);
+        try { responder_cambio($this->db, $a, $id, true); $this->fail('el compañero también tiene que marcarlo'); } catch (DomainException) {}
+        responder_cambio($this->db, $a, $id, true, true);
+        resolver_cambio($this->db, $admin, $id, true);
+        $this->assertSame($m, calendario_teorico($this->db, $b, '2099-07-07', '2099-07-07')['2099-07-07']['horario_id']);
+        $this->assertSame(1, (int)consulta($this->db, "SELECT COUNT(*) FROM auditoria WHERE accion = 'cambio_aprobado' AND detalle LIKE ?", ["cambio=$id voluntario%"])->fetchColumn());
+    }
 }
