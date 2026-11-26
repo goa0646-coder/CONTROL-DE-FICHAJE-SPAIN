@@ -137,9 +137,5 @@ $hoy_txt = $dia['ausencia'] ? $dia['ausencia']['tipo'] : ($dia['festivo'] ? 'Fes
   <?php endif ?>
 </aside>
 </div>
-<div class="tarjeta centro" data-instalar hidden>
-  <p>Instala la app en tu teléfono y ficha con un toque.</p>
-  <button type="button" data-instalar-boton>Instalar en el teléfono</button>
-  <p class="nota" data-ios hidden>En iPhone: pulsa <strong>Compartir</strong> y después <strong>«Añadir a pantalla de inicio»</strong>.</p>
-</div>
+<?= caja_instalar() ?>
 <?php pie();
