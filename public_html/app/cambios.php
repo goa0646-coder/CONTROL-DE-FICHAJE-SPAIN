@@ -34,7 +34,8 @@ function turno_del_dia(PDO $db, array $u, string $f): array
 
 // Intercambia los turnos de los dos en esas fechas y comprueba el convenio. Sin $guardar lo deshace (solo prueba).
 // Devuelve [[fecha, turno de A antes, turno de B antes], …]. Lanza DomainException si algo no se puede.
-function aplicar_cambio(PDO $db, array $a, array $b, array $fechas, bool $guardar): array
+// Con $voluntario, lo que incumple el convenio no para el cambio: se devuelve en $incumple para que quede constancia.
+function aplicar_cambio(PDO $db, array $a, array $b, array $fechas, bool $guardar, bool $voluntario = false, ?string &$incumple = null): array
 {
     $propio = !$db->inTransaction();
     if ($propio) $db->beginTransaction();
@@ -50,9 +51,12 @@ function aplicar_cambio(PDO $db, array $a, array $b, array $fechas, bool $guarda
         }
         $desde = date('Y-m-d', strtotime(min($fechas) . ' -7 days'));
         $hasta = date('Y-m-d', strtotime(max($fechas) . ' +7 days'));
+        $mal = [];
         foreach ([$a, $b] as $x) if ($m = bloqueos(comprobar_plan($db, $x, $desde, $hasta))) {
-            throw new DomainException('No se puede: a ' . nombre($x) . ' le quedaría «' . $m[0][2] . '» (' . date('d/m', strtotime($m[0][0])) . ').');
+            $mal[] = 'a ' . nombre($x) . ' le quedaría «' . $m[0][2] . '» (' . date('d/m', strtotime($m[0][0])) . ')';
         }
+        $incumple = mb_substr(implode('; ', $mal), 0, 500);
+        if ($mal && !$voluntario) throw new DomainException('No se puede: ' . $incumple . '. Si los dos lo queréis igualmente, marca «Lo acepto por mi propia voluntad aunque incumpla el convenio».');
         if ($propio) $guardar ? $db->commit() : $db->rollBack();
         return $out;
     } catch (Throwable $e) {
@@ -66,7 +70,7 @@ function fechas_cambio(array $c): array
     return array_values(array_unique(array_filter([$c['fecha'], $c['fecha_devuelve'] ?? null])));
 }
 
-function pedir_cambio(PDO $db, array $u, int $companero, string $fecha, string $devuelve = '', string $motivo = ''): int
+function pedir_cambio(PDO $db, array $u, int $companero, string $fecha, string $devuelve = '', string $motivo = '', bool $voluntario = false): int
 {
     $o = companeros_cambio($db, $u)[$companero] ?? throw new DomainException('Elige un compañero de tu mismo puesto.');
     foreach (array_filter([$fecha, $devuelve]) as $f) {
@@ -77,11 +81,11 @@ function pedir_cambio(PDO $db, array $u, int $companero, string $fecha, string $
     $pend = consulta($db, "SELECT COUNT(*) FROM cambios_turno WHERE estado IN ('companero','aprobacion') AND ? IN (solicitante_id, companero_id) AND (fecha IN (?, ?) OR fecha_devuelve IN (?, ?))",
         [$u['id'], $fecha, $devuelve ?: $fecha, $fecha, $devuelve ?: $fecha])->fetchColumn();
     if ($pend) throw new DomainException('Ya hay un cambio pendiente para ese día.');
-    aplicar_cambio($db, $u, $o, array_filter([$fecha, $devuelve]), false); // prueba: avisa ya si no cumple
-    consulta($db, 'INSERT INTO cambios_turno (solicitante_id, companero_id, fecha, fecha_devuelve, motivo, pedido_utc) VALUES (?, ?, ?, ?, ?, ?)',
-        [$u['id'], $o['id'], $fecha, $devuelve ?: null, mb_substr(trim($motivo), 0, 500), ahora()]);
+    aplicar_cambio($db, $u, $o, array_filter([$fecha, $devuelve]), false, $voluntario, $inc); // prueba: avisa ya si no cumple
+    consulta($db, 'INSERT INTO cambios_turno (solicitante_id, companero_id, fecha, fecha_devuelve, motivo, pedido_utc, incumple) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [$u['id'], $o['id'], $fecha, $devuelve ?: null, mb_substr(trim($motivo), 0, 500), ahora(), $inc]);
     $id = (int)$db->lastInsertId();
-    auditar($db, (int)$u['id'], 'cambio_pedido', "cambio=$id con={$o['id']}");
+    auditar($db, (int)$u['id'], 'cambio_pedido', "cambio=$id con={$o['id']}" . ($inc !== '' ? " voluntario incumple: $inc" : ''));
     avisar_administracion('INDA: cambio de turno pedido · ' . nombre($u), nombre($u) . ' pide cambiar el turno del ' . date('d/m/Y', strtotime($fecha)) . ' con ' . nombre($o)
         . ($devuelve ? ' (le devuelve el ' . date('d/m/Y', strtotime($devuelve)) . ')' : '') . '. Primero tiene que aceptarlo ' . nombre($o) . "; después lo apruebas tú.\n\n" . rtrim(config()['url'] ?? '', '/') . '/?p=solicitudes');
     notificar($db, (int)$o['id'], "cambio:$id", nombre($u) . ' te propone cambiar el turno del ' . date('d/m', strtotime($fecha)) . ($devuelve ? ' (y te devuelve el ' . date('d/m', strtotime($devuelve)) . ')' : '') . '. Acepta o rechaza en Cambios de turno.', 'cambios');
@@ -89,14 +93,18 @@ function pedir_cambio(PDO $db, array $u, int $companero, string $fecha, string $
 }
 
 // El compañero acepta (pasa a aprobación, con correo a administración) o rechaza.
-function responder_cambio(PDO $db, array $yo, int $id, bool $acepta): array
+function responder_cambio(PDO $db, array $yo, int $id, bool $acepta, bool $voluntario = false): array
 {
     $c = cambio($db, $id);
     if (!$c || $c['companero_id'] != $yo['id'] || $c['estado'] !== 'companero') throw new DomainException('Esta propuesta ya no está pendiente.');
     $a = usuario($db, (int)$c['solicitante_id']);
-    if ($acepta) aplicar_cambio($db, $a, $yo, fechas_cambio($c), false);
-    consulta($db, 'UPDATE cambios_turno SET estado = ?, respondido_utc = ? WHERE id = ?', [$acepta ? 'aprobacion' : 'rechazado', ahora(), $id]);
-    auditar($db, (int)$yo['id'], $acepta ? 'cambio_aceptado' : 'cambio_rechazado_companero', "cambio=$id");
+    $inc = $c['incumple'];
+    // Si incumple, también el compañero tiene que aceptarlo por su voluntad (y quien lo pidió ya lo hizo al pedirlo).
+    if ($acepta) aplicar_cambio($db, $a, $yo, fechas_cambio($c), false, $voluntario, $inc);
+    if ($acepta && $inc !== '' && $c['incumple'] === '') throw new DomainException('Ahora este cambio incumple el convenio (' . $inc . ') y quien lo pidió no lo aceptó así: que lo vuelva a pedir.');
+    consulta($db, 'UPDATE cambios_turno SET estado = ?, respondido_utc = ?, incumple = ?, voluntario_companero = ? WHERE id = ?',
+        [$acepta ? 'aprobacion' : 'rechazado', ahora(), $acepta ? $inc : $c['incumple'], (int)($acepta && $inc !== ''), $id]);
+    auditar($db, (int)$yo['id'], $acepta ? 'cambio_aceptado' : 'cambio_rechazado_companero', "cambio=$id" . ($acepta && $inc !== '' ? " voluntario incumple: $inc" : ''));
     $dias = implode(' y ', array_map(fn($f) => date('d/m', strtotime($f)), fechas_cambio($c)));
     if ($acepta) avisar_aprobadores($db, $a, "cambio_ok:$id", 'Cambio de turno para aprobar: ' . nombre($a) . ' y ' . nombre($yo) . " ($dias)." . ($c['motivo'] !== '' ? " Motivo: {$c['motivo']}" : ''), 'equipo');
     else notificar($db, (int)$a['id'], "cambio_no:$id", nombre($yo) . " no acepta el cambio de turno del $dias.", 'cambios');
@@ -115,7 +123,8 @@ function resolver_cambio(PDO $db, array $yo, int $id, bool $aprobar, string $com
     if (!puede_aprobar($yo, $a)) throw new DomainException('No puedes aprobar este cambio.');
     $db->beginTransaction();
     try {
-        if ($aprobar) aplicar_cambio($db, $a, $b, fechas_cambio($c), true);
+        // Solo pasa por encima del convenio si los dos lo aceptaron por su voluntad; la empresa ve el aviso antes de aprobar.
+        if ($aprobar) aplicar_cambio($db, $a, $b, fechas_cambio($c), true, $c['incumple'] !== '' && (bool)$c['voluntario_companero']);
         consulta($db, 'UPDATE cambios_turno SET estado = ?, resuelto_por = ?, resuelto_utc = ?, comentario = ? WHERE id = ?',
             [$aprobar ? 'aprobado' : 'rechazado', $yo['id'], ahora(), mb_substr(trim($comentario), 0, 500), $id]);
         $db->commit();
@@ -123,7 +132,7 @@ function resolver_cambio(PDO $db, array $yo, int $id, bool $aprobar, string $com
         if ($db->inTransaction()) $db->rollBack();
         throw $e;
     }
-    auditar($db, (int)$yo['id'], $aprobar ? 'cambio_aprobado' : 'cambio_rechazado', "cambio=$id");
+    auditar($db, (int)$yo['id'], $aprobar ? 'cambio_aprobado' : 'cambio_rechazado', "cambio=$id" . ($aprobar && $c['incumple'] !== '' ? " voluntario de los dos, incumple: {$c['incumple']}" : ''));
     $dias = implode(' y ', array_map(fn($f) => date('d/m', strtotime($f)), fechas_cambio($c)));
     foreach ([$a, $b] as $x) notificar($db, (int)$x['id'], "cambio_res:$id", "El cambio de turno del $dias ha sido " . ($aprobar ? 'aprobado: ya está en tu calendario.' : 'rechazado.'), 'calendario');
     return $c;

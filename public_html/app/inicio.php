@@ -4,7 +4,7 @@ declare(strict_types=1);
 date_default_timezone_set('UTC');
 const ZONA = 'Europe/Madrid';
 // Versión que se ve abajo en el menú: sirve para comprobar que el servidor tiene la última subida.
-const VERSION = '2026.11.26j';
+const VERSION = '2026.11.27a';
 
 // Dirección de un archivo de assets con su fecha: así el navegador y el móvil no usan uno viejo de su caché.
 function asset(string $ruta): string

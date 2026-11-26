@@ -11,7 +11,7 @@ if (es_post()) {
     try {
         if ($id = (int)($_POST['responder'] ?? 0)) {
             $acepta = ($_POST['decision'] ?? '') === 'aceptar';
-            responder_cambio(db(), $u, $id, $acepta);
+            responder_cambio(db(), $u, $id, $acepta, isset($_POST['voluntario']));
             aviso($acepta ? 'Aceptado. Ahora falta que lo apruebe la empresa.' : 'Propuesta rechazada.');
         } elseif ($id = (int)($_POST['cancelar'] ?? 0)) {
             cancelar_cambio(db(), $u, $id);
@@ -19,7 +19,7 @@ if (es_post()) {
         } else {
             $lim = limite_vision(db(), $u);
             if ($lim && max((string)($_POST['fecha'] ?? ''), (string)($_POST['devuelve'] ?? '')) > $lim) throw new DomainException('Solo puedes proponer cambios hasta el ' . date('d/m/Y', strtotime($lim)) . '.');
-            pedir_cambio(db(), $u, (int)($_POST['companero'] ?? 0), $_POST['fecha'] ?? '', $_POST['devuelve'] ?? '', $_POST['motivo'] ?? '');
+            pedir_cambio(db(), $u, (int)($_POST['companero'] ?? 0), $_POST['fecha'] ?? '', $_POST['devuelve'] ?? '', $_POST['motivo'] ?? '', isset($_POST['voluntario']));
             aviso('Propuesta enviada. Cuando tu compañero la acepte, la aprobará la empresa.');
         }
     } catch (DomainException $e) {
@@ -56,6 +56,7 @@ cabecera('Cambios de turno', $u);
   </div>
   <div data-cal-companero></div>
   <label>Motivo <input name="motivo" maxlength="500" placeholder="Opcional"></label>
+  <label><input type="checkbox" name="voluntario"> Lo acepto por mi propia voluntad aunque incumpla el convenio (descansos, horas…)</label>
   <button>Enviar propuesta</button>
   <?php endif ?>
 </form>
@@ -73,11 +74,13 @@ $lista = array_values(array_filter($lista, fn($c) => in_array($c['estado'], $gru
   <tr>
     <td><?= e(nombre($otro)) ?><br><small><?= $yo_pido ? 'Lo pides tú' : 'Te lo propone' ?></small></td>
     <td><?= implode('<br>', array_map(fn($f) => date('d/m/Y', strtotime($f)), fechas_cambio($c))) ?></td>
-    <td><?php foreach (fechas_cambio($c) as $f): ?><small><?= date('d/m', strtotime($f)) ?>: tú <?= e($texto_turno($u, $f)) ?> · <?= e($otro['nombre']) ?> <?= e($texto_turno($otro, $f)) ?></small><br><?php endforeach ?><?= $c['motivo'] !== '' ? '<small>Motivo: ' . e($c['motivo']) . '</small>' : '' ?></td>
+    <td><?php foreach (fechas_cambio($c) as $f): ?><small><?= date('d/m', strtotime($f)) ?>: tú <?= e($texto_turno($u, $f)) ?> · <?= e($otro['nombre']) ?> <?= e($texto_turno($otro, $f)) ?></small><br><?php endforeach ?><?= $c['motivo'] !== '' ? '<small>Motivo: ' . e($c['motivo']) . '</small>' : '' ?><?= $c['incumple'] !== '' ? '<br><small class="error">Voluntario, incumple: ' . e($c['incumple']) . '</small>' : '' ?></td>
     <td><span class="pildora <?= ['aprobado' => 'ok', 'rechazado' => 'mal', 'cancelado' => 'mal'][$c['estado']] ?? 'pendiente' ?>"><?= ESTADOS_CAMBIO[$c['estado']] ?></span><?= $c['comentario'] !== '' ? '<br><small>' . e($c['comentario']) . '</small>' : '' ?></td>
     <td>
       <?php if (!$yo_pido && $c['estado'] === 'companero'): ?>
       <form method="post" class="filtros"><?= csrf_campo() ?><input type="hidden" name="responder" value="<?= e($c['id']) ?>">
+        <?php if ($c['incumple'] !== ''): ?><small class="error">Incumple el convenio: <?= e($c['incumple']) ?>. Quien lo pide lo acepta por su voluntad.</small><?php endif ?>
+        <label><small><input type="checkbox" name="voluntario"<?= $c['incumple'] !== '' ? ' required' : '' ?>> Lo acepto por mi propia voluntad aunque incumpla el convenio</small></label>
         <button name="decision" value="aceptar" class="pequeno">Aceptar</button><button name="decision" value="rechazar" class="secundario pequeno">Rechazar</button></form>
       <?php elseif ($yo_pido && in_array($c['estado'], ['companero', 'aprobacion'], true)): ?>
       <form method="post"><?= csrf_campo() ?><button name="cancelar" value="<?= e($c['id']) ?>" class="secundario pequeno">Cancelar</button></form>

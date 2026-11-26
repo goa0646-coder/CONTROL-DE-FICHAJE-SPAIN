@@ -51,6 +51,7 @@ cabecera('Ausencias y vacaciones', $u);
 <form method="post" enctype="multipart/form-data" class="tarjeta" data-ausencia data-rango>
   <?= csrf_campo() ?>
   <h2>Pedir</h2>
+  <?php if (!$tipos): ?><p class="aviso error"><?= icono('alerta') ?><span>No hay tipos de ausencia activos. <?= $u['rol'] === 'admin' ? 'Actívalos en <a href="?p=horarios">Horarios → Tipos de ausencia</a>.' : 'Avisa a la empresa para que los active.' ?></span></p><?php endif ?>
   <label>Tipo <select name="tipo_id" required>
     <option value="">Elige…</option>
     <?php foreach ($tipos as $id => $t): ?><option value="<?= e($id) ?>" data-horas="<?= e($t['por_horas']) ?>" data-justificante="<?= e($t['justificante']) ?>"><?= e($t['nombre']) ?></option><?php endforeach ?>

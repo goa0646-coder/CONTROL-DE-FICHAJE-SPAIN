@@ -26,7 +26,8 @@ cabecera('Solicitudes', $yo);
   <tr><td><?= e(nombre($a)) ?><br><small><?= local($c['pedido_utc'], 'd/m H:i') ?></small></td><td><?= e(nombre($b)) ?></td>
     <td><?php foreach (fechas_cambio($c) as $f): try { $ta = turno_del_dia(db(), $a, $f)[1]; $tb = turno_del_dia(db(), $b, $f)[1]; } catch (DomainException $ex) { $ta = $tb = '—'; } ?>
       <small><b><?= date('d/m/Y', strtotime($f)) ?></b>: <?= e($a['nombre']) ?> <?= e($ta) ?> ⇄ <?= e($b['nombre']) ?> <?= e($tb) ?></small><br><?php endforeach ?>
-      <?= $c['motivo'] !== '' ? '<small>Motivo: ' . e($c['motivo']) . '</small>' : '' ?></td>
+      <?= $c['motivo'] !== '' ? '<small>Motivo: ' . e($c['motivo']) . '</small>' : '' ?>
+      <?= $c['incumple'] !== '' ? '<p class="error"><small><b>Incumple el convenio</b>: ' . e($c['incumple']) . '. Lo han aceptado por su propia voluntad ' . ($c['voluntario_companero'] ? 'los dos' : 'quien lo pide (falta el compañero)') . '. Si lo apruebas, queda en la auditoría.</small></p>' : '' ?></td>
     <td><?= $c['estado'] === 'aprobacion' ? '<span class="pildora ok">Aceptado ' . local($c['respondido_utc'], 'd/m H:i') . '</span>' : '<span class="pildora pendiente">Aún no ha respondido</span>' ?></td>
     <td><?= $boton('cambio', (int)$c['id'], $c['estado'] === 'aprobacion') ?></td></tr>
   <?php endforeach ?>
