@@ -4,7 +4,7 @@ declare(strict_types=1);
 date_default_timezone_set('UTC');
 const ZONA = 'Europe/Madrid';
 // Versión que se ve abajo en el menú: sirve para comprobar que el servidor tiene la última subida.
-const VERSION = '2026.11.26b';
+const VERSION = '2026.11.26c';
 
 // Dirección de un archivo de assets con su fecha: así el navegador y el móvil no usan uno viejo de su caché.
 function asset(string $ruta): string
@@ -42,6 +42,7 @@ require __DIR__ . '/cambios.php';
 require __DIR__ . '/valoraciones.php';
 require __DIR__ . '/seguridad.php';
 require __DIR__ . '/contratos.php';
+require __DIR__ . '/pdf.php';
 require __DIR__ . '/encuestas.php';
 require __DIR__ . '/consultas.php';
 require __DIR__ . '/preferencias.php';
@@ -211,6 +212,12 @@ function requiere(string ...$roles): array
     if (!in_array($u['rol'], $roles, true)) {
         http_response_code(403);
         exit('No tienes permiso para ver esta página.');
+    }
+    // Comunicado con firma requerida sin firmar: no se sigue hasta firmarlo (fichar nunca se bloquea: es el registro legal).
+    if (in_array($u['rol'], ['empleado', 'responsable'], true) && !in_array($_GET['p'] ?? '', ['comunicados', 'fichar', 'salir', 'archivo', 'foto', 'logo', 'version'], true)
+        && ($pend = firma_pendiente(db(), $u))) {
+        aviso('Tienes un comunicado que debes firmar antes de seguir.', 'error');
+        redirigir('comunicados', ['id' => $pend]);
     }
     return $u;
 }

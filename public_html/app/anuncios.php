@@ -29,21 +29,21 @@ function resolver_destinatarios(PDO $db, array $yo, array $sel): array
 }
 
 // $adjuntos: [[archivo guardado, nombre original], …].
-function crear_anuncio(PDO $db, array $yo, string $titulo, string $texto, array $uids, array $adjuntos = []): int
+function crear_anuncio(PDO $db, array $yo, string $titulo, string $texto, array $uids, array $adjuntos = [], bool $firma = false): int
 {
     $titulo = trim($titulo);
     $texto = trim($texto);
     if ($titulo === '' || $texto === '') throw new DomainException('Pon título y texto.');
     if (!$uids) throw new DomainException('Elige al menos un destinatario.');
     $db->beginTransaction();
-    consulta($db, 'INSERT INTO comunicados (titulo, texto, centro_id, autor_id, creado_utc, por_personas) VALUES (?, ?, NULL, ?, ?, 1)',
-        [mb_substr($titulo, 0, 150), $texto, $yo['id'], ahora()]);
+    consulta($db, 'INSERT INTO comunicados (titulo, texto, centro_id, autor_id, creado_utc, por_personas, firma_requerida) VALUES (?, ?, NULL, ?, ?, 1, ?)',
+        [mb_substr($titulo, 0, 150), $texto, $yo['id'], ahora(), (int)$firma]);
     $id = (int)$db->lastInsertId();
     foreach ($adjuntos as [$archivo, $original]) consulta($db, 'INSERT INTO comunicados_adjuntos (comunicado_id, archivo, nombre_original) VALUES (?, ?, ?)', [$id, $archivo, mb_substr($original, 0, 200)]);
     $s = $db->prepare('INSERT IGNORE INTO comunicados_para (comunicado_id, usuario_id) VALUES (?, ?)');
     foreach ($uids as $u) $s->execute([$id, (int)$u]);
     $db->commit();
-    foreach ($uids as $u) if ($u != $yo['id']) notificar($db, (int)$u, "comunicado:$id", "Anuncio: $titulo. Ábrelo en INDA y confirma que lo has leído.", "comunicados&id=$id");
+    foreach ($uids as $u) if ($u != $yo['id']) notificar($db, (int)$u, "comunicado:$id", "Anuncio: $titulo. Ábrelo en INDA y " . ($firma ? 'fírmalo (firma requerida).' : 'confirma que lo has leído.'), "comunicados&id=$id");
     auditar($db, (int)$yo['id'], 'comunicado_publicado', "comunicado=$id destinatarios=" . count($uids));
     return $id;
 }
@@ -241,4 +241,81 @@ function avatar(array $u, string $clase = ''): string
     if (!empty($u['foto'])) return '<img class="avatar ' . $clase . '" src="?p=foto&u=' . (int)$u['id'] . '&v=' . substr($u['foto'], 0, 8) . '" alt="' . $alt . '" loading="lazy">';
     $tono = ((int)($u['id'] ?? 0) * 47) % 360;
     return '<i class="avatar ' . $clase . '" style="background:hsl(' . $tono . ' 55% 50%)" title="' . $alt . '">' . e($ini) . '</i>';
+}
+
+// --- Firma requerida: acuse con DNI, firma manuscrita, aceptación expresa y certificado PDF con las evidencias ---
+
+function acuse_firma(PDO $db, int $cid, int $uid): ?array
+{
+    return consulta($db, 'SELECT * FROM acuses_firma WHERE comunicado_id = ? AND usuario_id = ?', [$cid, $uid])->fetch() ?: null;
+}
+
+// Primer anuncio con firma requerida que $u aún no ha firmado (bloquea el resto de INDA salvo fichar).
+function firma_pendiente(PDO $db, array $u): ?int
+{
+    foreach (anuncios_para($db, $u) as $c) {
+        if (!empty($c['firma_requerida']) && $c['autor_id'] != $u['id'] && !acuse_firma($db, (int)$c['id'], (int)$u['id'])) return (int)$c['id'];
+    }
+    return null;
+}
+
+// $d: dni, acepto, firma (data:image/jpeg;base64,…), lat, lng, precision. Devuelve el id del documento con el certificado.
+function firmar_anuncio(PDO $db, array $c, array $u, array $d): int
+{
+    if (empty($c['firma_requerida']) || !es_destinatario($db, $c, $u)) throw new DomainException('Este anuncio no necesita tu firma.');
+    if ($ya = acuse_firma($db, (int)$c['id'], (int)$u['id'])) return (int)$ya['documento_id'];
+    if (empty($d['acepto'])) throw new DomainException('Marca la casilla «He leído, comprendo y acepto».');
+    $dni = strtoupper(preg_replace('/[^0-9A-Za-z]/', '', (string)($d['dni'] ?? '')));
+    $mio = strtoupper(preg_replace('/[^0-9A-Za-z]/', '', (string)($u['dni'] ?? '')));
+    if ($mio !== '' ? !hash_equals($mio, $dni) : !preg_match('/^[0-9A-Z]{5,20}$/', $dni)) throw new DomainException('El documento no coincide con el de tu ficha.');
+    $jpeg = preg_match('#^data:image/jpeg;base64,([A-Za-z0-9+/=]+)$#', (string)($d['firma'] ?? ''), $m) ? base64_decode($m[1], true) : false;
+    $tam = $jpeg ? getimagesizefromstring($jpeg) : false;
+    if (!$jpeg || !$tam || $tam['mime'] !== 'image/jpeg' || strlen($jpeg) > 600 * 1024) throw new DomainException('Firma con el dedo en el recuadro antes de enviar.');
+    $geo = is_numeric($d['lat'] ?? null) && is_numeric($d['lng'] ?? null) && abs((float)$d['lat']) <= 90 && abs((float)$d['lng']) <= 180
+        ? [round((float)$d['lat'], 6), round((float)$d['lng'], 6), max(0, (int)($d['precision'] ?? 0))] : [null, null, null];
+    $ahora = ahora();
+    $ip = ip();
+    $agente = mb_substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 300);
+    $sesion = hash('sha256', session_id() ?: 'cli');
+    $hash_texto = hash('sha256', $c['titulo'] . "\n\n" . $c['texto']);
+    $hash_firma = hash('sha256', $jpeg);
+    $bloques = [
+        ['t' => 'CERTIFICADO DE ACUSE DE RECIBO Y FIRMA', 's' => 15, 'b' => true],
+        ['t' => (function_exists('nombre_empresa') ? nombre_empresa() : '') ?: 'INDA', 's' => 10],
+        ['t' => 'Comunicado', 's' => 12, 'b' => true],
+        ['t' => $c['titulo'], 's' => 11, 'b' => true],
+        ['t' => 'Publicado el ' . local($c['creado_utc'], 'd/m/Y H:i') . ' (hora de Madrid)', 's' => 9],
+        ['t' => $c['texto'], 's' => 10],
+        ['t' => 'Huella SHA-256 del texto: ' . $hash_texto, 's' => 8],
+        ['t' => 'Firmante', 's' => 12, 'b' => true],
+        ['t' => nombre($u) . ' · Documento: ' . $dni, 's' => 10],
+        ['t' => 'Declaración aceptada: «He leído, comprendo y acepto los términos del presente comunicado».', 's' => 10],
+        ['img' => true],
+        ['t' => 'Evidencias', 's' => 12, 'b' => true],
+        ['t' => 'Fecha y hora (UTC): ' . $ahora . ' · Madrid: ' . local($ahora, 'd/m/Y H:i:s'), 's' => 9],
+        ['t' => 'Dirección IP: ' . ($ip ?: 'no disponible'), 's' => 9],
+        ['t' => 'Dispositivo / navegador: ' . ($agente ?: 'no disponible'), 's' => 9],
+        ['t' => 'Ubicación del dispositivo: ' . ($geo[0] !== null ? "$geo[0], $geo[1] (precisión aprox. $geo[2] m, con permiso de la persona)" : 'no facilitada'), 's' => 9],
+        ['t' => 'Cuenta: ' . $u['id'] . ' · ' . $u['email'] . ' · Sesión (huella): ' . substr($sesion, 0, 16), 's' => 9],
+        ['t' => 'Huella SHA-256 de la firma: ' . $hash_firma, 's' => 8],
+        ['t' => 'Firma electrónica simple (Reglamento UE 910/2014, eIDAS). Este certificado se guarda con su huella SHA-256 en INDA para acreditar que no se ha modificado después de la firma.', 's' => 8],
+    ];
+    $pdf = pdf_documento($bloques, $jpeg);
+    $archivo = bin2hex(random_bytes(16)) . '.pdf';
+    if (file_put_contents(carpeta_archivos() . "/$archivo", $pdf) === false) throw new DomainException('No se pudo guardar el certificado. Inténtalo de nuevo.');
+    $db->beginTransaction();
+    try {
+        consulta($db, 'INSERT INTO documentos (usuario_id, titulo, archivo, nombre_original, requiere_firma, subido_por, subido_utc) VALUES (?, ?, ?, ?, 0, ?, ?)',
+            [$u['id'], mb_substr('Acuse firmado · ' . $c['titulo'], 0, 150), $archivo, "acuse-{$c['id']}-{$u['id']}.pdf", $u['id'], $ahora]);
+        $doc = (int)$db->lastInsertId();
+        consulta($db, 'INSERT INTO acuses_firma (comunicado_id, usuario_id, firmado_utc, dni, ip, agente, sesion, lat, lng, precision_m, hash_texto, hash_firma, documento_id, hash_pdf) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [$c['id'], $u['id'], $ahora, cifrado_activo($db) ? cifrar($dni) : $dni, $ip, $agente, $sesion, $geo[0], $geo[1], $geo[2], $hash_texto, $hash_firma, $doc, hash('sha256', $pdf)]);
+        consulta($db, 'INSERT IGNORE INTO comunicados_leidos (comunicado_id, usuario_id, leido_utc, ip) VALUES (?, ?, ?, ?)', [$c['id'], $u['id'], $ahora, $ip]);
+        $db->commit();
+    } catch (Throwable $e) {
+        $db->rollBack();
+        throw $e;
+    }
+    auditar($db, (int)$u['id'], 'comunicado_firmado', "comunicado={$c['id']} documento=$doc");
+    return $doc;
 }
