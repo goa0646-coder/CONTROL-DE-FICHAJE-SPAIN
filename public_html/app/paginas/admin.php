@@ -21,6 +21,12 @@ if (es_post()) {
         consulta(db(), 'REPLACE INTO ajustes VALUES (?, ?)', ['convenio', json_encode($cv, JSON_UNESCAPED_UNICODE)]);
         unset($_SESSION['convenio_leido']);
         auditar(db(), (int)$yo['id'], 'convenio_aplicado', $cv['nombre']);
+    } elseif ($que === 'mantenimiento') {
+        $m = in_array($_POST['modo'] ?? '', ['fichar', 'todo'], true) ? $_POST['modo'] : 'no';
+        consulta(db(), 'REPLACE INTO ajustes VALUES (?, ?)', ['mantenimiento', $m]);
+        auditar(db(), (int)$yo['id'], 'mantenimiento', $m);
+        aviso(['no' => 'INDA vuelve a estar abierto para toda la plantilla.', 'fichar' => 'INDA cerrado a la plantilla: solo pueden fichar.', 'todo' => 'INDA cerrado del todo a la plantilla (tampoco pueden fichar).'][$m]);
+        redirigir('admin');
     } elseif ($que === 'vision') {
         $n = (int)($_POST['vision_dias'] ?? 0);
         consulta(db(), 'REPLACE INTO ajustes VALUES (?, ?)', ['vision_dias', (string)(isset(VISION_DIAS[$n]) ? $n : 0)]);
@@ -248,6 +254,20 @@ cabecera('Empresa y centros', $yo);
 </form>
 
 <?php $r = reglas(db()); $con = (int)db()->query("SELECT COUNT(*) FROM usuarios WHERE activo = 1 AND rol <> 'inspeccion' AND pausa_auto_min > 0")->fetchColumn(); ?>
+<?php $mant = ajuste(db(), 'mantenimiento') ?: 'no'; ?>
+<form method="post" class="tarjeta<?= $mant !== 'no' ? ' aviso error' : '' ?>">
+  <?= csrf_campo() ?>
+  <h2>Cerrar INDA a la plantilla (mantenimiento)</h2>
+  <p class="nota">Ahora: <strong><?= ['no' => 'abierto', 'fichar' => 'cerrado, solo pueden fichar', 'todo' => 'cerrado del todo'][$mant] ?></strong>. Administración sigue entrando con normalidad. Trabajadores y responsables ven un aviso de mantenimiento.</p>
+  <?php if ($mant === 'no'): ?>
+  <button name="modo" value="fichar">Cerrar, pero dejar fichar (recomendado)</button>
+  <button name="modo" value="todo" class="secundario" data-confirmar="Nadie de la plantilla podrá fichar mientras esté cerrado. Sus fichajes de ese rato tendrán que corregirse después. ¿Cerrar del todo?">Cerrar del todo</button>
+  <?php else: ?>
+  <button name="modo" value="no">Abrir INDA otra vez</button>
+  <?php endif ?>
+  <input type="hidden" name="que" value="mantenimiento">
+</form>
+
 <form method="post" class="tarjeta">
   <?= csrf_campo() ?>
   <h2>Hasta dónde ven los trabajadores su calendario</h2>
