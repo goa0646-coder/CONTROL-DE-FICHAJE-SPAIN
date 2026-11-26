@@ -12,7 +12,11 @@ $propio = $yo['id'] == $u['id'];
 
 if (es_post()) {
     try {
-        if (isset($_POST['firmar']) && $propio) {
+        if (isset($_POST['pedir_copia']) && $propio) {
+            avisar_aprobadores(db(), $u, 'copia_registro:' . $u['id'] . ":$mes:" . ahora(), nombre($u) . ' pide una copia de su registro de jornada de ' . $mes . '.', 'historial&u=' . $u['id'] . "&mes=$mes");
+            auditar(db(), (int)$u['id'], 'copia_registro_pedida', "mes=$mes");
+            aviso('Petición enviada. La empresa te entregará la copia de tu registro.');
+        } elseif (isset($_POST['firmar']) && $propio) {
             $h = firmar_mes(db(), $u, $mes, $_POST['clave'] ?? '');
             auditar(db(), (int)$u['id'], 'firma_mensual', "mes=$mes hash=$h");
             aviso('Registro del mes firmado.');
@@ -41,6 +45,9 @@ $correcciones = array_filter(correcciones_de(db(), (int)$u['id']), fn($c) => loc
 
 if (!$propio) auditar(db(), (int)$yo['id'], isset($_GET['csv']) ? 'descarga_registro' : 'ver_registro', "usuario={$u['id']} mes=$mes");
 
+// La persona ve su registro en pantalla; la copia descargable se la da la empresa (la pide con un botón).
+$descarga = $yo['rol'] !== 'empleado';
+if (isset($_GET['csv']) && !$descarga) redirigir('historial', ['mes' => $mes]);
 if (isset($_GET['csv'])) {
     if ($propio) auditar(db(), (int)$yo['id'], 'descarga_registro', "mes=$mes");
     header('Content-Type: text/csv; charset=utf-8');
@@ -71,9 +78,12 @@ cabecera($propio ? 'Mi registro' : 'Registro de ' . nombre($u), $yo);
   <input type="hidden" name="p" value="historial"><input type="hidden" name="u" value="<?= e($u['id']) ?>">
   <label>Mes <input type="month" name="mes" value="<?= e($mes) ?>"></label>
   <button>Ver</button>
+  <?php if ($descarga): ?>
   <a class="boton secundario" href="?<?= e(http_build_query(['p' => 'historial', 'u' => $u['id'], 'mes' => $mes, 'csv' => 1])) ?>">Excel (CSV)</a>
   <button type="button" data-imprimir class="secundario">Imprimir / PDF</button>
+  <?php endif ?>
 </form>
+<?php if (!$descarga && $propio): ?><form method="post" class="no-imprimir"><?= csrf_campo() ?><button name="pedir_copia" value="1" class="secundario">Pedir copia a la empresa</button></form><?php endif ?>
 
 <div class="cifras">
   <div><span>Trabajado</span><strong><?= horas($t['trabajado']) ?></strong></div>

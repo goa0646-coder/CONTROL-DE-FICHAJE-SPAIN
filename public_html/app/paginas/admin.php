@@ -21,6 +21,12 @@ if (es_post()) {
         consulta(db(), 'REPLACE INTO ajustes VALUES (?, ?)', ['convenio', json_encode($cv, JSON_UNESCAPED_UNICODE)]);
         unset($_SESSION['convenio_leido']);
         auditar(db(), (int)$yo['id'], 'convenio_aplicado', $cv['nombre']);
+    } elseif ($que === 'vision') {
+        $n = (int)($_POST['vision_dias'] ?? 0);
+        consulta(db(), 'REPLACE INTO ajustes VALUES (?, ?)', ['vision_dias', (string)(isset(VISION_DIAS[$n]) ? $n : 0)]);
+        auditar(db(), (int)$yo['id'], 'vision_dias', (string)$n);
+        aviso($n ? "Los trabajadores verán sus turnos hasta $n días en adelante." : 'Los trabajadores ven todos sus turnos publicados.');
+        redirigir('admin');
     } elseif ($que === 'avisos_trab') {
         consulta(db(), 'REPLACE INTO ajustes VALUES (?, ?)', ['avisos_trabajadores', isset($_POST['avisar']) ? 'si' : 'no']);
         auditar(db(), (int)$yo['id'], 'avisos_trabajadores', isset($_POST['avisar']) ? 'si' : 'no');
@@ -242,6 +248,14 @@ cabecera('Empresa y centros', $yo);
 </form>
 
 <?php $r = reglas(db()); $con = (int)db()->query("SELECT COUNT(*) FROM usuarios WHERE activo = 1 AND rol <> 'inspeccion' AND pausa_auto_min > 0")->fetchColumn(); ?>
+<form method="post" class="tarjeta">
+  <?= csrf_campo() ?>
+  <h2>Hasta dónde ven los trabajadores su calendario</h2>
+  <label>Pueden ver sus turnos hasta <select name="vision_dias"><?= opciones(VISION_DIAS, (int)ajuste(db(), 'vision_dias')) ?></select> en adelante</label>
+  <p class="nota">Más allá verán los días como «Aún no publicado»: pueden pedir vacaciones en esas fechas, pero no ven el turno ni proponer cambios. Responsables y administración lo ven todo.</p>
+  <button name="que" value="vision" class="secundario">Guardar</button>
+</form>
+
 <form method="post" class="tarjeta">
   <?= csrf_campo() ?>
   <h2>Seguridad de los datos</h2>

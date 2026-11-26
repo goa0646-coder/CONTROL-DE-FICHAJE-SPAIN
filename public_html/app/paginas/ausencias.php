@@ -31,6 +31,7 @@ if (es_post()) {
 }
 
 $anio = (int)($_GET['anio'] ?? local(ahora(), 'Y'));
+$mes = preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $_GET['mes'] ?? '') ? $_GET['mes'] : local(ahora(), 'Y-m');
 $tipos = tipos_ausencia(db());
 $hoy = local(ahora(), 'Y-m-d');
 cabecera('Ausencias y vacaciones', $u);
@@ -42,7 +43,12 @@ cabecera('Ausencias y vacaciones', $u);
   <?php endforeach ?>
 </div>
 
-<form method="post" enctype="multipart/form-data" class="tarjeta" data-ausencia>
+<div class="tarjeta">
+  <h2>Elige los días en tu calendario</h2>
+  <p class="nota">Toca el primer día y después el último: se rellenan «Desde» y «Hasta». Para un solo día, tócalo dos veces.</p>
+  <?= mes_trabajador(db(), $u, $mes, 'ausencias', true, true, ['anio' => $anio]) ?>
+</div>
+<form method="post" enctype="multipart/form-data" class="tarjeta" data-ausencia data-rango>
   <?= csrf_campo() ?>
   <h2>Pedir</h2>
   <label>Tipo <select name="tipo_id" required>
@@ -60,10 +66,16 @@ cabecera('Ausencias y vacaciones', $u);
   <button>Enviar solicitud</button>
 </form>
 
-<h2>Mis ausencias <?= $anio ?> <a class="nota" href="?p=ausencias&anio=<?= $anio - 1 ?>">‹ <?= $anio - 1 ?></a> <a class="nota" href="?p=ausencias&anio=<?= $anio + 1 ?>"><?= $anio + 1 ?> ›</a></h2>
+<?php $todas = ausencias_de(db(), (int)$u['id'], $anio);
+$grupos = ['pendientes' => ['Pendientes', ['pendiente']], 'aprobadas' => ['Aprobadas', ['aprobada']], 'cerradas' => ['Rechazadas y canceladas', ['rechazada', 'cancelada']]];
+$g = isset($grupos[$_GET['ver'] ?? '']) ? $_GET['ver'] : 'pendientes';
+$cuenta = fn($k) => count(array_filter($todas, fn($a) => in_array($a['estado'], $grupos[$k][1], true))); ?>
+<h2>Mis ausencias <?= $anio ?> <a class="nota" href="?p=ausencias&anio=<?= $anio - 1 ?>&ver=<?= $g ?>">‹ <?= $anio - 1 ?></a> <a class="nota" href="?p=ausencias&anio=<?= $anio + 1 ?>&ver=<?= $g ?>"><?= $anio + 1 ?> ›</a></h2>
+<nav class="segmentos"><?php foreach ($grupos as $k => [$t]): ?><a href="?p=ausencias&anio=<?= $anio ?>&ver=<?= $k ?>" class="<?= $g === $k ? 'activo' : '' ?>"><?= $t ?> (<?= $cuenta($k) ?>)</a><?php endforeach ?></nav>
+<?php if (!$cuenta($g)): ?><p class="nota">No hay ninguna.</p><?php endif ?>
 <table>
   <tr><th>Tipo</th><th>Fechas</th><th>Estado</th><th>Justificante</th><th></th></tr>
-  <?php foreach (ausencias_de(db(), (int)$u['id'], $anio) as $a): ?>
+  <?php foreach (array_filter($todas, fn($a) => in_array($a['estado'], $grupos[$g][1], true)) as $a): ?>
   <tr class="<?= in_array($a['estado'], ['rechazada', 'cancelada'], true) ? 'anulado' : '' ?>">
     <td><span class="etiqueta" style="background:<?= e($a['color']) ?>"><?= e($a['tipo']) ?></span></td>
     <td><?= date('d/m/Y', strtotime($a['desde'])) ?><?= $a['hasta'] !== $a['desde'] ? ' – ' . date('d/m/Y', strtotime($a['hasta'])) : '' ?>
@@ -78,5 +90,4 @@ cabecera('Ausencias y vacaciones', $u);
   </tr>
   <?php endforeach ?>
 </table>
-<p><a href="?p=calendario">Ver calendario</a></p>
 <?php pie();

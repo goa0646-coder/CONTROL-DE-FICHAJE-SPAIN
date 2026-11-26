@@ -245,3 +245,47 @@ for (const f of document.querySelectorAll('[data-firma-anuncio]')) {
     f.firma.value = cv.toDataURL('image/jpeg', 0.85);
   });
 }
+
+// Calendario que rellena formularios: en Cambios de turno el día del cambio o el que devuelve; en Ausencias, desde–hasta.
+for (const mes of document.querySelectorAll('[data-mes-clic]')) {
+  const cambio = document.querySelector('[data-cambio]')?.fecha ? document.querySelector('[data-cambio]') : null, rango = document.querySelector('[data-rango]');
+  const dias = [...mes.querySelectorAll('[data-fecha]')];
+  const pinta = () => {
+    const d = rango?.desde.value, h = rango?.hasta.value || d;
+    for (const x of dias) {
+      const f = x.dataset.fecha;
+      x.classList.toggle('elegido', cambio ? f === cambio.fecha.value || f === cambio.devuelve.value : f === d || f === h);
+      x.classList.toggle('en-rango', !!rango && !!d && f >= d && f <= h);
+    }
+  };
+  const elegir = f => {
+    if (cambio) {
+      const campo = cambio.querySelector('[name=rellenar]:checked')?.value || 'fecha';
+      cambio[campo].value = f;
+      if (campo === 'fecha') { const r = cambio.querySelector('[name=rellenar][value=devuelve]'); if (r) r.checked = true; }
+      cambio.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else if (rango) {
+      if (!rango.desde.value || rango.hasta.value) { rango.desde.value = f; rango.hasta.value = ''; }
+      else if (f < rango.desde.value) { rango.hasta.value = rango.desde.value; rango.desde.value = f; }
+      else rango.hasta.value = f;
+      rango.desde.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    pinta();
+  };
+  for (const x of dias) {
+    x.addEventListener('click', () => elegir(x.dataset.fecha));
+    x.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); elegir(x.dataset.fecha); } });
+  }
+  for (const i of document.querySelectorAll('[data-cambio] input[type=date], [data-rango] input[type=date]')) i.addEventListener('change', pinta);
+}
+// Cambios de turno: al elegir compañero se ve su calendario del mes (solo turnos).
+for (const f of document.querySelectorAll('[data-cambio]')) {
+  const sel = f.querySelector('[name=companero]'), caja = f.querySelector('[data-cal-companero]');
+  if (!sel || !caja) continue;
+  sel.addEventListener('change', async () => {
+    caja.innerHTML = '';
+    if (!sel.value) return;
+    const r = await fetch('?p=cambios&cal=' + encodeURIComponent(sel.value) + '&mes=' + encodeURIComponent(f.dataset.mes));
+    if (r.ok) caja.innerHTML = await r.text();
+  });
+}

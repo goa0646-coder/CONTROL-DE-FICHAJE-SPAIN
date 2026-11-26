@@ -68,7 +68,7 @@ function celda_turno(array $c, array $hors, bool $detalle): array
         $h = !empty($c['horario_id']) ? ($hors[$c['horario_id']] ?? null) : null;
         $base = $h ? ($h['abreviatura'] !== '' ? $h['abreviatura'] : '') : '';
         $titulo = ($h ? $h['nombre'] . ' ' : '') . '(' . $c['ausencia']['tipo'] . ')';
-        return $detalle ? [($base !== '' ? "$base·" : '') . $ini, $c['ausencia']['color'], $titulo] : ['·', '#6b7280', 'Ausente'];
+        return $detalle ? [($base !== '' ? "{$base}·" : '') . $ini, $c['ausencia']['color'], $titulo] : ['·', '#6b7280', 'Ausente'];
     }
     if ($c['festivo'] && !$c['turno']) return ['F', '', $c['festivo']];
     $h = $c['horario_id'] ? ($hors[$c['horario_id']] ?? null) : null;
@@ -242,4 +242,69 @@ function opciones_turno(array $hors, array $u): array
         else $otros[$id] = $txt;
     }
     return array_filter(['Su departamento' => $suyos, $suyos ? 'Otros turnos' : 'Turnos' => $otros]);
+}
+
+// Calendario mensual de una persona (el de «Calendario» para la plantilla), con flechas de mes y la leyenda solo de los
+// turnos que tiene ese mes. $pagina: a dónde llevan las flechas. $clic: los días de hoy en adelante se pueden tocar
+// (data-fecha) para rellenar un formulario. $detalle false: sin el tipo de ausencia (calendario de un compañero).
+function mes_trabajador(PDO $db, array $u, string $mes, string $pagina, bool $clic = false, bool $detalle = true, array $extra = []): string
+{
+    $desde = "$mes-01";
+    $hasta = (new DateTime($desde))->modify('last day of this month')->format('Y-m-d');
+    $hors = horarios($db);
+    $hoy = local(ahora(), 'Y-m-d');
+    $cal = calendario_teorico($db, $u, $desde, $hasta);
+    $lim = limite_vision($db, function_exists('usuario_actual') ? usuario_actual() : null);
+    $pend = [];
+    if ($detalle) foreach (consulta($db, "SELECT desde, hasta FROM ausencias WHERE usuario_id = ? AND estado = 'pendiente' AND desde <= ? AND hasta >= ?", [$u['id'], $hasta, $desde]) as $a) {
+        foreach (rango_fechas(max($desde, $a['desde']), min($hasta, $a['hasta'])) as $f) $pend[$f] = true;
+    }
+    $url = fn(string $m) => '?' . http_build_query(['p' => $pagina, 'mes' => $m] + $extra);
+    $ant = (new DateTime($desde))->modify('-1 month')->format('Y-m');
+    $sig = (new DateTime($desde))->modify('+1 month')->format('Y-m');
+    $h = '<div class="mes-trabajador"' . ($clic ? ' data-mes-clic' : '') . '>' . ($pagina === '' ? '<p><strong class="mes-nombre">' . e(ucfirst(MESES[(int)substr($mes, 5)]) . ' ' . substr($mes, 0, 4)) . '</strong></p><div class="mes-personal">' : '<div class="filtros navegar-mes"><span class="mes-flechas"><a class="boton secundario" href="' . e($url($ant)) . '" aria-label="Mes anterior">‹</a>'
+        . '<strong class="mes-nombre">' . e(ucfirst(MESES[(int)substr($mes, 5)]) . ' ' . substr($mes, 0, 4)) . '</strong>'
+        . '<a class="boton secundario" href="' . e($url($sig)) . '" aria-label="Mes siguiente">›</a></span></div><div class="mes-personal">');
+    foreach (['L', 'M', 'X', 'J', 'V', 'S', 'D'] as $d) $h .= '<span class="cab">' . $d . '</span>';
+    $h .= str_repeat('<span class="vacio"></span>', (int)date('N', strtotime($desde)) - 1);
+    $usados = [];
+    foreach ($cal as $f => $c) {
+        // Más allá del límite de visión: el día existe (se puede pedir una ausencia) pero sin turno.
+        if ($lim && $f > $lim) {
+            $toca = $clic && $pagina === 'ausencias';
+            $h .= '<div class="dia oculto' . ($toca ? ' tocable' : '') . '" title="Aún no publicado"' . ($toca ? ' data-fecha="' . $f . '" role="button" tabindex="0"' : '') . '><span class="num">' . (int)substr($f, 8) . '</span><b></b><small>Aún no publicado</small></div>';
+            continue;
+        }
+        [$txt, $fondo, $titulo] = celda_turno($c, $hors, $detalle);
+        if (!$c['ausencia'] && !empty($c['horario_id']) && $c['turno']) $usados[$c['horario_id']] = true;
+        $p = !$c['ausencia'] && isset($pend[$f]);
+        $toca = $clic && $f >= $hoy;
+        $h .= '<div class="dia' . ($f === $hoy ? ' hoy' : '') . ($fondo ? ' con-turno' : '') . ($txt === 'D' ? ' libre' : '') . ($toca ? ' tocable' : '') . '"'
+            . ($fondo ? ' style="--c:' . e($fondo) . '"' : '') . ' title="' . e($p ? 'Ausencia pendiente de aprobar' : $titulo) . '"'
+            . ($toca ? ' data-fecha="' . $f . '" role="button" tabindex="0"' : '') . '>'
+            . '<span class="num">' . (int)substr($f, 8) . '</span><b>' . e($p ? '?' : $txt) . '</b><small>'
+            . ($c['turno'] && !$c['ausencia'] && $c['entrada'] && !$c['flexible'] ? substr($c['entrada'], 0, 5) . '–' . substr((string)$c['salida'], 0, 5)
+                : ($c['ausencia'] ? ($detalle ? e($c['ausencia']['tipo']) : 'No disponible') : ($c['festivo'] ? e($c['festivo']) : ''))) . '</small></div>';
+    }
+    $h .= '</div>' . leyenda_turnos($hors, array_keys($usados)) . '</div>';
+    return $h;
+}
+
+// Leyenda solo con los turnos que aparecen (y D/F siempre).
+function leyenda_turnos(array $hors, array $ids): string
+{
+    $l = array_filter($hors, fn($x) => in_array($x['id'], $ids) && $x['abreviatura'] !== '');
+    $h = '<p class="nota leyenda-turnos">';
+    foreach ($l as $x) $h .= '<span class="letra-turno" style="background:' . e($x['color'] ?: '#6b7280') . '">' . e($x['abreviatura']) . '</span> ' . e($x['nombre']) . ' ';
+    return $h . '<span class="letra-turno descanso">D</span> Descanso · F Festivo</p>';
+}
+
+const VISION_DIAS = [0 => 'Sin límite', 30 => '30 días', 60 => '60 días', 120 => '120 días', 365 => '365 días'];
+
+// Último día que un empleado puede ver de su planificación (o null si no hay límite o no es empleado).
+function limite_vision(PDO $db, ?array $quien): ?string
+{
+    $n = (int)ajuste($db, 'vision_dias');
+    if (!$n || !$quien || $quien['rol'] !== 'empleado') return null;
+    return date('Y-m-d', strtotime(local(ahora(), 'Y-m-d') . " +$n days"));
 }
