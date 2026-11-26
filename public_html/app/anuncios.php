@@ -123,14 +123,18 @@ function confirmar_lectura(PDO $db, array $c, array $u): void
     if ($s->rowCount()) auditar($db, (int)$u['id'], 'comunicado_leido', "comunicado={$c['id']}");
 }
 
-// [leídos => [[usuario, leido_utc, ip]], pendientes => [usuario]].
+// [leídos => [[usuario, leido_utc, ip, abierto]], pendientes => [usuario]].
+// En los de firma requerida, «leído» es el acuse de recibo firmado y «abierto» cuándo abrió el comunicado (null = aún no).
 function lecturas(PDO $db, array $c): array
 {
-    $leidos = consulta($db, 'SELECT usuario_id, leido_utc, ip FROM comunicados_leidos WHERE comunicado_id = ? ORDER BY leido_utc', [$c['id']])->fetchAll(PDO::FETCH_UNIQUE);
+    $abiertos = consulta($db, 'SELECT usuario_id, leido_utc FROM comunicados_leidos WHERE comunicado_id = ?', [$c['id']])->fetchAll(PDO::FETCH_KEY_PAIR);
+    $leidos = !empty($c['firma_requerida'])
+        ? consulta($db, 'SELECT usuario_id, firmado_utc AS leido_utc, ip FROM acuses_firma WHERE comunicado_id = ?', [$c['id']])->fetchAll(PDO::FETCH_UNIQUE)
+        : consulta($db, 'SELECT usuario_id, leido_utc, ip FROM comunicados_leidos WHERE comunicado_id = ?', [$c['id']])->fetchAll(PDO::FETCH_UNIQUE);
     $r = ['leidos' => [], 'pendientes' => []];
     foreach (destinatarios_anuncio($db, $c) as $id) {
         if (!$u = usuario($db, $id)) continue;
-        if (isset($leidos[$id])) $r['leidos'][] = ['usuario' => $u] + $leidos[$id];
+        if (isset($leidos[$id])) $r['leidos'][] = ['usuario' => $u] + $leidos[$id] + ['abierto' => $abiertos[$id] ?? null];
         elseif ($u['activo']) $r['pendientes'][] = $u;
     }
     usort($r['pendientes'], fn($a, $b) => strcoll(nombre($a), nombre($b)));
@@ -143,7 +147,7 @@ function recordar_anuncio(PDO $db, array $c, array $yo): int
     $n = 0;
     $vez = date('YmdHi');
     foreach (lecturas($db, $c)['pendientes'] as $u) {
-        $n += notificar($db, (int)$u['id'], "comunicado:{$c['id']}:recordatorio:$vez", "Recordatorio: tienes pendiente de leer el anuncio «{$c['titulo']}».", "comunicados&id={$c['id']}");
+        $n += notificar($db, (int)$u['id'], "comunicado:{$c['id']}:recordatorio:$vez", 'Recordatorio: tienes pendiente de ' . (empty($c['firma_requerida']) ? 'leer' : 'firmar el acuse de recibo de') . " el anuncio «{$c['titulo']}».", "comunicados&id={$c['id']}");
     }
     auditar($db, (int)$yo['id'], 'comunicado_recordado', "comunicado={$c['id']} personas=$n");
     return $n;
@@ -288,72 +292,59 @@ function evidencias(array $d): array
     return [ahora(), ip(), mb_substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 300), hash('sha256', session_id() ?: 'cli'), ...$geo];
 }
 
-// Paso 1: firma de recepción con DNI, sin haber visto el contenido. $d: dni, recibido, firma, lat, lng, precision.
-function recibir_anuncio(PDO $db, array $c, array $u, array $d): void
-{
-    if (empty($c['firma_requerida']) || !es_destinatario($db, $c, $u)) throw new DomainException('Este anuncio no necesita tu firma.');
-    if (recepcion_firma($db, (int)$c['id'], (int)$u['id'])) return;
-    if (empty($d['recibido'])) throw new DomainException('Marca la casilla «He recibido este comunicado».');
-    $dni = strtoupper(preg_replace('/[^0-9A-Za-z]/', '', (string)($d['dni'] ?? '')));
-    $mio = strtoupper(preg_replace('/[^0-9A-Za-z]/', '', (string)($u['dni'] ?? '')));
-    if ($mio !== '' ? !hash_equals($mio, $dni) : !preg_match('/^[0-9A-Z]{5,20}$/', $dni)) throw new DomainException('El documento no coincide con el de tu ficha.');
-    $jpeg = firma_jpeg((string)($d['firma'] ?? ''));
-    $archivo = bin2hex(random_bytes(16)) . '.jpg';
-    if (file_put_contents(carpeta_archivos() . "/$archivo", $jpeg) === false) throw new DomainException('No se pudo guardar la firma. Inténtalo de nuevo.');
-    [$t, $ip, $ag, $se, $la, $ln, $pr] = evidencias($d);
-    consulta($db, 'INSERT IGNORE INTO recepciones_firma (comunicado_id, usuario_id, recibido_utc, dni, ip, agente, sesion, lat, lng, precision_m, firma_archivo, hash_firma) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [$c['id'], $u['id'], $t, cifrado_activo($db) ? cifrar($dni) : $dni, $ip, $ag, $se, $la, $ln, $pr, $archivo, hash('sha256', $jpeg)]);
-    auditar($db, (int)$u['id'], 'comunicado_recibido', "comunicado={$c['id']}");
-}
-
-// Paso 2: firma de lectura y aceptación (tras ver el contenido) y certificado PDF con las dos firmas.
-// $d: acepto, firma, lat, lng, precision. Devuelve el id del documento con el certificado.
-function firmar_anuncio(PDO $db, array $c, array $u, array $d): int
+// Una sola firma: acuse de recibo (como un certificado de Correos) con DNI, firma manuscrita y certificado PDF.
+// Se firma sin ver el contenido; después se puede leer y INDA apunta aparte cuándo lo abrió (confirmar_lectura).
+// $d: dni, recibido, firma, lat, lng, precision. Devuelve el id del documento con el certificado.
+function recibir_anuncio(PDO $db, array $c, array $u, array $d): int
 {
     if (empty($c['firma_requerida']) || !es_destinatario($db, $c, $u)) throw new DomainException('Este anuncio no necesita tu firma.');
     if ($ya = acuse_firma($db, (int)$c['id'], (int)$u['id'])) return (int)$ya['documento_id'];
-    $rec = recepcion_firma($db, (int)$c['id'], (int)$u['id']) ?? throw new DomainException('Primero firma la recepción del comunicado.');
-    if (empty($d['acepto'])) throw new DomainException('Marca la casilla «He leído, comprendo y acepto».');
-    $jpeg = firma_jpeg((string)($d['firma'] ?? ''));
-    $jpeg_rec = (string)@file_get_contents(carpeta_archivos() . '/' . basename($rec['firma_archivo']));
-    [$ahora, $ip, $agente, $sesion, $la, $ln, $pr] = evidencias($d);
+    if (!$rec = recepcion_firma($db, (int)$c['id'], (int)$u['id'])) {
+        if (empty($d['recibido'])) throw new DomainException('Marca la casilla «He recibido este comunicado».');
+        $dni = strtoupper(preg_replace('/[^0-9A-Za-z]/', '', (string)($d['dni'] ?? '')));
+        $mio = strtoupper(preg_replace('/[^0-9A-Za-z]/', '', (string)($u['dni'] ?? '')));
+        if ($mio !== '' ? !hash_equals($mio, $dni) : !preg_match('/^[0-9A-Z]{5,20}$/', $dni)) throw new DomainException('El documento no coincide con el de tu ficha.');
+        $jpeg = firma_jpeg((string)($d['firma'] ?? ''));
+        $archivo = bin2hex(random_bytes(16)) . '.jpg';
+        if (file_put_contents(carpeta_archivos() . "/$archivo", $jpeg) === false) throw new DomainException('No se pudo guardar la firma. Inténtalo de nuevo.');
+        [$t, $ip, $ag, $se, $la, $ln, $pr] = evidencias($d);
+        consulta($db, 'INSERT IGNORE INTO recepciones_firma (comunicado_id, usuario_id, recibido_utc, dni, ip, agente, sesion, lat, lng, precision_m, firma_archivo, hash_firma) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [$c['id'], $u['id'], $t, cifrado_activo($db) ? cifrar($dni) : $dni, $ip, $ag, $se, $la, $ln, $pr, $archivo, hash('sha256', $jpeg)]);
+        auditar($db, (int)$u['id'], 'comunicado_recibido', "comunicado={$c['id']}");
+        $rec = recepcion_firma($db, (int)$c['id'], (int)$u['id']);
+    }
+    // Certificado con la firma de recepción (también para quien ya la firmó con el sistema anterior de dos firmas).
+    $jpeg = (string)@file_get_contents(carpeta_archivos() . '/' . basename($rec['firma_archivo']));
     $dni = (string)descifrar($rec['dni']);
     $hash_texto = hash('sha256', $c['titulo'] . "\n\n" . $c['texto']);
-    $hash_firma = hash('sha256', $jpeg);
-    $geo = fn($a, $b, $p) => $a !== null ? "$a, $b (precisión aprox. $p m, con permiso de la persona)" : 'no facilitada';
-    $paso = fn(string $t, string $utc, string $i, string $ag, $a, $b, $p, string $h) => [
-        ['t' => $t, 's' => 11, 'b' => true],
-        ['t' => 'Fecha y hora (UTC): ' . $utc . ' · Madrid: ' . local($utc, 'd/m/Y H:i:s'), 's' => 9],
-        ['t' => 'Dirección IP: ' . ($i ?: 'no disponible') . ' · Ubicación del dispositivo: ' . $geo($a, $b, $p), 's' => 9],
-        ['t' => 'Dispositivo / navegador: ' . ($ag ?: 'no disponible'), 's' => 9],
-        ['t' => 'Huella SHA-256 de la firma: ' . $h, 's' => 8],
-    ];
+    $geo = $rec['lat'] !== null ? "{$rec['lat']}, {$rec['lng']} (precisión aprox. {$rec['precision_m']} m, con permiso de la persona)" : 'no facilitada';
     $bloques = [
-        ['t' => 'CERTIFICADO DE ACUSE DE RECIBO Y FIRMA', 's' => 15, 'b' => true],
+        ['t' => 'CERTIFICADO DE ACUSE DE RECIBO', 's' => 15, 'b' => true],
         ['t' => (function_exists('nombre_empresa') ? nombre_empresa() : '') ?: 'INDA', 's' => 10],
         ['t' => 'Comunicado', 's' => 12, 'b' => true],
         ['t' => $c['titulo'], 's' => 11, 'b' => true],
         ['t' => 'Publicado el ' . local($c['creado_utc'], 'd/m/Y H:i') . ' (hora de Madrid)', 's' => 9],
         ['t' => $c['texto'], 's' => 10],
         ['t' => 'Huella SHA-256 del texto: ' . $hash_texto, 's' => 8],
-        ['t' => 'Firmante: ' . nombre($u) . ' · Documento: ' . $dni . ' · Cuenta ' . $u['id'] . ' (' . $u['email'] . ')', 's' => 10, 'b' => true],
-        ...$paso('1. Recepción: «He recibido este comunicado» (firmada antes de ver su contenido)', $rec['recibido_utc'], $rec['ip'], $rec['agente'], $rec['lat'], $rec['lng'], $rec['precision_m'], $rec['hash_firma']),
+        ['t' => 'Destinatario: ' . nombre($u) . ' · Documento: ' . $dni . ' · Cuenta ' . $u['id'] . ' (' . $u['email'] . ')', 's' => 10, 'b' => true],
+        ['t' => 'Declara: «He recibido este comunicado». Firmado antes de ver su contenido, que queda a su disposición en INDA desde ese momento.', 's' => 11, 'b' => true],
+        ['t' => 'Fecha y hora (UTC): ' . $rec['recibido_utc'] . ' · Madrid: ' . local($rec['recibido_utc'], 'd/m/Y H:i:s'), 's' => 9],
+        ['t' => 'Dirección IP: ' . ($rec['ip'] ?: 'no disponible') . ' · Ubicación del dispositivo: ' . $geo, 's' => 9],
+        ['t' => 'Dispositivo / navegador: ' . ($rec['agente'] ?: 'no disponible'), 's' => 9],
+        ['t' => 'Huella SHA-256 de la firma: ' . $rec['hash_firma'], 's' => 8],
         ['img' => 0],
-        ...$paso('2. Lectura y aceptación: «He leído, comprendo y acepto los términos del presente comunicado»', $ahora, $ip, $agente, $la, $ln, $pr, $hash_firma),
-        ['img' => 1],
-        ['t' => 'Sesión (huella): ' . substr($sesion, 0, 16) . '. Firma electrónica simple (Reglamento UE 910/2014, eIDAS). Este certificado se guarda con su huella SHA-256 en INDA para acreditar que no se ha modificado después de la firma.', 's' => 8],
+        ['t' => 'Sesión (huella): ' . substr($rec['sesion'], 0, 16) . '. Firma electrónica simple (Reglamento UE 910/2014, eIDAS). La apertura posterior del comunicado se registra aparte en INDA. Este certificado se guarda con su huella SHA-256 para acreditar que no se ha modificado.', 's' => 8],
     ];
-    $pdf = pdf_documento($bloques, [$jpeg_rec, $jpeg]);
+    $pdf = pdf_documento($bloques, [$jpeg]);
     $archivo = bin2hex(random_bytes(16)) . '.pdf';
     if (file_put_contents(carpeta_archivos() . "/$archivo", $pdf) === false) throw new DomainException('No se pudo guardar el certificado. Inténtalo de nuevo.');
     $db->beginTransaction();
     try {
         consulta($db, 'INSERT INTO documentos (usuario_id, titulo, archivo, nombre_original, requiere_firma, subido_por, subido_utc) VALUES (?, ?, ?, ?, 0, ?, ?)',
-            [$u['id'], mb_substr('Acuse firmado · ' . $c['titulo'], 0, 150), $archivo, "acuse-{$c['id']}-{$u['id']}.pdf", $u['id'], $ahora]);
+            [$u['id'], mb_substr('Acuse de recibo · ' . $c['titulo'], 0, 150), $archivo, "acuse-{$c['id']}-{$u['id']}.pdf", $u['id'], ahora()]);
         $doc = (int)$db->lastInsertId();
         consulta($db, 'INSERT INTO acuses_firma (comunicado_id, usuario_id, firmado_utc, dni, ip, agente, sesion, lat, lng, precision_m, hash_texto, hash_firma, documento_id, hash_pdf) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [$c['id'], $u['id'], $ahora, $rec['dni'], $ip, $agente, $sesion, $la, $ln, $pr, $hash_texto, $hash_firma, $doc, hash('sha256', $pdf)]);
-        consulta($db, 'INSERT IGNORE INTO comunicados_leidos (comunicado_id, usuario_id, leido_utc, ip) VALUES (?, ?, ?, ?)', [$c['id'], $u['id'], $ahora, $ip]);
+            [$c['id'], $u['id'], $rec['recibido_utc'], $rec['dni'], $rec['ip'], $rec['agente'], $rec['sesion'], $rec['lat'], $rec['lng'], $rec['precision_m'], $hash_texto, $rec['hash_firma'], $doc, hash('sha256', $pdf)]);
         $db->commit();
     } catch (Throwable $e) {
         $db->rollBack();

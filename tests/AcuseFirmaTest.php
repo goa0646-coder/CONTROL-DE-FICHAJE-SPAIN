@@ -16,25 +16,26 @@ class AcuseFirmaTest extends Base
         $mal = fn(callable $f, array $d) => (function () use ($f, $c, $u, $d) { try { $f($this->db, $c, $u, $d); return 'firmó'; } catch (DomainException $e) { return 'no'; } })();
         $this->assertFalse(contenido_visible($this->db, $c, $u), 'el contenido se ve tras firmar la recepción');
         $this->assertTrue(contenido_visible($this->db, $c, $admin));
-        $this->assertSame('no', $mal('firmar_anuncio', ['acepto' => 1, 'firma' => self::JPEG]), 'sin recepción no hay aceptación');
         $this->assertSame('no', $mal('recibir_anuncio', ['dni' => '11111111H', 'firma' => self::JPEG]), 'sin marcar recibido');
         $this->assertSame('no', $mal('recibir_anuncio', ['dni' => '00000000T', 'recibido' => 1, 'firma' => self::JPEG]), 'otro DNI');
         $this->assertSame('no', $mal('recibir_anuncio', ['dni' => '11111111H', 'recibido' => 1, 'firma' => 'data:image/png;base64,AAAA']), 'sin firma');
-        recibir_anuncio($this->db, $c, $u, ['dni' => '11111111-h', 'recibido' => 1, 'firma' => self::JPEG]);
+        $doc = recibir_anuncio($this->db, $c, $u, ['dni' => '11111111-h', 'recibido' => 1, 'firma' => self::JPEG, 'lat' => '43.3', 'lng' => '-8.4', 'precision' => '20']);
         $this->assertTrue(contenido_visible($this->db, $c, $u));
-        $this->assertSame($id, firma_pendiente($this->db, $u), 'sigue pendiente hasta la aceptación');
-        $this->assertSame('no', $mal('firmar_anuncio', ['firma' => self::JPEG]), 'sin aceptar');
-        $doc = firmar_anuncio($this->db, $c, $u, ['acepto' => 1, 'firma' => self::JPEG, 'lat' => '43.3', 'lng' => '-8.4', 'precision' => '20']);
+        $this->assertNull(firma_pendiente($this->db, $u), 'una sola firma desbloquea INDA');
         $a = acuse_firma($this->db, $id, (int)$u['id']);
         $this->assertSame([$doc, '43.300000'], [(int)$a['documento_id'], $a['lat']]);
         $d = consulta($this->db, 'SELECT * FROM documentos WHERE id = ?', [$doc])->fetch();
         $pdf = file_get_contents(carpeta_archivos() . '/' . $d['archivo']);
         $this->assertStringStartsWith('%PDF-1.4', $pdf);
         $this->assertSame($a['hash_pdf'], hash('sha256', $pdf), 'huella del certificado');
-        $this->assertSame(2, substr_count($pdf, '/DCTDecode'), 'las dos firmas');
+        $this->assertSame(1, substr_count($pdf, '/DCTDecode'), 'una firma');
         $this->assertStringContainsString('(Cambio de turnos)', $pdf);
-        $this->assertNull(firma_pendiente($this->db, $u));
-        $this->assertSame($doc, firmar_anuncio($this->db, $c, $u, []), 'no se firma dos veces');
+        $this->assertSame($doc, recibir_anuncio($this->db, $c, $u, []), 'no se firma dos veces');
+        // Recibido pero aún no leído; al marcar «Lo he leído» se ve aparte.
+        $l = lecturas($this->db, $c)['leidos'][0];
+        $this->assertNull($l['abierto']);
+        confirmar_lectura($this->db, $c, $u);
+        $this->assertNotNull(lecturas($this->db, $c)['leidos'][0]['abierto']);
         $this->assertTrue(puede_ver_documento($u, $d) && puede_ver_documento($admin, $d), 'certificado para ambas partes');
     }
 }
