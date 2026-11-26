@@ -263,6 +263,7 @@ for (const mes of document.querySelectorAll('[data-mes-clic]')) {
       const campo = cambio.querySelector('[name=rellenar]:checked')?.value || 'fecha';
       cambio[campo].value = f;
       if (campo === 'fecha') { const r = cambio.querySelector('[name=rellenar][value=devuelve]'); if (r) r.checked = true; }
+      cambio.dispatchEvent(new Event('cambio-dia'));
       cambio.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else if (rango) {
       if (!rango.desde.value || rango.hasta.value) { rango.desde.value = f; rango.hasta.value = ''; }
@@ -277,6 +278,18 @@ for (const mes of document.querySelectorAll('[data-mes-clic]')) {
     x.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); elegir(x.dataset.fecha); } });
   }
   for (const i of document.querySelectorAll('[data-cambio] input[type=date], [data-rango] input[type=date]')) i.addEventListener('change', pinta);
+}
+// Cambios de turno: vista previa de cómo quedan los turnos de los dos (mañana ⇄ tarde/noche…).
+for (const f of document.querySelectorAll('[data-cambio]')) {
+  const caja = f.querySelector('[data-previa-cambio]');
+  if (!caja || !f.companero) continue;
+  const ver = async () => {
+    if (!f.companero.value || !f.fecha.value) { caja.innerHTML = ''; return; }
+    const q = new URLSearchParams({ p: 'cambios', previa: 1, companero: f.companero.value, fecha: f.fecha.value, devuelve: f.devuelve.value });
+    const r = await fetch('?' + q); if (r.ok) caja.innerHTML = await r.text();
+  };
+  for (const i of [f.companero, f.fecha, f.devuelve]) i.addEventListener('change', ver);
+  f.addEventListener('cambio-dia', ver);
 }
 // Cambios de turno: al elegir compañero se ve su calendario del mes (solo turnos).
 for (const f of document.querySelectorAll('[data-cambio]')) {
