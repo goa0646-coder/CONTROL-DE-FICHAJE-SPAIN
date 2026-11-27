@@ -23,3 +23,10 @@ Uso real desde el **1/12/2026**, en paralelo con el sistema anterior durante la 
 |---|---|---|---|
 | 27/11/2026 | Claude Code | Puente entre agentes: AGENTS.md, .agents/rules, EXPERIENCIA, ESTADO, entregas/ | — |
 | 27/11/2026 | Antigravity | Fix: Bugs SMTP (inyección CRLF) y tipos de ausencia consumidos sin límite anual en listado saldos | PR #67 |
+
+## Tareas en paralelo (Asignadas a Antigravity)
+- [ ] **Móvil y UI**: Revisar aplicación con cuenta de trabajador en Android/iPhone (botones pequeños, textos cortados, modo oscuro) y documentar fallos.
+- [ ] **Cobertura de Pruebas**: Buscar funciones sin cobertura en `tests/` y añadir tests automáticos sin alterar el código original.
+- [ ] **Revisión de Textos y Ayudas**: Garantizar español claro, directo y ausencia total de marcas de terceros (ej. Woffu).
+- [ ] **Velocidad y Rendimiento**: Analizar consultas en Planificación e Informes para miles de trabajadores y crear migración con índices SQL óptimos.
+- [ ] **Accesibilidad (a11y)**: Comprobar etiquetas de formularios, contraste visual y navegación por teclado.
