@@ -4,6 +4,7 @@ Cada ZIP es el contenido de `public_html` + `config.ejemplo.php` (sin pruebas, v
 
 | Versión | Qué trae |
 |---|---|
+| 2026.11.27e | 27/11/2026 | Arreglo listado de ausencias consumidas sin límite anual y fix de seguridad CRLF en correos. |
 | 2026.11.26g | Botón de mantenimiento (cerrar INDA a la plantilla) |
 | 2026.11.26h | Borrar cuadrante entre fechas |
 | 2026.11.26i | Recuperar contraseña por el SMTP |
