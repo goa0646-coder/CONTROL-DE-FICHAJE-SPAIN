@@ -6,6 +6,8 @@ const MESES = [1 => 'enero', 2 => 'febrero', 3 => 'marzo', 4 => 'abril', 5 => 'm
 
 function horarios(PDO $db): array
 {
+    static $h = null;
+    if ($h !== null) return $h;
     $h = [];
     foreach ($db->query('SELECT * FROM horarios ORDER BY nombre') as $x) $h[$x['id']] = $x + ['dias' => []];
     foreach ($db->query('SELECT * FROM horario_dias') as $d) $h[$d['horario_id']]['dias'][$d['dia']] = $d;
@@ -22,6 +24,9 @@ function rango_fechas(string $desde, string $hasta): array
 // Por fecha: horario que toca, minutos teóricos, festivo y ausencia. Orden: planificación > festivo > horario de la persona.
 function calendario_teorico(PDO $db, array $u, string $desde, string $hasta): array
 {
+    static $cache = [];
+    $k = $u['id'] . '|' . $desde . '|' . $hasta;
+    if (isset($cache[$k])) return $cache[$k];
     $h = horarios($db);
     $plan = consulta($db, 'SELECT fecha, horario_id, extra, fuerza_mayor, puesto_id FROM planificacion WHERE usuario_id = ? AND fecha BETWEEN ? AND ?', [$u['id'], $desde, $hasta])->fetchAll(PDO::FETCH_UNIQUE);
     $fest = consulta($db, 'SELECT fecha, nombre FROM festivos WHERE (centro_id IS NULL OR centro_id = ?) AND fecha BETWEEN ? AND ?', [$u['centro_id'], $desde, $hasta])->fetchAll(PDO::FETCH_KEY_PAIR);
@@ -50,7 +55,7 @@ function calendario_teorico(PDO $db, array $u, string $desde, string $hasta): ar
             'laborable' => $dia !== null || (!$p && !$hid && !$u['horario_id'] && !isset($fest[$f]) && date('N', strtotime($f)) < 6),
         ];
     }
-    return $out;
+    return $cache[$k] = $out;
 }
 
 // Segundos de los tramos que caen en horario nocturno (hora de Madrid). ET art. 36: 22:00–6:00; el convenio puede ampliarlo.
@@ -107,8 +112,20 @@ function resumen(PDO $db, array $u, string $desde, string $hasta): array
 function saldo_bolsa(PDO $db, array $u): int
 {
     $ayer = local(gmdate('Y-m-d H:i:s', time() - 86400), 'Y-m-d');
-    $alta = local($u['alta_utc'], 'Y-m-d');
-    $dif = $alta <= $ayer ? resumen($db, $u, $alta, $ayer)['total']['diferencia'] : 0;
+    $cache_date = date('Y-m-01', strtotime($ayer)); // From start of month
+    
+    // Check if we can cache the historical balance
+    $hist_bolsa = (int)consulta($db, "SELECT valor FROM saldos_historicos WHERE usuario_id = ? AND fecha = ?", [$u['id'], $cache_date])->fetchColumn();
+    if (!$hist_bolsa && local($u['alta_utc'], 'Y-m-d') < $cache_date) {
+        $hist_bolsa = resumen($db, $u, local($u['alta_utc'], 'Y-m-d'), date('Y-m-d', strtotime("$cache_date - 1 day")))['total']['diferencia'];
+        consulta($db, "INSERT IGNORE INTO saldos_historicos (usuario_id, fecha, valor) VALUES (?, ?, ?)", [$u['id'], $cache_date, $hist_bolsa]);
+    }
+    
+    $dif = $hist_bolsa;
+    if ($cache_date <= $ayer) {
+        $dif += resumen($db, $u, max($cache_date, local($u['alta_utc'], 'Y-m-d')), $ayer)['total']['diferencia'];
+    }
+    
     return $dif + 60 * (int)consulta($db, 'SELECT COALESCE(SUM(minutos), 0) FROM ajustes_saldo WHERE usuario_id = ?', [$u['id']])->fetchColumn();
 }
 

@@ -25,7 +25,12 @@ function firmar_documento(PDO $db, array $u, int $id, string $clave): string
 {
     $d = documento($db, $id);
     if (!$d || !puede_ver_documento($u, $d) || !$d['requiere_firma']) throw new DomainException('Documento no disponible.');
-    if (!password_verify($clave, $u['password_hash'])) throw new DomainException('La contraseña no es correcta.');
+    if (bloqueado($db, 'f:' . $u['id']) || bloqueado($db, 'ip:' . ip(), 30)) throw new DomainException('Demasiados intentos.');
+    if (!password_verify($clave, $u['password_hash'])) {
+        fallo($db, 'f:' . $u['id']);
+        fallo($db, 'ip:' . ip());
+        throw new DomainException('La contraseña no es correcta.');
+    }
     $hash = hash_file('sha256', carpeta_archivos() . '/' . $d['archivo']) ?: throw new DomainException('No se encuentra el archivo.');
     consulta($db, 'INSERT IGNORE INTO documentos_firmas VALUES (?, ?, ?, ?, ?)', [$id, $u['id'], $hash, ahora(), ip()]);
     return $hash;

@@ -23,7 +23,7 @@ function leer_libro(string $ruta, string $ext): array
     if (!class_exists('ZipArchive')) throw new DomainException('Este servidor no puede abrir .xlsx: guárdalo como CSV en Excel y súbelo.');
     $z = new ZipArchive();
     if ($z->open($ruta) !== true) throw new DomainException('El archivo no es un Excel válido.');
-    $x = fn(string $n) => ($c = $z->getFromName($n)) === false ? null : simplexml_load_string($c, 'SimpleXMLElement', LIBXML_NONET);
+    $x = fn(string $n) => ($c = $z->getFromName($n)) === false ? null : (simplexml_load_string($c, 'SimpleXMLElement', LIBXML_NONET) ?: null);
     // Algunos programas (p. ej. la exportación de Woffu) escriben las etiquetas con prefijo (x:row): se lee por espacio de nombres.
     $m = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
     $ss = [];
@@ -159,9 +159,10 @@ function preparar_importacion(PDO $db, array $filas): array
         if ($nombre === '') $err[] = 'sin nombre';
         $dni = strtoupper(preg_replace('/[^0-9A-Za-z]/', '', $d['dni'] ?? ''));
         if ($dni !== '' && !dni_valido($dni)) $err[] = 'la letra del DNI no cuadra';
+        $rol_norm = normalizar($d['rol'] ?? '');
         $rol = match (true) {
-            str_contains(normalizar($d['rol'] ?? ''), 'admin') => 'admin',
-            (bool)preg_match('/respons|manager|supervis|coordin|encarg/', normalizar($d['rol'] ?? '')) => 'responsable',
+            in_array($rol_norm, ['admin', 'administrador', 'administracion'], true) => 'admin',
+            (bool)preg_match('/respons|manager|supervis|coordin|encarg/', $rol_norm) => 'responsable',
             default => 'empleado',
         };
         $suspendido = isset($d['suspendido']) ? in_array(normalizar($d['suspendido']), ['si', 'yes', 'true', '1', 'x'], true)

@@ -144,7 +144,9 @@ function aplicar_libro(PDO $db, array $yo, array $plan, bool $actualizar): array
     $s = $plan['secciones'];
     $ok = fn($sec) => array_values(array_filter($s[$sec]['filas'] ?? [], fn($f) => empty($f['errores'])));
     $res = [];
-    foreach (['departamentos' => 'departamentos', 'puestos' => 'puestos'] as $sec => $tabla) {
+    $db->beginTransaction();
+    try {
+        foreach (['departamentos' => 'departamentos', 'puestos' => 'puestos'] as $sec => $tabla) {
         if (!isset($s[$sec])) continue;
         $n = 0;
         foreach ($ok($sec) as $f) {
@@ -251,9 +253,14 @@ function aplicar_libro(PDO $db, array $yo, array $plan, bool $actualizar): array
     auditar($db, (int)$yo['id'], 'importacion_libro', json_encode(array_diff_key($res, ['_nuevos' => 1]), JSON_UNESCAPED_UNICODE));
     // Informe para administración: lo que no entró y lo que entró pero incumple el convenio.
     $informe = informe_libro($plan);
-    foreach ($convenio as [$quien, $f, $txt]) $informe[] = ['Cuadrante', '', '', $quien, $f, '', 'Importado, pero incumple el convenio: ' . $txt];
+    foreach ($convenio ?? [] as [$quien, $f, $txt]) $informe[] = ['Cuadrante', '', '', $quien, $f, '', 'Importado, pero incumple el convenio: ' . $txt];
     consulta($db, 'REPLACE INTO ajustes VALUES (?, ?)', ['informe_importacion', json_encode(['fecha' => ahora(), 'archivo' => $plan['archivo'] ?? '', 'resumen' => array_diff_key($res, ['_nuevos' => 1]), 'filas' => array_slice($informe, 0, 3000)], JSON_UNESCAPED_UNICODE)]);
+    $db->commit();
     return $res;
+    } catch (Throwable $e) {
+        $db->rollBack();
+        throw $e;
+    }
 }
 
 // Todo lo que no se puede importar, fila a fila: [sección, hoja, fila, persona, día, valor, motivo].
@@ -343,7 +350,7 @@ function escribir_xlsx(array $hojas): string
     $col = function (int $i): string { $s = ''; for ($i++; $i > 0; $i = intdiv($i - 1, 26)) $s = chr(65 + ($i - 1) % 26) . $s; return $s; };
     $ruta = tempnam(sys_get_temp_dir(), 'inda');
     $z = new ZipArchive();
-    $z->open($ruta, ZipArchive::OVERWRITE);
+    if ($z->open($ruta, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) throw new DomainException('No se pudo crear el archivo Zip.');
     $ns = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
     $libro = $rels = $tipos = '';
     $i = 0;

@@ -47,7 +47,7 @@ if (!$abierto && !$nuevo && $lista && !isset($_GET['id'])) $abierto = anuncio(db
 $autor = $abierto && $puede && ($abierto['autor_id'] == $yo['id'] || $yo['rol'] === 'admin');
 $cuentas = [];
 foreach ($ver === 'enviados' ? $lista : [] as $c) $cuentas[$c['id']] = [
-    (int)consulta(db(), 'SELECT COUNT(*) FROM comunicados_leidos WHERE comunicado_id = ?', [$c['id']])->fetchColumn(), count(destinatarios_anuncio(db(), $c))];
+    (int)consulta(db(), empty($c['firma_requerida']) ? 'SELECT COUNT(*) FROM comunicados_leidos WHERE comunicado_id = ?' : 'SELECT COUNT(*) FROM acuses_firma WHERE comunicado_id = ?', [$c['id']])->fetchColumn(), count(destinatarios_anuncio(db(), $c))];
 $fecha = fn($utc) => local($utc, 'j') . ' ' . MESES[(int)local($utc, 'n')] . ' ' . local($utc, 'Y');
 cabecera('Anuncios', $yo);
 ?>

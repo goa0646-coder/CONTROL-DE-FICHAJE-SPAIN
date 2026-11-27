@@ -9,7 +9,8 @@ function b64url(string $s): string
 
 function ajuste(PDO $db, string $clave): ?string
 {
-    return consulta($db, 'SELECT valor FROM ajustes WHERE clave = ?', [$clave])->fetchColumn() ?: null;
+    $v = consulta($db, 'SELECT valor FROM ajustes WHERE clave = ?', [$clave])->fetchColumn();
+    return $v === false ? null : (string)$v;
 }
 
 // Par de claves VAPID (se genera la primera vez y se guarda en la BD).

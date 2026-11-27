@@ -84,14 +84,12 @@ function ejecutar_consulta(PDO $db, array $yo, string $nombre, array $a): array
                     + ($x['hora_desde'] ? ['horas' => substr($x['hora_desde'], 0, 5) . '-' . substr($x['hora_hasta'], 0, 5)] : []), array_filter($r, fn($x) => isset($ids[$x['usuario_id']]))))];
             case 'ratios':
                 $hn = array_column(horarios($db), 'nombre', 'id');
-                $todos = $db->query("SELECT * FROM usuarios WHERE activo = 1 AND rol <> 'inspeccion'")->fetchAll();
-                return ['desvios' => array_map(fn($x) => ['fecha' => $x[0], 'turno' => $hn[$x[1]] ?? '', 'que' => $x[3] > 0 ? 'faltan ' . $x[3] : 'sobran ' . -$x[3]], desvios($db, $todos, $desde, $hasta))];
+                return ['desvios' => array_map(fn($x) => ['fecha' => $x[0], 'turno' => $hn[$x[1]] ?? '', 'que' => $x[3] > 0 ? 'faltan ' . $x[3] : 'sobran ' . -$x[3]], desvios($db, $gente, $desde, $hasta))];
             case 'propuesta_cubrir':
                 if (strtotime($hasta) - strtotime($desde) > 31 * 86400) return ['error' => 'Para propuestas, como mucho un mes por consulta.'];
                 $hn = array_column(horarios($db), 'nombre', 'id');
-                $todos = $db->query("SELECT * FROM usuarios WHERE activo = 1 AND rol IN ('empleado','responsable','admin')")->fetchAll();
-                $nom = array_column(array_map(fn($p) => ['id' => $p['id'], 'n' => nombre($p)], $todos), 'n', 'id');
-                $r = planificar($db, $todos, max($desde, $hoy), $hasta, ['mantener' => true]);
+                $nom = array_column(array_map(fn($p) => ['id' => $p['id'], 'n' => nombre($p)], $gente), 'n', 'id');
+                $r = planificar($db, $gente, max($desde, $hoy), $hasta, ['mantener' => true]);
                 return ['aviso' => 'Es solo una propuesta: no se ha cambiado nada.',
                     'cambios_propuestos' => array_map(fn($x) => ['persona' => $nom[$x[0]] ?? '', 'fecha' => $x[1], 'turno' => $hn[$x[2]] ?? ''], $r['nuevos']),
                     'sin_cubrir' => array_map(fn($x) => ['fecha' => $x[0], 'turno' => $hn[$x[1]] ?? '', 'faltan' => $x[3], 'motivo' => $x[4]], $r['faltan'])];
