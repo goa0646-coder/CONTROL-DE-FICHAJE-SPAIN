@@ -1,5 +1,7 @@
 # Reglas del proyecto INDA
 
+> Trabajamos en paralelo con otros agentes (Antigravity). Lee también [AGENTS.md](AGENTS.md), [docs/EXPERIENCIA.md](docs/EXPERIENCIA.md) y [docs/ESTADO.md](docs/ESTADO.md). El repo es la única fuente de verdad; cada ZIP se guarda en `entregas/`.
+
 - **Nombre**: el sistema se llama **INDA**. Nada de "Fichaje", "Control horario" ni nombres de terceros (Woffu, etc.) como marca. Diseño, nombres y textos propios.
 - **Registro de jornada (art. 34.9 ET)**: inicio y fin diario por persona; hora del servidor (UTC, se muestra en Europe/Madrid); conservación **4 años**; acceso del trabajador, representantes e Inspección.
 - **Fichajes inmutables**: la tabla `fichajes` solo admite INSERT (triggers + cadena de hashes). Nunca UPDATE/DELETE. Los errores se arreglan con una `correccion` trazable; el original se sigue viendo.
