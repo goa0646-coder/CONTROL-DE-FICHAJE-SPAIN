@@ -26,7 +26,7 @@ function pdf_documento(array $bloques, array $jpegs = []): string
         $s = $b['s'] ?? 10;
         $max = (int)floor(495 / ($s * 0.52));
         foreach (preg_split('/\R/u', (string)$b['t']) as $parrafo) {
-            $lineas = $parrafo === '' ? [''] : explode("\n", wordwrap($parrafo, $max, "\n", true));
+            $lineas = $parrafo === '' ? [''] : explode("\n", wordwrap($parrafo, $max, "\n"));
             foreach ($lineas as $l) {
                 $salto($s * 1.4);
                 $y -= $s * 1.4;

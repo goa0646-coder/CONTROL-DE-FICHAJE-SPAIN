@@ -38,6 +38,10 @@ function resolver_correccion(PDO $db, int $id, array $yo, bool $aprobar, string 
         $u = usuario($db, (int)$c['usuario_id']);
         if (!puede_aprobar($yo, $u)) throw new DomainException('No puedes resolver esta corrección.');
         $db->prepare('SELECT id FROM usuarios WHERE id = ? FOR UPDATE')->execute([$u['id']]);
+        if ($c['fichaje_id']) {
+            $f_ok = consulta($db, "SELECT id FROM fichajes f WHERE id = ? AND " . NO_ANULADO . " FOR UPDATE", [$c['fichaje_id']])->fetchColumn();
+            if (!$f_ok && $aprobar) throw new DomainException('El fichaje original ya ha sido corregido o anulado.');
+        }
         $db->prepare('UPDATE correcciones SET estado = ?, resuelta_por = ?, resuelta_utc = ?, comentario = ? WHERE id = ?')
             ->execute([$aprobar ? 'aprobada' : 'rechazada', $yo['id'], gmdate('Y-m-d H:i:s'), mb_substr(trim($comentario), 0, 500), $id]);
         if ($aprobar && $c['accion'] !== 'anular') {

@@ -31,7 +31,12 @@ $sobran = [];
 foreach (desvios(db(), $todos, $hoy, $hasta) as [$f, , , $n]) if ($n > 0) $faltan[$f] = ($faltan[$f] ?? 0) + $n; else $sobran[$f] = ($sobran[$f] ?? 0) - $n;
 $dias = [];
 foreach (rango_fechas($hoy, $hasta) as $f) $dias[$f] = ['minimo' => array_sum(array_column(necesidades_dia(db(), $f), 2)), 'hay' => 0];
-foreach ($todos as $p) foreach (calendario_teorico(db(), $p, $hoy, $hasta) as $f => $c) if ($c['turno'] > 0 && !$c['ausencia']) $dias[$f]['hay']++;
+foreach ($todos as $p) {
+    // Ya esta cacheado porque llamamos a calendario_teorico para $hoy y para $hasta (o al menos los ultimos dias se cachean al vuelo).
+    foreach (calendario_teorico(db(), $p, $hoy, $hasta) as $f => $c) {
+        if ($c['turno'] > 0 && !$c['ausencia']) $dias[$f]['hay']++;
+    }
+}
 $max = max(1, ...array_values(array_map(fn($d) => max($d['minimo'], $d['hay']), $dias)));
 $anuncio = anuncios_enviados(db(), $yo)[0] ?? null;
 $hm = fn($utc) => $utc ? local($utc, 'H:i') : '';

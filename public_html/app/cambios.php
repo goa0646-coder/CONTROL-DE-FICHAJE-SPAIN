@@ -89,8 +89,8 @@ function pedir_cambio(PDO $db, array $u, int $companero, string $fecha, string $
         if ($f < local(ahora(), 'Y-m-d')) throw new DomainException('Solo se pueden cambiar días que aún no han pasado.');
     }
     if ($devuelve === $fecha) $devuelve = '';
-    $pend = consulta($db, "SELECT COUNT(*) FROM cambios_turno WHERE estado IN ('companero','aprobacion') AND ? IN (solicitante_id, companero_id) AND (fecha IN (?, ?) OR fecha_devuelve IN (?, ?))",
-        [$u['id'], $fecha, $devuelve ?: $fecha, $fecha, $devuelve ?: $fecha])->fetchColumn();
+    $pend = consulta($db, "SELECT COUNT(*) FROM cambios_turno WHERE estado IN ('companero','aprobacion') AND (? IN (solicitante_id, companero_id) OR ? IN (solicitante_id, companero_id)) AND (fecha IN (?, ?) OR fecha_devuelve IN (?, ?))",
+        [$u['id'], $o['id'], $fecha, $devuelve ?: $fecha, $fecha, $devuelve ?: $fecha])->fetchColumn();
     if ($pend) throw new DomainException('Ya hay un cambio pendiente para ese día.');
     aplicar_cambio($db, $u, $o, array_filter([$fecha, $devuelve]), false, $voluntario, $inc); // prueba: avisa ya si no cumple
     consulta($db, 'INSERT INTO cambios_turno (solicitante_id, companero_id, fecha, fecha_devuelve, motivo, pedido_utc, incumple) VALUES (?, ?, ?, ?, ?, ?, ?)',

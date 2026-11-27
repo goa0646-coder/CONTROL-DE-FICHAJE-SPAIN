@@ -70,6 +70,7 @@ function recordar_firmas(PDO $db, ?string $ahora = null): int
     $n = 0;
     foreach ($db->query("SELECT * FROM usuarios WHERE activo = 1 AND rol IN ('empleado','responsable','admin')")->fetchAll() as $u) {
         if (local($u['alta_utc'], 'Y-m') > $mes || !consulta($db, 'SELECT 1 FROM fichajes WHERE usuario_id = ? LIMIT 1', [$u['id']])->fetchColumn()) continue;
+        if (consulta($db, 'SELECT 1 FROM avisos WHERE usuario_id = ? AND clave = ?', [$u['id'], "firma:$mes:$vuelta"])->fetchColumn()) continue;
         $f = firma_mes($db, $u, $mes);
         if ($f && $f['hash'] === hash('sha256', contenido_mes($db, $u, $mes))) continue;
         for ($v = 1; $v <= $vuelta; $v++) {
@@ -85,22 +86,23 @@ function revisar_avisos(PDO $db, ?string $ahora = null): int
     $ahora ??= ahora();
     $hoy = local($ahora, 'Y-m-d');
     $hora = local($ahora, 'H:i:s');
+    $ahora_ts = strtotime(local($ahora, 'Y-m-d H:i:s'));
     $n = 0;
     $incidencias = [];
-    $suma = fn(string $h, int $min) => date('H:i:s', strtotime("2000-01-01 $h") + 60 * $min);
+    $ts = fn(string $h, int $min = 0) => ts_local($hoy, $h) + 60 * $min;
     foreach ($db->query("SELECT * FROM usuarios WHERE activo = 1 AND sin_fichaje = 0 AND fichaje_auto = 0 AND rol IN ('empleado','responsable','admin')")->fetchAll() as $u) {
         $c = calendario_teorico($db, $u, $hoy, $hoy)[$hoy];
         $estado = estado_actual($db, (int)$u['id']);
         if (!$c['flexible'] && $c['entrada'] && $c['minutos'] > 0) {
-            $limite = $suma($c['entrada'], $c['margen']);
-            $media = $suma($c['entrada'], 30); // entrada olvidada: aviso a la persona a los 30 minutos
+            $limite = $ts($c['entrada'], $c['margen']);
+            $media = $ts($c['entrada'], 30); // entrada olvidada: aviso a la persona a los 30 minutos
             $primera = consulta($db, "SELECT MIN(momento_utc) FROM fichajes f WHERE usuario_id = ? AND tipo = 'entrada' AND momento_utc >= ? AND momento_utc <= ? AND " . NO_ANULADO,
                 [$u['id'], a_utc("$hoy 00:00:00"), $ahora])->fetchColumn();
-            if (!$primera && $estado === 'fuera' && $hora > $media) {
+            if (!$primera && $estado === 'fuera' && $ahora_ts > $media) {
                 $v = ['nombre' => $u['nombre'], 'fecha' => local($ahora, 'd/m/Y'), 'hora' => substr($c['entrada'], 0, 5), 'turno' => $c['horario'] ?? '', 'fichado' => ''];
                 if (notificar($db, (int)$u['id'], "sin_entrada:$hoy", texto_aviso($db, 'sin_entrada', $v), 'fichar')) $n++; // a administración, a la hora (avisar_olvidos)
             }
-            if ($primera && local($primera, 'H:i:s') > $limite) {
+            if ($primera && strtotime(local($primera, 'Y-m-d H:i:s')) > $limite) {
                 $txt = texto_aviso($db, 'retraso', ['nombre' => nombre($u), 'fecha' => local($ahora, 'd/m/Y'), 'hora' => substr($c['entrada'], 0, 5), 'turno' => $c['horario'] ?? '', 'fichado' => local($primera, 'H:i')]);
                 $avisados = 0;
                 foreach (aprobadores($db, $u) as $jefe) $avisados += notificar($db, $jefe, "retraso:{$u['id']}:$hoy", $txt, "historial&u={$u['id']}");

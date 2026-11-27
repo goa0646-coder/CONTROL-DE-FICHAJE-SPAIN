@@ -126,12 +126,13 @@ function login(PDO $db, string $email, string $clave): array|string
 function login_pin(PDO $db, string $num, string $pin): array|string
 {
     $clave = 'pin:' . $num;
-    if (bloqueado($db, $clave)) return 'Demasiados intentos. Espera 15 minutos.';
+    if (bloqueado($db, $clave) || bloqueado($db, 'ip:' . ip(), 30)) return 'Demasiados intentos. Espera 15 minutos.';
     $s = $db->prepare("SELECT * FROM usuarios WHERE num_empleado = ? AND rol <> 'inspeccion'");
     $s->execute([$num]);
     $u = $s->fetch();
     if (!$u || !$u['pin_hash'] || !password_verify($pin, $u['pin_hash']) || !acceso_vigente($u)) {
         fallo($db, $clave);
+        fallo($db, 'ip:' . ip());
         return 'Número o PIN incorrectos.';
     }
     return $u;

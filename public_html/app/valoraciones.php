@@ -156,6 +156,7 @@ function notas_calidad(PDO $db, array $yo, array $personas): array
 // Lectura con IA (DNI, nóminas, convenio, festivos) y asistente: si hay propietario de las funciones privadas, solo él.
 function ia_permitida(?array $yo): bool
 {
+    if (!$yo || $yo['rol'] !== 'admin') return false;
     $d = valoraciones_de(db());
-    return !$d || ($yo && (int)$yo['id'] === $d);
+    return !$d || (int)$yo['id'] === $d;
 }

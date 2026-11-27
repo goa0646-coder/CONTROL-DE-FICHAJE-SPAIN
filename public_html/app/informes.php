@@ -21,7 +21,12 @@ function firma_mes(PDO $db, array $u, string $mes): ?array
 
 function firmar_mes(PDO $db, array $u, string $mes, string $clave): string
 {
-    if (!password_verify($clave, $u['password_hash'])) throw new DomainException('La contraseña no es correcta.');
+    if (bloqueado($db, 'f:' . $u['id']) || bloqueado($db, 'ip:' . ip(), 30)) throw new DomainException('Demasiados intentos.');
+    if (!password_verify($clave, $u['password_hash'])) {
+        fallo($db, 'f:' . $u['id']);
+        fallo($db, 'ip:' . ip());
+        throw new DomainException('La contraseña no es correcta.');
+    }
     if ($mes >= local(ahora(), 'Y-m')) throw new DomainException('Solo se firman meses ya terminados.');
     $hash = hash('sha256', contenido_mes($db, $u, $mes));
     consulta($db, 'INSERT IGNORE INTO firmas_mensuales VALUES (?, ?, ?, ?, ?)', [$u['id'], $mes, $hash, ahora(), ip()]);
