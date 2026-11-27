@@ -15,10 +15,11 @@ Uso real desde el **1/12/2026**, en paralelo con el sistema anterior durante la 
 ## Pendiente
 
 - Datos del dueño: nombres y emails de dos administradores más; formato de Nominasol; nombre oficial completo del convenio.
-- Revisar en producción: tipos de ausencia activos (una trabajadora veía la lista vacía), configuración SMTP (correos que no llegaban).
+
 
 ## Registro de trabajo (añade una línea al terminar cada tarea)
 
 | Fecha | Agente | Qué | Versión / PR |
 |---|---|---|---|
 | 27/11/2026 | Claude Code | Puente entre agentes: AGENTS.md, .agents/rules, EXPERIENCIA, ESTADO, entregas/ | — |
+| 27/11/2026 | Antigravity | Fix: Bugs SMTP (inyección CRLF) y tipos de ausencia consumidos sin límite anual en listado saldos | PR #67 |
