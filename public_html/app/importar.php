@@ -23,7 +23,7 @@ function leer_libro(string $ruta, string $ext): array
     if (!class_exists('ZipArchive')) throw new DomainException('Este servidor no puede abrir .xlsx: guárdalo como CSV en Excel y súbelo.');
     $z = new ZipArchive();
     if ($z->open($ruta) !== true) throw new DomainException('El archivo no es un Excel válido.');
-    $x = fn(string $n) => ($c = $z->getFromName($n)) === false ? null : (simplexml_load_string($c, 'SimpleXMLElement', LIBXML_NONET) ?: null);
+    $x = fn(string $n) => ($c = $z->getFromName($n)) === false ? null : (($r = simplexml_load_string($c, 'SimpleXMLElement', LIBXML_NONET)) === false ? null : $r);
     // Algunos programas (p. ej. la exportación de Woffu) escriben las etiquetas con prefijo (x:row): se lee por espacio de nombres.
     $m = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
     $ss = [];

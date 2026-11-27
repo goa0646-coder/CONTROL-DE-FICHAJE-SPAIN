@@ -86,10 +86,11 @@ function revisar_avisos(PDO $db, ?string $ahora = null): int
     $ahora ??= ahora();
     $hoy = local($ahora, 'Y-m-d');
     $hora = local($ahora, 'H:i:s');
-    $ahora_ts = strtotime(local($ahora, 'Y-m-d H:i:s'));
+    $ahora_ts = strtotime($ahora . ' UTC'); // instantes reales, igual que ts_local()
     $n = 0;
     $incidencias = [];
     $ts = fn(string $h, int $min = 0) => ts_local($hoy, $h) + 60 * $min;
+    $suma = fn(string $h, int $min) => date('H:i:s', strtotime("2000-01-01 $h") + 60 * $min);
     foreach ($db->query("SELECT * FROM usuarios WHERE activo = 1 AND sin_fichaje = 0 AND fichaje_auto = 0 AND rol IN ('empleado','responsable','admin')")->fetchAll() as $u) {
         $c = calendario_teorico($db, $u, $hoy, $hoy)[$hoy];
         $estado = estado_actual($db, (int)$u['id']);
@@ -102,7 +103,7 @@ function revisar_avisos(PDO $db, ?string $ahora = null): int
                 $v = ['nombre' => $u['nombre'], 'fecha' => local($ahora, 'd/m/Y'), 'hora' => substr($c['entrada'], 0, 5), 'turno' => $c['horario'] ?? '', 'fichado' => ''];
                 if (notificar($db, (int)$u['id'], "sin_entrada:$hoy", texto_aviso($db, 'sin_entrada', $v), 'fichar')) $n++; // a administración, a la hora (avisar_olvidos)
             }
-            if ($primera && strtotime(local($primera, 'Y-m-d H:i:s')) > $limite) {
+            if ($primera && strtotime($primera . ' UTC') > $limite) {
                 $txt = texto_aviso($db, 'retraso', ['nombre' => nombre($u), 'fecha' => local($ahora, 'd/m/Y'), 'hora' => substr($c['entrada'], 0, 5), 'turno' => $c['horario'] ?? '', 'fichado' => local($primera, 'H:i')]);
                 $avisados = 0;
                 foreach (aprobadores($db, $u) as $jefe) $avisados += notificar($db, $jefe, "retraso:{$u['id']}:$hoy", $txt, "historial&u={$u['id']}");

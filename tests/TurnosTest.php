@@ -55,6 +55,18 @@ class TurnosTest extends Base
         $this->db->exec("DELETE FROM ajustes WHERE clave = 'plantillas_aviso'");
     }
 
+    public function testQuienLlegaAsuHoraNoSaleComoRetrasoNiSeAvisaAntesDeTiempo(): void
+    {
+        $u = $this->usuario(['horario_id' => $this->horario([1, 2, 3, 4, 5], '07:00', '15:00')]);
+        // A las 07:20 de Madrid aún no toca el aviso de «no has fichado» (es a los 30 minutos).
+        revisar_avisos($this->db, a_utc('2030-01-07 07:20:00'));
+        $this->assertFalse(consulta($this->db, "SELECT 1 FROM avisos WHERE usuario_id = ? AND clave = 'sin_entrada:2030-01-07'", [$u['id']])->fetchColumn());
+        // Ficha a las 07:02 (dentro del margen): no es un retraso.
+        $this->fichar($u, 'entrada', '2030-01-08 07:02:00');
+        revisar_avisos($this->db, a_utc('2030-01-08 09:00:00'));
+        $this->assertFalse(consulta($this->db, "SELECT 1 FROM avisos WHERE clave = ?", ["retraso:{$u['id']}:2030-01-08"])->fetchColumn());
+    }
+
     public function testCambiarUnDiaConElConvenio(): void
     {
         $s = uniqid();

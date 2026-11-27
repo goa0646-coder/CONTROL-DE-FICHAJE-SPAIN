@@ -23,3 +23,4 @@ Uso real desde el **1/12/2026**, en paralelo con el sistema anterior durante la 
 |---|---|---|---|
 | 27/11/2026 | Claude Code | Puente entre agentes: AGENTS.md, .agents/rules, EXPERIENCIA, ESTADO, entregas/ | — |
 | 27/11/2026 | Antigravity | Fix: Bugs SMTP (inyección CRLF) y tipos de ausencia consumidos sin límite anual en listado saldos | PR #67 |
+| 27/11/2026 | Claude Code | Auditoría y arreglo del parche 27e: migración 031 en MariaDB, cachés con datos viejos, bolsa congelada, hora de los avisos, importar Excel, cron sin recordatorios ni Diagnóstico | 2026.11.27f |
