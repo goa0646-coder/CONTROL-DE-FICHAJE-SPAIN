@@ -144,9 +144,7 @@ function aplicar_libro(PDO $db, array $yo, array $plan, bool $actualizar): array
     $s = $plan['secciones'];
     $ok = fn($sec) => array_values(array_filter($s[$sec]['filas'] ?? [], fn($f) => empty($f['errores'])));
     $res = [];
-    $db->beginTransaction();
-    try {
-        foreach (['departamentos' => 'departamentos', 'puestos' => 'puestos'] as $sec => $tabla) {
+    foreach (['departamentos' => 'departamentos', 'puestos' => 'puestos'] as $sec => $tabla) {
         if (!isset($s[$sec])) continue;
         $n = 0;
         foreach ($ok($sec) as $f) {
@@ -255,12 +253,7 @@ function aplicar_libro(PDO $db, array $yo, array $plan, bool $actualizar): array
     $informe = informe_libro($plan);
     foreach ($convenio ?? [] as [$quien, $f, $txt]) $informe[] = ['Cuadrante', '', '', $quien, $f, '', 'Importado, pero incumple el convenio: ' . $txt];
     consulta($db, 'REPLACE INTO ajustes VALUES (?, ?)', ['informe_importacion', json_encode(['fecha' => ahora(), 'archivo' => $plan['archivo'] ?? '', 'resumen' => array_diff_key($res, ['_nuevos' => 1]), 'filas' => array_slice($informe, 0, 3000)], JSON_UNESCAPED_UNICODE)]);
-    $db->commit();
     return $res;
-    } catch (Throwable $e) {
-        $db->rollBack();
-        throw $e;
-    }
 }
 
 // Todo lo que no se puede importar, fila a fila: [sección, hoja, fila, persona, día, valor, motivo].
