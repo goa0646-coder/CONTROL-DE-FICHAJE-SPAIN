@@ -101,12 +101,14 @@ function smtp_enviar(array $s, string $de, string $para, string $asunto, string 
                 throw new RuntimeException('Usuario o contraseña del correo incorrectos.');
             }
         }
-        $orden("MAIL FROM:<$de>", 250);
-        $orden("RCPT TO:<$para>", 250);
+        $de_l = preg_replace('/[\r\n<>]/', '', $de);
+        $para_l = preg_replace('/[\r\n<>]/', '', $para);
+        $orden("MAIL FROM:<$de_l>", 250);
+        $orden("RCPT TO:<$para_l>", 250);
         $orden('DATA', 354);
         $cuerpo = preg_replace('/^\./m', '..', str_replace(["\r\n", "\r"], "\n", $texto)); // un punto al principio de línea terminaría el mensaje
         fwrite($f, implode("\r\n", [
-            'Date: ' . date(DATE_RFC2822), 'From: INDA <' . $de . '>', "To: <$para>", 'Subject: =?UTF-8?B?' . base64_encode($asunto) . '?=',
+            'Date: ' . date(DATE_RFC2822), 'From: INDA <' . $de_l . '>', "To: <$para_l>", 'Subject: =?UTF-8?B?' . base64_encode($asunto) . '?=',
             'Message-ID: <' . bin2hex(random_bytes(12)) . '@' . (explode('@', $de)[1] ?? 'inda') . '>', 'MIME-Version: 1.0',
             'Content-Type: text/plain; charset=utf-8', 'Content-Transfer-Encoding: 8bit', '', str_replace("\n", "\r\n", $cuerpo), '.', '']));
         $orden(null, 250);

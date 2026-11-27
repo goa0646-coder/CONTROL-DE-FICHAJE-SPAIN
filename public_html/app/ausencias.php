@@ -52,10 +52,10 @@ function saldos_ausencia(PDO $db, array $u, int $anio): array
     $propios = consulta($db, 'SELECT tipo_id, dias FROM saldos_ausencia WHERE usuario_id = ? AND anio = ?', [$u['id'], $anio])->fetchAll(PDO::FETCH_KEY_PAIR);
     $out = [];
     foreach (tipos_ausencia($db) as $id => $t) {
-        if ($t['dias_anuales'] === null && !isset($propios[$id])) continue;
-        $asig = (float)($propios[$id] ?? $t['dias_anuales']);
         $cons = dias_de_tipo($db, $u, $id, $anio, ['aprobada']);
         $comp = dias_de_tipo($db, $u, $id, $anio, ['pendiente']);
+        if ($t['dias_anuales'] === null && !isset($propios[$id]) && $cons == 0 && $comp == 0) continue;
+        $asig = (float)($propios[$id] ?? $t['dias_anuales']);
         $out[$id] = ['tipo' => $t['nombre'], 'asignado' => $asig, 'consumido' => $cons, 'comprometido' => $comp, 'disponible' => $asig - $cons - $comp];
     }
     return $out;
